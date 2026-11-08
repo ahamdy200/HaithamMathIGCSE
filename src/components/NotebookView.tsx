@@ -16,6 +16,8 @@ import { AddCellBar } from './AddCellBar';
 
 interface NotebookViewProps {
   cells: NotebookCell[];
+  selectedNotebook?: 'igcse' | 'equation_solver';
+  onSelectNotebook?: (nb: 'igcse' | 'equation_solver') => void;
   onRunCell: (id: string) => Promise<void>;
   onUpdateContent: (id: string, content: string) => void;
   onDeleteCell: (id: string) => void;
@@ -27,6 +29,8 @@ interface NotebookViewProps {
 
 export const NotebookView: React.FC<NotebookViewProps> = ({
   cells,
+  selectedNotebook = 'igcse',
+  onSelectNotebook,
   onRunCell,
   onUpdateContent,
   onDeleteCell,
@@ -115,7 +119,58 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       </aside>
 
       {/* Main Notebook Canvas */}
-      <main className="flex-1 max-w-5xl mx-auto px-4 sm:px-8 py-6">
+      <main className="flex-1 max-w-5xl mx-auto px-4 sm:px-8 py-6 space-y-4">
+        {/* Notebook Switcher Header */}
+        <div className="bg-[#1b1f2a] border border-[#2e3547] rounded-xl p-3.5 flex items-center justify-between flex-wrap gap-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 font-medium">Active Colab Notebook:</span>
+            <div className="flex rounded-lg bg-[#12151e] p-1 border border-[#272e3d] gap-1">
+              <button
+                type="button"
+                onClick={() => onSelectNotebook?.('igcse')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${
+                  selectedNotebook === 'igcse'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>1. IGCSE BIDMAS Grader</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-200">
+                  9 Cells
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectNotebook?.('equation_solver')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${
+                  selectedNotebook === 'equation_solver'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>2. Handwritten Equation Solver CNN</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-200">
+                  44 Cells (Connected Repo)
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-gray-400">
+            {selectedNotebook === 'equation_solver' ? (
+              <span className="text-purple-300 font-mono">
+                Source: repos/Hand-Written-Equation-Solver/Notebook.ipynb
+              </span>
+            ) : (
+              <span className="text-blue-300 font-mono">
+                Source: Cambridge IGCSE Math Model Key
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Top Add Cell Bar */}
         <AddCellBar onAddCode={() => onInsertCell('code', 0)} onAddText={() => onInsertCell('markdown', 0)} />
 

@@ -14,17 +14,30 @@ import { StudentHomeworkPortal } from './components/StudentHomeworkPortal';
 import { TeacherModelKeyViewer } from './components/TeacherModelKeyViewer';
 import { NotebookIntegrationCode } from './components/NotebookIntegrationCode';
 import { INITIAL_CELLS, INITIAL_SOURCES } from './data/defaultNotebook';
+import { HANDWRITTEN_EQUATION_SOLVER_CELLS } from './data/handwrittenSolverNotebook';
 import { NotebookCell, SourceDocument } from './types';
 import { downloadIpynb } from './utils/colabExport';
 
 export default function App() {
   const [notebookTitle, setNotebookTitle] = useState('IGCSE_Math_BIDMAS_Grader.ipynb');
+  const [selectedNotebook, setSelectedNotebook] = useState<'igcse' | 'equation_solver'>('igcse');
   const [cells, setCells] = useState<NotebookCell[]>(INITIAL_CELLS);
   const [sources, setSources] = useState<SourceDocument[]>(INITIAL_SOURCES);
   const [activeTab, setActiveTab] = useState<NavTabType>('homework');
   const [isColabModalOpen, setIsColabModalOpen] = useState(false);
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [executionCounter, setExecutionCounter] = useState(9);
+
+  const handleSelectNotebook = (nb: 'igcse' | 'equation_solver') => {
+    setSelectedNotebook(nb);
+    if (nb === 'igcse') {
+      setNotebookTitle('IGCSE_Math_BIDMAS_Grader.ipynb');
+      setCells(INITIAL_CELLS);
+    } else {
+      setNotebookTitle('Handwritten_Equation_Solver_CNN.ipynb');
+      setCells(HANDWRITTEN_EQUATION_SOLVER_CELLS);
+    }
+  };
 
   // Cell Content Updater
   const handleUpdateContent = (id: string, content: string) => {
@@ -311,6 +324,8 @@ export default function App() {
         {activeTab === 'notebook' && (
           <NotebookView
             cells={cells}
+            selectedNotebook={selectedNotebook}
+            onSelectNotebook={handleSelectNotebook}
             onRunCell={handleRunCell}
             onUpdateContent={handleUpdateContent}
             onDeleteCell={handleDeleteCell}

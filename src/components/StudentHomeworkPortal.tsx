@@ -25,8 +25,10 @@ import {
   Table as TableIcon,
   List as ListIcon,
   ExternalLink,
+  PenTool,
 } from 'lucide-react';
 import { HomeworkGradingReport } from '../types';
+import { HandwrittenEquationCanvas } from './HandwrittenEquationCanvas';
 
 interface StudentHomeworkPortalProps {
   onSwitchToNotebook?: () => void;
@@ -45,7 +47,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [fileMimeType, setFileMimeType] = useState<string | null>(null);
   const [customTextWorking, setCustomTextWorking] = useState<string>('');
-  const [inputMode, setInputMode] = useState<'upload' | 'type'>('upload');
+  const [inputMode, setInputMode] = useState<'upload' | 'type' | 'draw'>('upload');
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [isGrading, setIsGrading] = useState(false);
   const [report, setReport] = useState<HomeworkGradingReport | null>(null);
@@ -411,7 +413,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               <button
                 type="button"
                 onClick={() => setInputMode('upload')}
-                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
                   inputMode === 'upload'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-gray-200'
@@ -423,14 +425,26 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               <button
                 type="button"
                 onClick={() => setInputMode('type')}
-                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
                   inputMode === 'type'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-gray-200'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Type Answers Directly</span>
+                <span>Type Answers</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode('draw')}
+                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                  inputMode === 'draw'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <PenTool className="w-3.5 h-3.5 text-purple-300" />
+                <span>Draw on Canvas (CNN)</span>
               </button>
             </div>
 
@@ -575,6 +589,39 @@ Q2: 50
                   rows={5}
                   className="w-full bg-[#121419] border border-[#2d3340] rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500 font-mono leading-relaxed placeholder:text-gray-500"
                 />
+              </div>
+            )}
+
+            {/* Tab 3: Draw on Handwritten Canvas (CNN Equation Solver) */}
+            {inputMode === 'draw' && (
+              <div className="space-y-3">
+                <HandwrittenEquationCanvas
+                  onInsertAnswer={(equationResult) => {
+                    setCustomTextWorking((prev) => {
+                      const next = prev.trim() ? `${prev.trim()}\n${equationResult}` : equationResult;
+                      return next;
+                    });
+                    setRefreshNotice(`Added "${equationResult}" from Handwritten Canvas into submission!`);
+                  }}
+                />
+                {customTextWorking && (
+                  <div className="p-3 bg-[#11141c] border border-[#2b3243] rounded-lg text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-gray-400 text-[11px]">
+                      <span className="font-semibold text-gray-300">Accumulated Submission Answers:</span>
+                      <button
+                        type="button"
+                        onClick={() => setInputMode('type')}
+                        className="text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1 font-medium"
+                      >
+                        <span>Edit in Type View</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <pre className="font-mono text-purple-200 whitespace-pre-wrap text-[11px] bg-[#0d1017] p-2 rounded border border-[#222838]">
+                      {customTextWorking}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
 
