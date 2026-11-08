@@ -1,9 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@500;600;700&display=swap');
 @import "tailwindcss";
 
 @layer base {
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #1a1a1a;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #0d1117;
     color: #e5e7eb;
     margin: 0;
     padding: 0;
@@ -11,8 +12,54 @@
   }
 
   code, pre {
-    font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   }
+}
+
+/* Mathematical Classroom & Graph Paper Grid Patterns */
+.math-paper {
+  background-color: #0c1017;
+  background-image: 
+    linear-gradient(rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.math-paper-dense {
+  background-color: #0a0d14;
+  background-image: 
+    linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Chalkboard slate textures */
+.chalkboard-slate {
+  background: radial-gradient(circle at 50% 15%, #182333 0%, #0c121d 100%);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.chalkboard-green {
+  background: radial-gradient(circle at 50% 20%, #132b21 0%, #0a1813 100%);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+/* Authentic Teacher Marginalia and Handwritten notes */
+.teacher-handwriting {
+  font-family: 'Caveat', cursive, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Classical mathematical serif headers and notation */
+.math-serif {
+  font-family: 'Crimson Pro', Georgia, serif;
+}
+
+/* Ink-friendly paper preview mode for students & teachers */
+.ink-friendly-paper {
+  background-color: #fcfbf7;
+  color: #1a202c;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
 }
 
 /* Colab-style Prism Syntax Highlighting */

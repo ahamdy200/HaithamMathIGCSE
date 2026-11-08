@@ -255,10 +255,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="font-semibold text-sm text-gray-200">HaithamMathIGCSE</span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono font-medium flex items-center gap-1">
+                <span className="font-bold text-sm text-gray-100 math-serif tracking-tight">
+                  HaithamMath IGCSE <span className="text-amber-400 font-sans text-xs">∯</span>
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono font-medium flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-blue-400" />
-                  Gemini API
+                  Gemini 3.8
+                </span>
+                <span className="hidden lg:inline text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-mono border border-emerald-500/30">
+                  4-Repo Pool
                 </span>
               </div>
             </div>

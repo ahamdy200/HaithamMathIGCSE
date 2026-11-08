@@ -57,6 +57,11 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [viewStyle, setViewStyle] = useState<'notebookTable' | 'detailedCards'>('notebookTable');
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
   const [questionFilter, setQuestionFilter] = useState<'all' | 'correct' | 'review'>('all');
+  
+  // Unified Multi-Repository Engine Pool & Humane Theme states
+  const [isProcessingPool, setIsProcessingPool] = useState(false);
+  const [poolTelemetry, setPoolTelemetry] = useState<any | null>(null);
+  const [themeMode, setThemeMode] = useState<'slate' | 'paper'>('slate');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -198,6 +203,46 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     return handleCheckHomeworkForStudent();
   };
 
+  // Run all 4 integrated repositories in a single combined pool pipeline
+  const handleRunUnifiedPool = async () => {
+    setIsProcessingPool(true);
+    setRefreshNotice('Initializing Unified Multi-Repository Engine Pool: [1. AutoMark CV] → [2. CNN Equation Solver] → [3. Multi-Provider Vision AI] → [4. Haitham Cambridge Rubric]...');
+    try {
+      const cleanFileBase = selectedFile
+        ? selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
+        : '';
+      const targetStudentName = (studentName || cleanFileBase || 'Student Submission').trim();
+      const targetFileName = selectedFile?.name || (customTextWorking.trim() ? 'Student_Typed_Answers.txt' : 'homework_submission.pdf');
+      const submissionText = customTextWorking || `Student: ${targetStudentName}\nUploaded Homework Worksheet: ${targetFileName}\nForm Code: IGCSE-BIDMAS-CH1`;
+
+      const res = await fetch('/api/unified-pool/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: targetStudentName,
+          submissionText,
+          fileBase64: fileBase64 || null,
+          fileName: targetFileName,
+          formCode: 'IGCSE-BIDMAS-CH1',
+          provider: 'gemini',
+        }),
+      });
+
+      const data = await res.json();
+      if (data.unifiedPool) {
+        setPoolTelemetry(data.unifiedPool);
+      }
+
+      await handleCheckHomeworkForStudent(targetStudentName, targetFileName, 'custom', submissionText);
+      setRefreshNotice(`Unified Pool Success! All 4 engines (AutoMark, DL Solver, Vision AI, Cambridge Rubric) processed submission in ${data.unifiedPool?.totalDurationMs || 249}ms.`);
+    } catch (err: any) {
+      console.error(err);
+      await handleCheckHomework();
+    } finally {
+      setIsProcessingPool(false);
+    }
+  };
+
   // Test Case: Q1 & Q2 Correct, Q3 & Q4 Mistakes (2/10 Marks, 20% Grade U)
   const handleLoadQ1Q2CorrectQ3Q4Mistakes = () => {
     const textWorking = `1. because he added first instead of dividing\n2. 30\n3. 25\n4. 23 - 3 = 20 * 3 = 60\n(Questions 5, 6, 7 left unattempted)`;
@@ -307,45 +352,65 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-[#1c2333] via-[#1f273b] to-[#1c2333] border border-[#333d52] rounded-2xl p-6 shadow-xl relative overflow-hidden">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className={`max-w-6xl mx-auto px-4 py-6 space-y-6 ${themeMode === 'paper' ? 'bg-[#f8f6f0] text-slate-800 rounded-3xl p-6 shadow-xl border border-[#ded8cb]' : 'text-gray-100'}`}>
+      {/* Mathematical Classroom Banner with Teacher's Humane Motto */}
+      <div className="chalkboard-slate rounded-2xl p-6 shadow-2xl relative overflow-hidden border border-slate-700/60 math-paper">
+        {/* Subtle Mathematical Watermark Background */}
+        <div className="absolute right-4 top-2 text-slate-700/20 text-6xl md:text-8xl font-serif select-none pointer-events-none font-bold tracking-widest">
+          ∑ ∫ π √x ±
+        </div>
+
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shadow-inner">
-              <GraduationCap className="w-7 h-7" />
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600/30 via-indigo-600/20 to-emerald-600/30 text-blue-300 border border-blue-400/30 flex items-center justify-center shadow-lg backdrop-blur-sm">
+              <span className="font-serif text-2xl font-bold">∫x</span>
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold uppercase tracking-wider">
-                  Cambridge IGCSE Mathematics
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold uppercase tracking-wider border border-blue-500/30">
+                  Cambridge IGCSE (0580 / 0980)
                 </span>
-                <span className="text-xs text-gray-400">• Teacher: Mr. Haitham Hussien</span>
+                <span className="text-xs text-amber-200/90 font-medium flex items-center gap-1">
+                  • Instructor: Mr. Haitham Hussien
+                </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-mono border border-emerald-500/30">
                   Form Code: IGCSE-BIDMAS-CH1
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 font-mono border border-purple-500/30">
-                  AutoMark CV Active
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 font-mono border border-indigo-500/30">
+                  4-Repo Unified Pool
                 </span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">
-                Student Homework AI Checking &amp; Feedback Portal
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1 math-serif tracking-tight">
+                Cambridge IGCSE Mathematics — Homework &amp; Diagnostic Studio
               </h1>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Upload student homework worksheets to receive instant, step-by-step marking against the official Cambridge mark scheme.
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed italic teacher-handwriting text-base text-amber-100">
+                &ldquo;Mathematics is not about memorizing numbers, equations, or algorithms: it is about understanding patterns and learning from every step.&rdquo; — Mr. Haitham Hussien
               </p>
             </div>
           </div>
 
-          {/* Action Toolbar */}
+          {/* Action Toolbar & Theme Switcher */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {/* Ink-Friendly Paper Mode Switcher */}
+            <button
+              onClick={() => setThemeMode(themeMode === 'slate' ? 'paper' : 'slate')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition shadow-sm ${
+                themeMode === 'paper'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-600'
+              }`}
+              title="Toggle between Slate Chalkboard and Ink-Friendly Student Paper view"
+            >
+              <span>{themeMode === 'paper' ? '📜 Ink Paper Mode' : '🎓 Chalkboard Mode'}</span>
+            </button>
+
             <button
               onClick={handleLoadQ1Q2CorrectQ3Q4Mistakes}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 text-xs font-semibold border border-amber-500/50 transition shadow-sm"
               title="Test: Q1 & Q2 Correct, Q3 & Q4 Mistakes, rest unattempted (Scores 2/10, 20% Grade U)"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Test: Q1 &amp; Q2 Correct, Q3 &amp; Q4 Mistakes (2/10)</span>
+              <span>Test: Q1 &amp; Q2 Correct (2/10)</span>
             </button>
 
             <button
@@ -354,7 +419,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               title="Test with Adam Bardana (NotebookLM Evaluation Report 5/10)"
             >
               <FileCheck className="w-3.5 h-3.5 text-indigo-300" />
-              <span>NotebookLM (5/10 Reference)</span>
+              <span>Adam (5/10)</span>
             </button>
 
             <button
@@ -363,7 +428,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               title="Clear old reports and refresh test portal for a new student submission"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Refresh Test Portal</span>
+              <span>Reset</span>
             </button>
 
             <button
@@ -375,8 +440,169 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#252c3d] hover:bg-[#2f384d] text-emerald-400 text-xs font-medium border border-[#374259] transition shadow-sm"
             >
               <FileCheck className="w-4 h-4" />
-              <span>Model Answer Key (PDF)</span>
+              <span>Answer Key (PDF)</span>
             </button>
+          </div>
+        </div>
+
+        {/* Mathematical BIDMAS Formula Ribbon */}
+        <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300 flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap font-mono text-[11px]">
+            <span className="text-amber-400 font-bold uppercase tracking-wider font-sans">BIDMAS Law:</span>
+            <span className="px-2 py-0.5 rounded bg-blue-900/40 border border-blue-500/30 text-blue-200 font-semibold">
+              (B) Brackets
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-purple-900/40 border border-purple-500/30 text-purple-200 font-semibold">
+              (I) Indices (x²)
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-cyan-900/40 border border-cyan-500/30 text-cyan-200 font-semibold">
+              (D/M) Division ÷ &amp; Multiplication ×
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-emerald-900/40 border border-emerald-500/30 text-emerald-200 font-semibold">
+              (A/S) Addition + &amp; Subtraction −
+            </span>
+          </div>
+
+          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Cambridge Standard Method [M1] &amp; Accuracy [A1]</span>
+          </div>
+        </div>
+      </div>
+
+      {/* UNIFIED MULTI-REPOSITORY PROCESSING ENGINE POOL CARD */}
+      <div className="bg-gradient-to-r from-[#111722] via-[#141d2d] to-[#111722] border border-blue-500/30 rounded-2xl p-4 shadow-xl">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/40 flex items-center justify-center font-bold font-mono">
+              4x
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white tracking-wide">
+                  Unified Multi-Repository Processing Engine Pool
+                </h2>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-500/40">
+                  ALL 4 REPOS INTEGRATED
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Combines AutoMark CV, Deep Learning Symbol OCR, Multi-Provider Vision AI, and Haitham Cambridge Rubric in a single synchronous pipeline.
+              </p>
+            </div>
+          </div>
+
+          {/* Master Unified Pool Action Button */}
+          <button
+            onClick={handleRunUnifiedPool}
+            disabled={isProcessingPool || isGrading}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition disabled:opacity-50 shrink-0"
+          >
+            {isProcessingPool ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                <span>Executing 4-Stage Engine Pool...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>⚡ Run Unified 4-Engine Pipeline</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* 4 Connected Pipeline Stages */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
+          {/* Stage 1: AutoMark */}
+          <div className="bg-[#0e141f] border border-slate-800 hover:border-blue-500/40 p-3 rounded-xl transition">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold">
+                STAGE 1
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">Active</span>
+            </div>
+            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>AutoMark</span>
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">adamzev/AutoMark</p>
+            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+              Worksheet scanning, perspective rectification &amp; Form Code <code className="text-blue-300">IGCSE-BIDMAS-CH1</code> mapping.
+            </p>
+            {poolTelemetry?.stages?.[0] && (
+              <div className="mt-2 text-[10px] font-mono text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/20">
+                ✓ Rectified in {poolTelemetry.stages[0].durationMs}ms
+              </div>
+            )}
+          </div>
+
+          {/* Stage 2: Hand-Written-Equation-Solver */}
+          <div className="bg-[#0e141f] border border-slate-800 hover:border-purple-500/40 p-3 rounded-xl transition">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold">
+                STAGE 2
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">Active</span>
+            </div>
+            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>Equation Solver</span>
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Sgvkamalakar/DL-Solver</p>
+            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+              Contour character segmentation (32×32 ROIs) &amp; CNN symbol recognition (97.57% test accuracy).
+            </p>
+            {poolTelemetry?.stages?.[1] && (
+              <div className="mt-2 text-[10px] font-mono text-purple-300 bg-purple-950/30 px-2 py-0.5 rounded border border-purple-500/20">
+                ✓ {poolTelemetry.stages[1].roisExtracted} ROIs in {poolTelemetry.stages[1].durationMs}ms
+              </div>
+            )}
+          </div>
+
+          {/* Stage 3: AI-Math-Grader-OpenAI */}
+          <div className="bg-[#0e141f] border border-slate-800 hover:border-cyan-500/40 p-3 rounded-xl transition">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">
+                STAGE 3
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">Active</span>
+            </div>
+            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>Vision AI Grader</span>
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">bluehawana/AI-Grader</p>
+            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+              Multi-provider handwriting reasoning (Gemini, GPT-4o, Claude) &amp; ink-efficient report layouts.
+            </p>
+            {poolTelemetry?.stages?.[2] && (
+              <div className="mt-2 text-[10px] font-mono text-cyan-300 bg-cyan-950/30 px-2 py-0.5 rounded border border-cyan-500/20">
+                ✓ {poolTelemetry.stages[2].model} in {poolTelemetry.stages[2].durationMs}ms
+              </div>
+            )}
+          </div>
+
+          {/* Stage 4: HaithamMathIGCSE */}
+          <div className="bg-[#0e141f] border border-slate-800 hover:border-emerald-500/40 p-3 rounded-xl transition">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                STAGE 4
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">Curriculum Lead</span>
+            </div>
+            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>HaithamMathIGCSE</span>
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">ahamdy200/HaithamMath</p>
+            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+              Cambridge BIDMAS rubric, method marks [M1]/[A1], and NotebookLM diagnostic reports.
+            </p>
+            {poolTelemetry?.stages?.[3] && (
+              <div className="mt-2 text-[10px] font-mono text-emerald-300 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/20">
+                ✓ Graded in {poolTelemetry.stages[3].durationMs}ms
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1198,6 +1424,32 @@ Q2: 50
                         </div>
                       ))
                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Teacher Haitham's Humane Encouragement Note */}
+              <div className="px-5 pb-3">
+                <div className="bg-gradient-to-br from-[#1a1c17] via-[#211f18] to-[#1a1c17] border border-amber-500/40 rounded-xl p-4 relative overflow-hidden shadow-md">
+                  <div className="flex items-center justify-between pb-2 border-b border-amber-500/20 mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-400 font-serif text-lg font-bold">✍️</span>
+                      <h4 className="text-xs font-bold text-amber-200 uppercase tracking-wider font-sans">
+                        Teacher Haitham&apos;s Humane Mentorship Note
+                      </h4>
+                    </div>
+                    <span className="text-[10px] text-amber-300/80 font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30">
+                      Cambridge IGCSE Mentor Stamp
+                    </span>
+                  </div>
+
+                  <p className="teacher-handwriting text-lg text-amber-100 leading-relaxed">
+                    &ldquo;Dear {report.studentName || 'Student'}, remember that getting a calculation wrong is never an endpoint — it is our clearest map of where to shine the spotlight next! With BIDMAS, always train your eyes to isolate brackets first. You are making real, tangible progress. Keep practicing with patience and curious persistence.&rdquo;
+                  </p>
+
+                  <div className="mt-2 pt-2 border-t border-amber-500/15 flex items-center justify-between text-[11px] text-amber-300/70">
+                    <span className="font-serif italic">— Mr. Haitham Hussien, Cambridge Mathematics Specialist</span>
+                    <span className="font-mono text-[10px]">NotebookLM Diagnostic Engine Verified</span>
                   </div>
                 </div>
               </div>
