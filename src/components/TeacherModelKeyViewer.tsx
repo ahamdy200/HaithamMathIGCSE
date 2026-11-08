@@ -140,7 +140,7 @@ Put one pair of brackets in each statement to make it correct:
           )}
 
           <a
-            href="/public/assets/aistudio/order-of-operations-model-answer-key_202610250939_18187_be349899.pdf"
+            href={activeKey?.pdfUrl || "/assets/model-keys/pearson-edexcel-igcse-monthly-exam-1-model-answers.pdf"}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-semibold shadow transition"
@@ -284,7 +284,7 @@ Put one pair of brackets in each statement to make it correct:
 
           <div className="flex-1 bg-[#fdfafb] rounded-lg overflow-hidden border border-[#edd7dc]">
             <iframe
-              src="/public/assets/aistudio/order-of-operations-model-answer-key_202610250939_18187_be349899.pdf"
+              src={activeKey?.pdfUrl || "/assets/model-keys/pearson-edexcel-igcse-monthly-exam-1-model-answers.pdf"}
               className="w-full h-full"
               title="Official Model Answer Key PDF"
             />

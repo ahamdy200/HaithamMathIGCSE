@@ -31,6 +31,7 @@ import {
 import { HomeworkGradingReport } from '../types';
 import { HandwrittenEquationCanvas } from './HandwrittenEquationCanvas';
 import {
+  PEARSON_EDEXCEL_EXAM_1_KEY,
   DEFAULT_CAMBRIDGE_BIDMAS_KEY,
   MODEL_KEY_TEMPLATES,
   ModelAnswerKeyData,
@@ -45,13 +46,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   onSwitchToNotebook,
   onSwitchToModelKey,
 }) => {
-  // Model Answer Key Management State (allows adding ANY model answer)
-  const [activeModelKey, setActiveModelKey] = useState<ModelAnswerKeyData>(DEFAULT_CAMBRIDGE_BIDMAS_KEY);
+  // Model Answer Key Management State (allows adding ANY model answer, PDF or text)
+  const [activeModelKey, setActiveModelKey] = useState<ModelAnswerKeyData>(PEARSON_EDEXCEL_EXAM_1_KEY);
   const [isModelKeyModalOpen, setIsModelKeyModalOpen] = useState(false);
-  const [editingKeyTitle, setEditingKeyTitle] = useState(DEFAULT_CAMBRIDGE_BIDMAS_KEY.title);
-  const [editingKeyText, setEditingKeyText] = useState(DEFAULT_CAMBRIDGE_BIDMAS_KEY.text);
-  const [selectedTemplate, setSelectedTemplate] = useState('bidmas');
+  const [editingKeyTitle, setEditingKeyTitle] = useState(PEARSON_EDEXCEL_EXAM_1_KEY.title);
+  const [editingKeyText, setEditingKeyText] = useState(PEARSON_EDEXCEL_EXAM_1_KEY.text);
+  const [selectedTemplate, setSelectedTemplate] = useState('edexcel_monthly_1');
   const [showKeyPreview, setShowKeyPreview] = useState(false);
+  const [isUploadingKeyPdf, setIsUploadingKeyPdf] = useState(false);
 
   // Portal starts clean for uploading student homework (all test materials wiped)
   const [studentName, setStudentName] = useState('');
@@ -327,7 +329,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     }
   };
 
-  const handleUploadKeyFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadKeyFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -339,15 +341,54 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
     setEditingKeyTitle(cleanTitle || 'Imported Model Answer Key');
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        setEditingKeyText(content);
-        setSelectedTemplate('custom');
-      }
-    };
-    reader.readAsText(file);
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      setIsUploadingKeyPdf(true);
+      setRefreshNotice(`Extracting worked solutions & mark schemes from "${file.name}"...`);
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        try {
+          const res = await fetch('/api/model-key/upload-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileBase64: base64,
+              fileName: file.name,
+              title: cleanTitle,
+            }),
+          });
+          const data = await res.json();
+          if (data.success && data.modelKey) {
+            setActiveModelKey(data.modelKey);
+            setEditingKeyTitle(data.modelKey.title);
+            setEditingKeyText(data.modelKey.text);
+            setAssignment(data.modelKey.title);
+            setSelectedTemplate('custom');
+            setRefreshNotice(`PDF Model Answer Key loaded successfully! ${data.modelKey.questionCount || 26} questions (${data.modelKey.totalMarks || 75} marks).`);
+            setTimeout(() => setRefreshNotice(null), 5000);
+          } else {
+            setRefreshNotice(data.error || 'Failed to extract text from PDF.');
+          }
+        } catch (err: any) {
+          console.error(err);
+          setRefreshNotice('Failed to upload and parse model answer PDF.');
+        } finally {
+          setIsUploadingKeyPdf(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        if (content) {
+          setEditingKeyText(content);
+          setSelectedTemplate('custom');
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleAskTutor = async (e: React.FormEvent) => {
@@ -642,36 +683,95 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       )}
 
       {/* Active Model Answer Key & Marking Scheme Card */}
-      <div className="bg-white border-2 border-[#800020]/20 hover:border-[#800020]/40 rounded-2xl p-4 shadow-sm transition">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center font-bold text-lg shrink-0">
-              ✓
+      <div className="bg-white border-2 border-[#800020]/25 hover:border-[#800020]/50 rounded-2xl p-4 sm:p-5 shadow-sm transition">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center font-bold text-lg shrink-0 mt-0.5 shadow-2xs">
+              <FileCheck className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs uppercase font-extrabold tracking-wider text-[#800020]">
                   Active Model Answer Key
                 </span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${activeModelKey.isCustom ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-[#fff1f2] text-[#881337] border border-[#fecdd3]'}`}>
-                  {activeModelKey.isCustom ? '★ Custom Key Active' : 'Cambridge BIDMAS Default'}
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                  activeModelKey.pdfUrl
+                    ? 'bg-rose-100 text-[#800020] border border-[#fecdd3]'
+                    : activeModelKey.isCustom
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                    : 'bg-[#fff1f2] text-[#881337] border border-[#fecdd3]'
+                }`}>
+                  {activeModelKey.pdfUrl ? '📄 PDF Key Active' : activeModelKey.isCustom ? '★ Custom Key Active' : 'Cambridge Default'}
+                </span>
+                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                  {activeModelKey.questionCount || 26} Questions • {activeModelKey.totalMarks || 75} Marks
                 </span>
               </div>
-              <h3 className="text-sm font-bold text-slate-800 mt-0.5">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 mt-1">
                 {activeModelKey.title}
               </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {activeModelKey.fileName ? `Source: ${activeModelKey.fileName}` : 'Full worked solutions & method marks [M1]/[A1] active for grading'}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* Primary Action: Upload Model Answer PDF */}
+            <input
+              ref={keyFileInputRef}
+              type="file"
+              accept=".pdf,.txt,.md"
+              onChange={handleUploadKeyFile}
+              className="hidden"
+              id="model-answer-pdf-file-input"
+            />
+            <button
+              type="button"
+              onClick={() => keyFileInputRef.current?.click()}
+              disabled={isUploadingKeyPdf}
+              className="px-3.5 py-2 rounded-xl bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+              title="Upload official Exam or Solution PDF"
+            >
+              {isUploadingKeyPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                  <span>Extracting PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileUp className="w-3.5 h-3.5 text-rose-200" />
+                  <span>Upload Model Answer PDF</span>
+                </>
+              )}
+            </button>
+
+            {/* View PDF Button */}
+            {activeModelKey.pdfUrl && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPdfModalType('model');
+                  setPdfModalUrl(activeModelKey.pdfUrl || '/assets/model-keys/pearson-edexcel-igcse-monthly-exam-1-model-answers.pdf');
+                  setShowPdfModal(true);
+                }}
+                className="px-3 py-2 rounded-xl bg-white hover:bg-[#fff5f6] text-[#800020] border border-[#fecdd3] text-xs font-bold transition shadow-2xs flex items-center gap-1.5"
+                title="Preview the active Model Answer PDF"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>View Key PDF</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setShowKeyPreview(!showKeyPreview)}
-              className="px-2.5 py-1.5 rounded-lg border border-[#fecdd3] bg-[#fffcfd] hover:bg-[#fff1f2] text-xs font-semibold text-[#800020] transition flex items-center gap-1 shadow-2xs"
+              className="px-2.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition flex items-center gap-1 shadow-2xs"
             >
               {showKeyPreview ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              <span>{showKeyPreview ? 'Hide Key' : 'Preview Key'}</span>
+              <span>{showKeyPreview ? 'Hide Text' : 'Preview Text'}</span>
             </button>
+
             <button
               type="button"
               onClick={() => {
@@ -679,16 +779,17 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 setEditingKeyText(activeModelKey.text);
                 setIsModelKeyModalOpen(true);
               }}
-              className="px-3 py-1.5 rounded-lg bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+              className="px-3 py-2 rounded-xl bg-[#fff8f9] hover:bg-[#ffeef1] text-[#800020] border border-[#fecdd3] text-xs font-bold transition shadow-2xs flex items-center gap-1.5"
             >
               <Edit3 className="w-3.5 h-3.5" />
-              <span>Change / Enter Model Answer</span>
+              <span>Edit / Templates</span>
             </button>
+
             {activeModelKey.isCustom && (
               <button
                 type="button"
                 onClick={handleResetModelKey}
-                className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-600 transition"
+                className="px-2.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-500 transition"
                 title="Reset to default Cambridge BIDMAS model key"
               >
                 Reset Default
@@ -699,8 +800,12 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
         {/* Collapsible Key Preview */}
         {showKeyPreview && (
-          <div className="mt-3 pt-3 border-t border-[#f5e1e5] animate-in fade-in">
-            <pre className="text-xs font-mono bg-[#fffcfd] border border-[#fecdd3] p-3 rounded-xl text-slate-700 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+          <div className="mt-3.5 pt-3.5 border-t border-[#f5e1e5] animate-in fade-in space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-600">
+              <span className="font-semibold text-[#701a2d]">Parsed Solution &amp; Mark Scheme Text ({activeModelKey.text.length} characters):</span>
+              <span className="text-[11px] text-slate-400">Used by Gemini AI for student step evaluation</span>
+            </div>
+            <pre className="text-xs font-mono bg-[#fffcfd] border border-[#fecdd3] p-3 rounded-xl text-slate-700 max-h-56 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
               {activeModelKey.text}
             </pre>
           </div>
@@ -1557,7 +1662,7 @@ Q3: 25 + 11 = 36`}
                     ? `${report?.studentName || 'Student'} — Homework Evaluation Report`
                     : pdfModalType === 'joury'
                     ? 'Joury — Official Evaluation Report'
-                    : 'Cambridge IGCSE Model Answer Key (Order of Operations)'}
+                    : activeModelKey.title || 'Official Model Answer Key & Mark Scheme'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1618,10 +1723,68 @@ Q3: 25 + 11 = 36`}
 
             {/* Modal Body */}
             <div className="flex-1 p-5 overflow-y-auto space-y-4">
+              {/* PDF File Upload Zone (Primary Action) */}
+              <div className="p-4 rounded-xl border-2 border-dashed border-[#fecdd3] hover:border-[#800020] bg-[#fffafb] transition">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center shrink-0">
+                      <FileUp className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">
+                        Upload Model Answer Key (PDF)
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Upload official exam mark schemes or worked solutions (<code>.pdf</code>, <code>.txt</code>). All worked steps [M1] and accuracy marks [A1] are extracted automatically.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => keyFileInputRef.current?.click()}
+                    disabled={isUploadingKeyPdf}
+                    className="px-4 py-2 rounded-xl bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                  >
+                    {isUploadingKeyPdf ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Extracting PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileUp className="w-3.5 h-3.5" />
+                        <span>Choose PDF File</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                {activeModelKey.fileName && (
+                  <div className="mt-3 pt-2.5 border-t border-[#f8e1e5] flex items-center justify-between text-[11px]">
+                    <span className="text-[#701a2d] font-semibold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Active File: <strong>{activeModelKey.fileName}</strong>
+                    </span>
+                    {activeModelKey.pdfUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPdfModalType('model');
+                          setPdfModalUrl(activeModelKey.pdfUrl!);
+                          setShowPdfModal(true);
+                        }}
+                        className="text-[#800020] hover:underline font-bold"
+                      >
+                        Preview PDF Document
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Template Quick Selection */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Choose a Starting Template or Upload
+                  Or Select a Curriculum Template
                 </label>
                 <div className="flex items-center gap-2 flex-wrap">
                   {Object.entries(MODEL_KEY_TEMPLATES).map(([key, tmpl]) => (
@@ -1635,25 +1798,9 @@ Q3: 25 + 11 = 36`}
                           : 'bg-[#fffcfd] text-slate-700 border-[#edd7dc] hover:bg-[#fff1f2] hover:text-[#800020]'
                       }`}
                     >
-                      {tmpl.title.split('—')[0].trim()}
+                      {tmpl.title.split('—')[0].replace('Pearson Edexcel', 'Edexcel').replace('Chapter 1: Numbers', 'BIDMAS').trim()}
                     </button>
                   ))}
-
-                  <input
-                    ref={keyFileInputRef}
-                    type="file"
-                    accept=".txt,.md,.text"
-                    onChange={handleUploadKeyFile}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => keyFileInputRef.current?.click()}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#fff8f9] text-[#800020] border border-[#fecdd3] hover:bg-[#ffe4e6] transition flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <FileUp className="w-3.5 h-3.5" />
-                    <span>Import .txt / .md Key File</span>
-                  </button>
                 </div>
               </div>
 

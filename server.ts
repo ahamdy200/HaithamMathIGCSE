@@ -6,6 +6,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { GoogleGenAI } from '@google/genai';
+import { PEARSON_EDEXCEL_EXAM_1_KEY, DEFAULT_CAMBRIDGE_BIDMAS_KEY } from './src/data/modelAnswerKey';
 
 dotenv.config();
 
@@ -937,13 +938,9 @@ Put one pair of brackets in each statement to make it correct.
 Total Marks: 10 Marks
 `;
 
-// Active Model Answer Key Store (Mutable - supports any custom model answer submitted by teacher)
+// Active Model Answer Key Store (Defaults to the official Pearson Edexcel 26-Question Exam Key)
 let currentModelAnswerKey = {
-  title: 'Chapter 1: Numbers — Lesson 1: Order of Operations (BIDMAS)',
-  topic: 'Order of Operations (BIDMAS)',
-  text: IGCSE_BIDMAS_MODEL_KEY,
-  totalMarks: 10,
-  isCustom: false,
+  ...PEARSON_EDEXCEL_EXAM_1_KEY,
   updatedAt: new Date().toISOString(),
 };
 
@@ -955,9 +952,73 @@ app.get('/api/model-key/active', (_req: Request, res: Response) => {
   });
 });
 
+// POST Upload Model Answer PDF endpoint (Directly parse & set any PDF Exam/Mark Scheme)
+app.post('/api/model-key/upload-pdf', async (req: Request, res: Response) => {
+  try {
+    const { fileBase64, fileName = 'model_answer.pdf', title } = req.body || {};
+    if (!fileBase64) {
+      return res.status(400).json({ success: false, error: 'No file data received' });
+    }
+
+    const cleanBase64 = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    // Save PDF to public/assets/model-keys/ for direct in-browser rendering
+    const safeName = (fileName || 'model_answer.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const targetDir = path.resolve(__dirname, 'public', 'assets', 'model-keys');
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const targetPath = path.join(targetDir, safeName);
+    fs.writeFileSync(targetPath, buffer);
+
+    // Extract text and math notation using PDFParse
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const pdfData = await parser.getText();
+    const extractedText = typeof pdfData === 'string' ? pdfData : (pdfData?.text || '');
+
+    if (!extractedText.trim()) {
+      return res.status(422).json({ success: false, error: 'Could not extract text from this PDF file' });
+    }
+
+    // Auto-detect title, total marks, and questions count
+    const cleanBaseName = (fileName || 'Model Answer').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()).trim();
+    const marksMatch = extractedText.match(/Total Marks:\s*(\d+)/i) || extractedText.match(/(\d+)\s*Marks/i);
+    const detectedMarks = marksMatch ? parseInt(marksMatch[1], 10) : 75;
+    const questionMatches = extractedText.match(/Question\s+(\d+)/gi);
+    const detectedQuestions = questionMatches ? new Set(questionMatches.map((q: string) => q.toLowerCase())).size : 26;
+
+    const resolvedTitle = title && title.trim() ? title.trim() : cleanBaseName || 'Uploaded Model Answer Key (PDF)';
+
+    currentModelAnswerKey = {
+      title: resolvedTitle,
+      topic: resolvedTitle,
+      text: extractedText.trim(),
+      totalMarks: detectedMarks,
+      isCustom: true,
+      pdfUrl: `/assets/model-keys/${safeName}`,
+      fileName: safeName,
+      questionCount: detectedQuestions,
+      updatedAt: new Date().toISOString(),
+    };
+
+    console.log(`[PDF Model Key Uploaded] "${currentModelAnswerKey.title}" (${currentModelAnswerKey.text.length} chars, ${detectedQuestions} questions, ${detectedMarks} marks) -> ${currentModelAnswerKey.pdfUrl}`);
+
+    res.json({
+      success: true,
+      message: 'PDF Model Answer Key uploaded and parsed successfully!',
+      modelKey: currentModelAnswerKey,
+    });
+  } catch (err: any) {
+    console.error('Error uploading model answer PDF:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to process model answer PDF' });
+  }
+});
+
 // POST Set / Update Active Model Answer Key
 app.post('/api/model-key/active', (req: Request, res: Response) => {
-  const { title, text, totalMarks, topic } = req.body || {};
+  const { title, text, totalMarks, topic, pdfUrl, fileName } = req.body || {};
   if (!text || !text.trim()) {
     return res.status(400).json({ success: false, error: 'Model answer text cannot be empty' });
   }
@@ -966,8 +1027,10 @@ app.post('/api/model-key/active', (req: Request, res: Response) => {
     title: (title && title.trim()) || 'Custom Model Answer Key',
     topic: (topic && topic.trim()) || (title && title.trim()) || 'Custom Assessment',
     text: text.trim(),
-    totalMarks: typeof totalMarks === 'number' && totalMarks > 0 ? totalMarks : 10,
+    totalMarks: typeof totalMarks === 'number' && totalMarks > 0 ? totalMarks : 75,
     isCustom: true,
+    pdfUrl: pdfUrl || currentModelAnswerKey.pdfUrl,
+    fileName: fileName || currentModelAnswerKey.fileName,
     updatedAt: new Date().toISOString(),
   };
 
@@ -980,20 +1043,24 @@ app.post('/api/model-key/active', (req: Request, res: Response) => {
   });
 });
 
-// POST Reset Active Model Answer Key to default Cambridge BIDMAS
-app.post('/api/model-key/reset', (_req: Request, res: Response) => {
-  currentModelAnswerKey = {
-    title: 'Chapter 1: Numbers — Lesson 1: Order of Operations (BIDMAS)',
-    topic: 'Order of Operations (BIDMAS)',
-    text: IGCSE_BIDMAS_MODEL_KEY,
-    totalMarks: 10,
-    isCustom: false,
-    updatedAt: new Date().toISOString(),
-  };
+// POST Reset Active Model Answer Key (supports resetting to Edexcel Monthly Exam 1 or Cambridge BIDMAS)
+app.post('/api/model-key/reset', (req: Request, res: Response) => {
+  const target = req.body?.target || 'edexcel';
+  if (target === 'bidmas') {
+    currentModelAnswerKey = {
+      ...DEFAULT_CAMBRIDGE_BIDMAS_KEY,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    currentModelAnswerKey = {
+      ...PEARSON_EDEXCEL_EXAM_1_KEY,
+      updatedAt: new Date().toISOString(),
+    };
+  }
 
   res.json({
     success: true,
-    message: 'Reset to default Cambridge BIDMAS model key',
+    message: `Active model answer key reset to: ${currentModelAnswerKey.title}`,
     modelKey: currentModelAnswerKey,
   });
 });
