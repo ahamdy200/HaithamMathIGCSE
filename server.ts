@@ -55,7 +55,7 @@ app.get('/api/github/status', (_req: Request, res: Response) => {
       branch,
       lastCommit,
       remoteCommit,
-      trackedFilesCount: parseInt(trackedFilesCount, 10) || 0,
+      trackedFilesCount: Number(trackedFilesCount) || 0,
       workingTreeClean: statusShort.length === 0,
       modifiedFiles: statusShort ? statusShort.split('\n') : [],
     });
@@ -142,11 +142,21 @@ with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
   }
 });
 
+// Global error guards to keep the server resilient against unhandled promise rejections
+process.on('unhandledRejection', (reason) => {
+  console.warn('Unhandled Rejection observed (process kept alive):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception observed (process kept alive):', err);
+});
+
 async function generateWithRetry(params: any, maxRetries = 1, timeoutMs = 4500): Promise<any> {
   let attempt = 0;
   while (attempt <= maxRetries) {
     try {
       const callPromise = ai.models.generateContent(params);
+      // Suppress unhandled rejection if timeoutPromise wins the race
+      callPromise.catch(() => {});
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`Gemini API request timed out after ${timeoutMs}ms`)), timeoutMs)
       );
