@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   FileText,
   UploadCloud,
@@ -26,9 +26,15 @@ import {
   List as ListIcon,
   ExternalLink,
   PenTool,
+  Edit3,
 } from 'lucide-react';
 import { HomeworkGradingReport } from '../types';
 import { HandwrittenEquationCanvas } from './HandwrittenEquationCanvas';
+import {
+  DEFAULT_CAMBRIDGE_BIDMAS_KEY,
+  MODEL_KEY_TEMPLATES,
+  ModelAnswerKeyData,
+} from '../data/modelAnswerKey';
 
 interface StudentHomeworkPortalProps {
   onSwitchToNotebook?: () => void;
@@ -39,10 +45,18 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   onSwitchToNotebook,
   onSwitchToModelKey,
 }) => {
-  // Portal starts clean for uploading student homework
+  // Model Answer Key Management State (allows adding ANY model answer)
+  const [activeModelKey, setActiveModelKey] = useState<ModelAnswerKeyData>(DEFAULT_CAMBRIDGE_BIDMAS_KEY);
+  const [isModelKeyModalOpen, setIsModelKeyModalOpen] = useState(false);
+  const [editingKeyTitle, setEditingKeyTitle] = useState(DEFAULT_CAMBRIDGE_BIDMAS_KEY.title);
+  const [editingKeyText, setEditingKeyText] = useState(DEFAULT_CAMBRIDGE_BIDMAS_KEY.text);
+  const [selectedTemplate, setSelectedTemplate] = useState('bidmas');
+  const [showKeyPreview, setShowKeyPreview] = useState(false);
+
+  // Portal starts clean for uploading student homework (all test materials wiped)
   const [studentName, setStudentName] = useState('');
   const [studentId, setStudentId] = useState(`IGCSE-2026-${Math.floor(100 + Math.random() * 900)}`);
-  const [assignment, setAssignment] = useState('Chapter 1: Numbers — Lesson 1: Order of Operations (BIDMAS)');
+  const [assignment, setAssignment] = useState(DEFAULT_CAMBRIDGE_BIDMAS_KEY.title);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [fileMimeType, setFileMimeType] = useState<string | null>(null);
@@ -52,8 +66,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [isGrading, setIsGrading] = useState(false);
   const [report, setReport] = useState<HomeworkGradingReport | null>(null);
   const [showPdfModal, setShowPdfModal] = useState(false);
-  const [pdfModalType, setPdfModalType] = useState<'student' | 'model' | 'joury' | 'adam' | 'custom'>('adam');
-  const [pdfModalUrl, setPdfModalUrl] = useState<string>('/assets/aistudio/adam-bardana-homework-report_9fb73cfc.pdf');
+  const [pdfModalType, setPdfModalType] = useState<'student' | 'model' | 'custom'>('model');
+  const [pdfModalUrl, setPdfModalUrl] = useState<string>('/assets/aistudio/order-of-operations-model-answer-key_202610250939_18187_be349899.pdf');
   const [viewStyle, setViewStyle] = useState<'notebookTable' | 'detailedCards'>('notebookTable');
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
   const [questionFilter, setQuestionFilter] = useState<'all' | 'correct' | 'review'>('all');
@@ -64,6 +78,22 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [themeMode, setThemeMode] = useState<'slate' | 'paper'>('slate');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const keyFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch active model key from server on initial mount
+  useEffect(() => {
+    fetch('/api/model-key/active')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.modelKey) {
+          setActiveModelKey(data.modelKey);
+          setEditingKeyTitle(data.modelKey.title);
+          setEditingKeyText(data.modelKey.text);
+          setAssignment(data.modelKey.title);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Student question ask state
   const [studentQuery, setStudentQuery] = useState('');
@@ -174,8 +204,10 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           studentName: targetStudentName,
-          assignment,
+          assignment: activeModelKey.title,
           submissionText,
+          modelAnswerKey: activeModelKey.text,
+          modelAnswerTitle: activeModelKey.title,
           useSampleSubmission: false,
           scenario,
           fileName: targetFileName,
@@ -189,7 +221,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
         setReport(data.report);
         if (data.report.pdfUrl) {
           setPdfModalUrl(data.report.pdfUrl);
-          setPdfModalType('adam');
+          setPdfModalType('model');
         }
       }
     } catch (e) {
@@ -203,17 +235,17 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     return handleCheckHomeworkForStudent();
   };
 
-  // Run all 4 integrated repositories in a single combined pool pipeline
+  // Run all 5 integrated repositories in a single combined pool pipeline
   const handleRunUnifiedPool = async () => {
     setIsProcessingPool(true);
-    setRefreshNotice('Initializing Unified Multi-Repository Engine Pool: [1. AutoMark CV] → [2. CNN Equation Solver] → [3. Multi-Provider Vision AI] → [4. Haitham Cambridge Rubric]...');
+    setRefreshNotice('Initializing Unified Multi-Repository Engine Pool: [1. AutoMark CV] → [2. CNN Equation Solver] → [3. Pix2Text OCR] → [4. Vision AI] → [5. Cambridge Rubric]...');
     try {
       const cleanFileBase = selectedFile
         ? selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
         : '';
       const targetStudentName = (studentName || cleanFileBase || 'Student Submission').trim();
       const targetFileName = selectedFile?.name || (customTextWorking.trim() ? 'Student_Typed_Answers.txt' : 'homework_submission.pdf');
-      const submissionText = customTextWorking || `Student: ${targetStudentName}\nUploaded Homework Worksheet: ${targetFileName}\nForm Code: IGCSE-BIDMAS-CH1`;
+      const submissionText = customTextWorking || `Student: ${targetStudentName}\nUploaded Homework Worksheet: ${targetFileName}\nAssignment: ${activeModelKey.title}`;
 
       const res = await fetch('/api/unified-pool/process', {
         method: 'POST',
@@ -223,7 +255,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           submissionText,
           fileBase64: fileBase64 || null,
           fileName: targetFileName,
-          formCode: 'IGCSE-BIDMAS-CH1',
+          modelAnswerKey: activeModelKey.text,
+          modelAnswerTitle: activeModelKey.title,
+          formCode: 'CUSTOM-OR-BIDMAS',
           provider: 'gemini',
         }),
       });
@@ -234,7 +268,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       }
 
       await handleCheckHomeworkForStudent(targetStudentName, targetFileName, 'custom', submissionText);
-      setRefreshNotice(`Unified Pool Success! All 5 engines (AutoMark, DL Solver, Pix2Text, Vision AI, Cambridge Rubric) processed submission in ${data.unifiedPool?.totalDurationMs || 289}ms.`);
+      setRefreshNotice(`Unified Pool Success! All 5 engines processed submission against active model key in ${data.unifiedPool?.totalDurationMs || 289}ms.`);
     } catch (err: any) {
       console.error(err);
       await handleCheckHomework();
@@ -243,83 +277,77 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     }
   };
 
-  // Test Case: Q1 & Q2 Correct, Q3 & Q4 Mistakes (2/10 Marks, 20% Grade U)
-  const handleLoadQ1Q2CorrectQ3Q4Mistakes = () => {
-    const textWorking = `1. because he added first instead of dividing\n2. 30\n3. 25\n4. 23 - 3 = 20 * 3 = 60\n(Questions 5, 6, 7 left unattempted)`;
-    const testName = 'Test Student (Q1-Q2 Correct, Q3-Q4 Wrong)';
-    setStudentName(testName);
-    setSelectedFile(null);
-    setFileBase64(null);
-    setFileMimeType(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  // Model Answer Key Management (Save, Reset, Import, Templates)
+  const handleSaveModelKey = async (title: string, text: string) => {
+    if (!text.trim()) return;
+    try {
+      const res = await fetch('/api/model-key/active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, text }),
+      });
+      const data = await res.json();
+      if (data.success && data.modelKey) {
+        setActiveModelKey(data.modelKey);
+        setAssignment(data.modelKey.title);
+        setIsModelKeyModalOpen(false);
+        setRefreshNotice(`Active Model Answer Key set to: "${data.modelKey.title}"`);
+        setTimeout(() => setRefreshNotice(null), 4000);
+      }
+    } catch (err) {
+      console.error(err);
     }
-    setCustomTextWorking(textWorking);
-    setInputMode('type');
-    setRefreshNotice('Loaded Test: Q1 & Q2 Correct, Q3 & Q4 Mistakes (Expected: 2 / 10 Marks, 20% Grade U). Grading now...');
-    handleCheckHomeworkForStudent(testName, 'Student_Typed_Answers.txt', 'custom', textWorking);
   };
 
-  // Test Case: Q1 & Q2 Correct, Q3 & Q4 Mistakes, Q5-Q7 Correct (7/10 Marks, 70% Grade B)
-  const handleLoadQ1Q2CorrectMistakesRestCorrect = () => {
-    const textWorking = `1. because he added first instead of dividing\n2. 30\n3. 25\n4. 23 - 3 = 20 * 3 = 60\n5a. 4 + 9 * (6 - 4) = 22\n5b. 24 / (12 - 8 + 2) = 4\n6a. (10 - 4) / 2 + 18 = 21\n6b. 7 * (3 + 1) + 2 = 30\n7. 2 + 8(35) = 282`;
-    const testName = 'Test Student (Q1-Q2 Correct, Q3-Q4 Wrong, Rest Correct)';
-    setStudentName(testName);
-    setSelectedFile(null);
-    setFileBase64(null);
-    setFileMimeType(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const handleResetModelKey = async () => {
+    try {
+      const res = await fetch('/api/model-key/reset', { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.modelKey) {
+        setActiveModelKey(data.modelKey);
+        setEditingKeyTitle(data.modelKey.title);
+        setEditingKeyText(data.modelKey.text);
+        setAssignment(data.modelKey.title);
+        setSelectedTemplate('bidmas');
+        setIsModelKeyModalOpen(false);
+        setRefreshNotice('Reset to default Cambridge BIDMAS Model Key');
+        setTimeout(() => setRefreshNotice(null), 3000);
+      }
+    } catch (err) {
+      console.error(err);
     }
-    setCustomTextWorking(textWorking);
-    setInputMode('type');
-    setRefreshNotice('Loaded Test: Q1 & Q2 Correct, Q3 & Q4 Mistakes, Rest Correct (Expected: 7 / 10 Marks, 70% Grade B). Grading now...');
-    handleCheckHomeworkForStudent(testName, 'Student_Typed_Answers.txt', 'custom', textWorking);
   };
 
-  const handleLoadAdamBardana = () => {
-    setStudentName('Adam Bardana');
-    const mockFile = new File(['Adam Bardana Homework Submission'], 'adam bardana.pdf', {
-      type: 'application/pdf',
-    });
-    setSelectedFile(mockFile);
-    setCustomTextWorking('');
-    setPdfModalUrl('/assets/aistudio/adam-bardana-homework-report_9fb73cfc.pdf');
-    setPdfModalType('adam');
-    setRefreshNotice('Loaded "adam bardana.pdf" (NotebookLM 5/10 Reference Report). Checking homework now...');
-    handleCheckHomeworkForStudent('Adam Bardana', 'adam bardana.pdf', 'adam_sample');
+  const handleSelectTemplate = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    const tmpl = MODEL_KEY_TEMPLATES[templateId];
+    if (tmpl) {
+      setEditingKeyTitle(tmpl.title);
+      setEditingKeyText(tmpl.text);
+    }
   };
 
-  const handleLoadTwoWrongAnswersTest = () => {
-    const wrongAnswersText = `1. Mike is right because 8 + 12 = 20, 20 / 4 = 5\n2. 50\n(Questions 3 to 7 left blank / unattempted)`;
-    const testName = 'Test Student (2 Wrong Answers)';
-    setStudentName(testName);
-    setSelectedFile(null);
-    setFileBase64(null);
-    setFileMimeType(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    setCustomTextWorking(wrongAnswersText);
-    setInputMode('type');
-    setRefreshNotice('Loaded 2 wrong answers test (Expected: 0 / 10 Marks, 0% Grade U). Grading now...');
-    handleCheckHomeworkForStudent(testName, 'Student_Typed_Answers.txt', 'custom', wrongAnswersText);
-  };
+  const handleUploadKeyFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const handleLoadAllCorrectTest = () => {
-    const allCorrectText = `1. because he added first instead of dividing\n2. 30\n3. 36\n4. 196\n5a. 4 + 9 * (6 - 4) = 22\n5b. 24 / (12 - 8 + 2) = 4\n6a. (10 - 4) / 2 + 18 = 21\n6b. 7 * (3 + 1) + 2 = 30\n7. 2 + 8(35) = 282`;
-    const testName = 'Model Student (10/10 Correct)';
-    setStudentName(testName);
-    setSelectedFile(null);
-    setFileBase64(null);
-    setFileMimeType(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    setCustomTextWorking(allCorrectText);
-    setInputMode('type');
-    setRefreshNotice('Loaded 10/10 all correct test answers (Expected: 10 / 10 Marks, 100% Grade A*). Grading now...');
-    handleCheckHomeworkForStudent(testName, 'Student_Typed_Answers.txt', 'custom', allCorrectText);
+    const cleanTitle = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_-]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+
+    setEditingKeyTitle(cleanTitle || 'Imported Model Answer Key');
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        setEditingKeyText(content);
+        setSelectedTemplate('custom');
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleAskTutor = async (e: React.FormEvent) => {
@@ -392,43 +420,37 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           {/* Action Toolbar */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
             <button
-              onClick={handleLoadQ1Q2CorrectQ3Q4Mistakes}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
-              title="Test: Q1 & Q2 Correct, Q3 & Q4 Mistakes, rest unattempted (Scores 2/10, 20% Grade U)"
+              onClick={() => {
+                setEditingKeyTitle(activeModelKey.title);
+                setEditingKeyText(activeModelKey.text);
+                setIsModelKeyModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold transition shadow-sm border border-white"
+              title="Add or edit custom model answer key & mark scheme"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Test: Q1 &amp; Q2 Correct (2/10)</span>
-            </button>
-
-            <button
-              onClick={handleLoadAdamBardana}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
-              title="Test with Adam Bardana (NotebookLM Evaluation Report 5/10)"
-            >
-              <FileCheck className="w-3.5 h-3.5 text-amber-300" />
-              <span>Adam (5/10)</span>
+              <FileCheck className="w-4 h-4 text-[#800020]" />
+              <span>Model Answer Key ({activeModelKey.isCustom ? 'Custom' : 'Active'})</span>
             </button>
 
             <button
               onClick={handleResetPortal}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
-              title="Clear old reports and refresh test portal for a new student submission"
+              title="Clear old submissions and start fresh"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset</span>
             </button>
 
-            <button
-              onClick={() => {
-                setPdfModalType('model');
-                setPdfModalUrl('/assets/aistudio/order-of-operations-model-answer-key_202610250939_18187_be349899.pdf');
-                setShowPdfModal(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold transition shadow-sm border border-white"
-            >
-              <FileCheck className="w-4 h-4 text-[#800020]" />
-              <span>Answer Key (PDF)</span>
-            </button>
+            {onSwitchToModelKey && (
+              <button
+                onClick={onSwitchToModelKey}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
+                title="View Cambridge Rubric in Teacher View"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-amber-300" />
+                <span>Rubric Viewer</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -619,6 +641,72 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
         </div>
       )}
 
+      {/* Active Model Answer Key & Marking Scheme Card */}
+      <div className="bg-white border-2 border-[#800020]/20 hover:border-[#800020]/40 rounded-2xl p-4 shadow-sm transition">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center font-bold text-lg shrink-0">
+              ✓
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs uppercase font-extrabold tracking-wider text-[#800020]">
+                  Active Model Answer Key
+                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${activeModelKey.isCustom ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-[#fff1f2] text-[#881337] border border-[#fecdd3]'}`}>
+                  {activeModelKey.isCustom ? '★ Custom Key Active' : 'Cambridge BIDMAS Default'}
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 mt-0.5">
+                {activeModelKey.title}
+              </h3>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowKeyPreview(!showKeyPreview)}
+              className="px-2.5 py-1.5 rounded-lg border border-[#fecdd3] bg-[#fffcfd] hover:bg-[#fff1f2] text-xs font-semibold text-[#800020] transition flex items-center gap-1 shadow-2xs"
+            >
+              {showKeyPreview ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              <span>{showKeyPreview ? 'Hide Key' : 'Preview Key'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingKeyTitle(activeModelKey.title);
+                setEditingKeyText(activeModelKey.text);
+                setIsModelKeyModalOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Change / Enter Model Answer</span>
+            </button>
+            {activeModelKey.isCustom && (
+              <button
+                type="button"
+                onClick={handleResetModelKey}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-600 transition"
+                title="Reset to default Cambridge BIDMAS model key"
+              >
+                Reset Default
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Collapsible Key Preview */}
+        {showKeyPreview && (
+          <div className="mt-3 pt-3 border-t border-[#f5e1e5] animate-in fade-in">
+            <pre className="text-xs font-mono bg-[#fffcfd] border border-[#fecdd3] p-3 rounded-xl text-slate-700 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+              {activeModelKey.text}
+            </pre>
+          </div>
+        )}
+      </div>
+
       {/* Main Upload / Test Control Panel (White & Burgundy Theme) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: File Upload & Student Details (5 cols) */}
@@ -699,24 +787,13 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     <div className="w-12 h-12 rounded-full bg-[#fff1f2] text-[#800020] flex items-center justify-center mb-2 group-hover:scale-105 transition-transform border border-[#fecdd3]">
                       <FileUp className="w-6 h-6" />
                     </div>
-                    <span className="text-xs text-slate-800 font-bold">Choose file or drag &amp; drop</span>
+                    <span className="text-xs text-slate-800 font-bold">Choose student file or drag &amp; drop</span>
                     <span className="text-[11px] text-slate-500 mt-1">
-                      Upload student homework PDF (e.g. <code>adam bardana.pdf</code>) or photos
+                      Upload student worksheet (PDF, JPG, PNG, or TXT)
                     </span>
-                    <div className="mt-3 flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleLoadAdamBardana();
-                        }}
-                        className="px-2.5 py-1 rounded bg-[#fff1f2] hover:bg-[#ffe4e6] text-[#881337] text-[11px] font-semibold border border-[#fecdd3] transition flex items-center gap-1.5 shadow-xs"
-                      >
-                        <Sparkles className="w-3 h-3 text-amber-500" />
-                        <span>Quick Test with <strong>adam bardana.pdf</strong></span>
-                      </button>
-                    </div>
+                    <span className="mt-2.5 text-[10px] text-[#800020] font-semibold bg-[#fff1f2] px-2.5 py-0.5 rounded-full border border-[#fecdd3]">
+                      Graded dynamically against active Model Answer Key
+                    </span>
                   </label>
                 ) : (
                   <div className="bg-[#fff8f9] border border-[#fecdd3] p-3.5 rounded-xl space-y-2 shadow-xs">
@@ -765,45 +842,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   <span className="text-[10px] text-slate-500">Type what the student wrote</span>
                 </div>
 
-                {/* Quick Presets for instant testing */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={handleLoadQ1Q2CorrectQ3Q4Mistakes}
-                    className="px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-[11px] font-semibold transition flex items-center gap-1 shadow-xs"
-                    title="Load Q1 & Q2 correct with Q3 & Q4 mistakes, rest unattempted (Scores 2/10, 20% Grade U)"
-                  >
-                    <span>🟡 Test: Q1 &amp; Q2 Correct (2/10)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLoadQ1Q2CorrectMistakesRestCorrect}
-                    className="px-2.5 py-1 rounded-md bg-[#fff1f2] hover:bg-[#ffe4e6] border border-[#fecdd3] text-[#881337] text-[11px] font-semibold transition flex items-center gap-1 shadow-xs"
-                    title="Load Q1 & Q2 correct, Q3 & Q4 mistakes, and Q5-Q7 correct (Scores 7/10, 70% Grade B)"
-                  >
-                    <span>🟡 Test: Rest Correct (7/10)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLoadTwoWrongAnswersTest}
-                    className="px-2.5 py-1 rounded-md bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-semibold transition flex items-center gap-1"
-                    title="Load 2 wrong answers with questions 3-7 unattempted (Should score 0/10)"
-                  >
-                    <span>🔴 Test: 2 Wrong (0/10)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLoadAllCorrectTest}
-                    className="px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-semibold transition flex items-center gap-1"
-                    title="Load all 9 questions correct (10/10)"
-                  >
-                    <span>🟢 Test: All 10/10 Correct</span>
-                  </button>
+                {/* Input helper controls */}
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Enter student's typed responses or transcription:</span>
                   {customTextWorking && (
                     <button
                       type="button"
                       onClick={() => setCustomTextWorking('')}
-                      className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] transition"
+                      className="px-2 py-0.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-semibold transition"
                     >
                       Clear
                     </button>
@@ -813,11 +859,11 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 <textarea
                   value={customTextWorking}
                   onChange={(e) => setCustomTextWorking(e.target.value)}
-                  placeholder={`Type student answers here for testing, for example:
-Q1: Mike is right because 8+12=20, 20/4=5
-Q2: 50
-(All other questions left unattempted)`}
-                  rows={5}
+                  placeholder={`Type or paste student answers here, for example:
+Q1: 8 + 12 ÷ 4 = 8 + 3 = 11
+Q2: 5 × (16 + 2 - 12) = 5 × 6 = 30
+Q3: 25 + 11 = 36`}
+                  rows={6}
                   className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:border-[#800020] font-mono leading-relaxed placeholder:text-slate-400"
                 />
               </div>
@@ -1005,21 +1051,21 @@ Q2: 50
                     {report.pdfUrl && (
                       <button
                         onClick={() => {
-                          setPdfModalType('adam');
+                          setPdfModalType('student');
                           setPdfModalUrl(report.pdfUrl || '/assets/aistudio/adam-bardana-homework-report_9fb73cfc.pdf');
                           setShowPdfModal(true);
                         }}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold shadow-md transition"
                       >
                         <Eye className="w-3.5 h-3.5" />
-                        <span>View NotebookLM PDF</span>
+                        <span>View Official PDF</span>
                       </button>
                     )}
 
                     {report.pdfUrl && (
                       <a
                         href={report.pdfUrl}
-                        download="adam-bardana-homework-report.pdf"
+                        download={`${(report.studentName || 'student').toLowerCase().replace(/\s+/g, '-')}-evaluation-report.pdf`}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold border border-white/25 transition"
                         title="Download official PDF report"
                       >
@@ -1507,10 +1553,10 @@ Q2: 50
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-[#800020]" />
                 <span className="font-bold text-slate-900 text-sm font-serif">
-                  {pdfModalType === 'adam'
-                    ? 'Adam Bardana — Homework Evaluation Report (adam-bardana-homework-report.pdf)'
+                  {pdfModalType === 'student' || pdfModalType === 'adam'
+                    ? `${report?.studentName || 'Student'} — Homework Evaluation Report`
                     : pdfModalType === 'joury'
-                    ? 'Joury — Official Evaluation Report (joury-homework-report.pdf)'
+                    ? 'Joury — Official Evaluation Report'
                     : 'Cambridge IGCSE Model Answer Key (Order of Operations)'}
                 </span>
               </div>
@@ -1537,6 +1583,140 @@ Q2: 50
                 className="w-full h-full rounded border border-[#edd7dc]"
                 title="NotebookLM PDF Document Preview"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Model Answer Key Editor / Uploader Modal */}
+      {isModelKeyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white border border-[#e6ccd2] rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-800">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[#f0d8dd] bg-[#fffdfa]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#fff1f2] text-[#800020] flex items-center justify-center border border-[#fecdd3]">
+                  <FileCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#701a2d]">
+                    Model Answer Key &amp; Mark Scheme Manager
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Define any custom assignment answer key; homework will be dynamically graded against it.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModelKeyModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-[#fdf2f4] text-slate-400 hover:text-slate-700 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 p-5 overflow-y-auto space-y-4">
+              {/* Template Quick Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Choose a Starting Template or Upload
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {Object.entries(MODEL_KEY_TEMPLATES).map(([key, tmpl]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleSelectTemplate(key)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                        selectedTemplate === key
+                          ? 'bg-[#800020] text-white border-[#800020] shadow-xs'
+                          : 'bg-[#fffcfd] text-slate-700 border-[#edd7dc] hover:bg-[#fff1f2] hover:text-[#800020]'
+                      }`}
+                    >
+                      {tmpl.title.split('—')[0].trim()}
+                    </button>
+                  ))}
+
+                  <input
+                    ref={keyFileInputRef}
+                    type="file"
+                    accept=".txt,.md,.text"
+                    onChange={handleUploadKeyFile}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => keyFileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#fff8f9] text-[#800020] border border-[#fecdd3] hover:bg-[#ffe4e6] transition flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <FileUp className="w-3.5 h-3.5" />
+                    <span>Import .txt / .md Key File</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Assignment Title */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Assignment Title / Curriculum Topic
+                </label>
+                <input
+                  type="text"
+                  value={editingKeyTitle}
+                  onChange={(e) => setEditingKeyTitle(e.target.value)}
+                  placeholder="e.g. Chapter 3: Linear Equations & Algebra"
+                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#800020] font-medium"
+                />
+              </div>
+
+              {/* Model Answer Key Text */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Solution Key &amp; Mark Scheme Content
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Include questions, method marks [M1], and final answers [A1]
+                  </span>
+                </div>
+                <textarea
+                  value={editingKeyText}
+                  onChange={(e) => setEditingKeyText(e.target.value)}
+                  placeholder={`QUESTION 1 [1 Mark]\nWork out: 2x + 5 = 15\nModel Answer: 2x = 10 -> x = 5\nMark Scheme: [1 Mark] Final answer x = 5`}
+                  rows={14}
+                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-xl p-3 text-xs text-slate-800 outline-none focus:border-[#800020] font-mono leading-relaxed"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-[#f0d8dd] bg-[#fffdfa] flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleResetModelKey}
+                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-medium transition"
+              >
+                Reset to Default BIDMAS
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModelKeyModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-[#edd7dc] text-slate-600 hover:bg-[#fff5f6] text-xs font-semibold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveModelKey(editingKeyTitle, editingKeyText)}
+                  disabled={!editingKeyText.trim()}
+                  className="px-5 py-2 rounded-lg bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold transition shadow-xs disabled:opacity-40"
+                >
+                  Save &amp; Set as Active Model Answer
+                </button>
+              </div>
             </div>
           </div>
         </div>

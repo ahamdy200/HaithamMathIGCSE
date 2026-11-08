@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileCheck,
   CheckCircle,
@@ -10,12 +10,38 @@ import {
   FileText,
   Copy,
   Check,
+  RotateCcw,
 } from 'lucide-react';
+import { ModelAnswerKeyData } from '../data/modelAnswerKey';
 
 export const TeacherModelKeyViewer: React.FC = () => {
   const [copiedKey, setCopiedKey] = useState(false);
+  const [activeKey, setActiveKey] = useState<ModelAnswerKeyData | null>(null);
 
-  const modelKeyText = `CHAPTER 1: NUMBERS — LESSON 1: ORDER OF OPERATIONS (BIDMAS)
+  useEffect(() => {
+    fetch('/api/model-key/active')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.modelKey) {
+          setActiveKey(data.modelKey);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleResetToDefault = async () => {
+    try {
+      const res = await fetch('/api/model-key/reset', { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.modelKey) {
+        setActiveKey(data.modelKey);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const currentKeyText = activeKey?.text || `CHAPTER 1: NUMBERS — LESSON 1: ORDER OF OPERATIONS (BIDMAS)
 Teacher Resource: Mr. Haitham Hussien — Subject: IGCSE / Lower Secondary Mathematics
 
 Fundamental Rule: BIDMAS / BODMAS Priority Order
@@ -65,7 +91,7 @@ Put one pair of brackets in each statement to make it correct:
 (b) 7 × (3 + 1) + 2 = 30 [1 Mark]`;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(modelKeyText);
+    navigator.clipboard.writeText(currentKeyText);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
   };
@@ -75,21 +101,26 @@ Put one pair of brackets in each statement to make it correct:
       {/* Title */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#e8d5d8]">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#fdf2f4] text-[#800020] border border-[#f0d8dd] font-semibold uppercase tracking-wider">
               Teacher Resource
             </span>
             <span className="text-xs text-slate-500 font-medium">• Author: Mr. Haitham Hussien</span>
+            {activeKey?.isCustom && (
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                ★ Custom Model Answer Key Active
+              </span>
+            )}
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 font-serif">
-            Official Model Answer Key &amp; Marking Guide
+            {activeKey?.title || 'Official Model Answer Key & Marking Guide'}
           </h1>
           <p className="text-xs text-slate-600">
-            Chapter 1: Numbers — Lesson 1: Order of Operations (BIDMAS) • Cambridge IGCSE
+            {activeKey?.topic || 'Chapter 1: Numbers — Lesson 1: Order of Operations (BIDMAS)'} • Cambridge IGCSE
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={handleCopy}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-[#fbf4f5] text-[#800020] text-xs font-semibold border border-[#e6ccd2] shadow-sm transition"
@@ -97,6 +128,16 @@ Put one pair of brackets in each statement to make it correct:
             {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-[#800020]" />}
             <span>{copiedKey ? 'Copied Key!' : 'Copy Solution Key'}</span>
           </button>
+
+          {activeKey?.isCustom && (
+            <button
+              onClick={handleResetToDefault}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition border border-slate-300"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset to Default</span>
+            </button>
+          )}
 
           <a
             href="/public/assets/aistudio/order-of-operations-model-answer-key_202610250939_18187_be349899.pdf"

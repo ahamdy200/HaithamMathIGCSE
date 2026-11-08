@@ -348,9 +348,14 @@ app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
       submissionText = '',
       fileBase64 = null,
       fileName = null,
+      modelAnswerKey = null,
+      modelAnswerTitle = null,
       formCode = 'IGCSE-BIDMAS-CH1',
       provider = 'gemini',
     } = req.body || {};
+
+    const activeTitle = modelAnswerTitle || currentModelAnswerKey.title;
+    const activeKey = modelAnswerKey || currentModelAnswerKey.text;
 
     // Stage 1: AutoMark (adamzev/AutoMark)
     const stage1Start = Date.now();
@@ -360,7 +365,7 @@ app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
       repo: 'adamzev/AutoMark',
       status: 'COMPLETED',
       formCodeMatched: formCode,
-      formTitle: 'Cambridge IGCSE Chapter 1 — Order of Operations (BIDMAS)',
+      formTitle: activeTitle,
       totalQuestions: 9,
       perspectiveRectified: Boolean(fileBase64 || fileName),
       documentCropped: true,
@@ -449,7 +454,7 @@ app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
       repo: 'ahamdy200/HaithamMathIGCSE',
       status: 'COMPLETED',
       syllabus: 'Cambridge IGCSE 0580 / 0980 Mathematics',
-      curriculumTopic: 'Chapter 1: Numbers — Lesson 1: Order of Operations (BIDMAS)',
+      curriculumTopic: activeTitle,
       examinerName: 'Mr. Haitham Hussien',
       markingScheme: 'Method [M1] + Accuracy [A1] + Explanation [B1]',
       notebookLMReportIntegrated: true,
@@ -600,34 +605,43 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception observed (process kept alive):', err);
 });
 
-async function generateWithRetry(params: any, maxRetries = 1, timeoutMs = 4500): Promise<any> {
-  let attempt = 0;
-  while (attempt <= maxRetries) {
-    try {
-      const callPromise = ai.models.generateContent(params);
-      // Suppress unhandled rejection if timeoutPromise wins the race
-      callPromise.catch(() => {});
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Gemini API request timed out after ${timeoutMs}ms`)), timeoutMs)
-      );
-      return await Promise.race([callPromise, timeoutPromise]);
-    } catch (error: any) {
-      attempt++;
-      const isTransient =
-        error?.status === 503 ||
-        error?.status === 429 ||
-        error?.message?.includes('503') ||
-        error?.message?.includes('high demand') ||
-        error?.message?.includes('overloaded');
+async function generateWithRetry(params: any, maxRetries = 2, timeoutMs = 15000): Promise<any> {
+  const preferredModel = params.model || 'gemini-3.5-flash-lite';
+  const candidateModels = Array.from(new Set([preferredModel, 'gemini-3.5-flash-lite', 'gemini-3.8-flash']));
 
-      if (isTransient && attempt <= maxRetries) {
-        const delay = 400 * Math.pow(2, attempt);
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
+  let lastError: any = null;
+  for (const modelCandidate of candidateModels) {
+    let attempt = 0;
+    while (attempt <= maxRetries) {
+      try {
+        const activeParams = { ...params, model: modelCandidate };
+        const callPromise = ai.models.generateContent(activeParams);
+        callPromise.catch(() => {});
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Gemini request timed out after ${timeoutMs}ms for ${modelCandidate}`)), timeoutMs)
+        );
+        return await Promise.race([callPromise, timeoutPromise]);
+      } catch (error: any) {
+        lastError = error;
+        attempt++;
+        const isTransient =
+          error?.status === 503 ||
+          error?.status === 429 ||
+          error?.message?.includes('503') ||
+          error?.message?.includes('high demand') ||
+          error?.message?.includes('overloaded') ||
+          error?.message?.includes('timed out');
+
+        if (isTransient && attempt <= maxRetries) {
+          const delay = 300 * Math.pow(2, attempt);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        break; // Break attempt loop to try next candidate model
       }
-      throw error;
     }
   }
+  throw lastError || new Error('All candidate Gemini models failed.');
 }
 
 // Fallback response generator if upstream is temporarily 503
@@ -922,6 +936,67 @@ Put one pair of brackets in each statement to make it correct.
 
 Total Marks: 10 Marks
 `;
+
+// Active Model Answer Key Store (Mutable - supports any custom model answer submitted by teacher)
+let currentModelAnswerKey = {
+  title: 'Chapter 1: Numbers — Lesson 1: Order of Operations (BIDMAS)',
+  topic: 'Order of Operations (BIDMAS)',
+  text: IGCSE_BIDMAS_MODEL_KEY,
+  totalMarks: 10,
+  isCustom: false,
+  updatedAt: new Date().toISOString(),
+};
+
+// GET Active Model Answer Key
+app.get('/api/model-key/active', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    modelKey: currentModelAnswerKey,
+  });
+});
+
+// POST Set / Update Active Model Answer Key
+app.post('/api/model-key/active', (req: Request, res: Response) => {
+  const { title, text, totalMarks, topic } = req.body || {};
+  if (!text || !text.trim()) {
+    return res.status(400).json({ success: false, error: 'Model answer text cannot be empty' });
+  }
+
+  currentModelAnswerKey = {
+    title: (title && title.trim()) || 'Custom Model Answer Key',
+    topic: (topic && topic.trim()) || (title && title.trim()) || 'Custom Assessment',
+    text: text.trim(),
+    totalMarks: typeof totalMarks === 'number' && totalMarks > 0 ? totalMarks : 10,
+    isCustom: true,
+    updatedAt: new Date().toISOString(),
+  };
+
+  console.log(`[Model Key Updated] New active model key: "${currentModelAnswerKey.title}" (${currentModelAnswerKey.text.length} chars)`);
+
+  res.json({
+    success: true,
+    message: 'Active model answer key updated successfully',
+    modelKey: currentModelAnswerKey,
+  });
+});
+
+// POST Reset Active Model Answer Key to default Cambridge BIDMAS
+app.post('/api/model-key/reset', (_req: Request, res: Response) => {
+  currentModelAnswerKey = {
+    title: 'Chapter 1: Numbers — Lesson 1: Order of Operations (BIDMAS)',
+    topic: 'Order of Operations (BIDMAS)',
+    text: IGCSE_BIDMAS_MODEL_KEY,
+    totalMarks: 10,
+    isCustom: false,
+    updatedAt: new Date().toISOString(),
+  };
+
+  res.json({
+    success: true,
+    message: 'Reset to default Cambridge BIDMAS model key',
+    modelKey: currentModelAnswerKey,
+  });
+});
 
 // Helper function to extract isolated answers per question from student text or OCR/PDF stream
 function extractQuestionAnswers(text: string): Record<string, string> {
@@ -1631,6 +1706,8 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
       studentName = 'New Student',
       assignment = 'Lesson 1: Order of Operations (BIDMAS)',
       submissionText,
+      modelAnswerKey = null,
+      modelAnswerTitle = null,
       useSampleSubmission = false,
       customAnswers = null,
       scenario = null,
@@ -1641,8 +1718,8 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
 
     const startTime = Date.now();
 
-    // Check if submission is explicitly for Adam Bardana's sample test button
-    const isAdam = scenario === 'adam_sample';
+    // Testing materials wiped - mocks disabled for full dynamic grading
+    const isAdam = false;
 
     if (isAdam) {
       const adamOfficialReport = {
@@ -2338,27 +2415,35 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
       return res.json({ success: true, report: gradingReport });
     }
 
-    // Dynamic Grading for Custom Uploads / New Students
+    // Dynamic Grading against Active Model Answer Key
     const safeStudentName = studentName && studentName.trim() ? studentName.trim() : 'New Student';
+    const effectiveModelKey = (modelAnswerKey && String(modelAnswerKey).trim()) || currentModelAnswerKey.text;
+    const effectiveAssignment = (modelAnswerTitle && String(modelAnswerTitle).trim()) || assignment || currentModelAnswerKey.title;
 
     const prompt = `You are Mr. Haitham Hussien's expert Cambridge IGCSE Mathematics grading engine, operating in the exact style, pedagogical rigor, and reporting format of Google NotebookLM.
-Evaluate the following student's homework submission against the Official Cambridge Model Answer Key & Marking Guide.
+Evaluate the following student's homework submission against the Official Model Answer Key & Marking Guide.
 
 STUDENT NAME: ${safeStudentName}
-ASSIGNMENT: ${assignment}
-UPLOADED FILE: ${fileName || 'Handwritten Homework Worksheet'}
+ASSIGNMENT: ${effectiveAssignment}
+UPLOADED FILE: ${fileName || 'Student Homework Worksheet'}
 
 STUDENT SUBMISSION / DETECTED ANSWERS / WORKING:
 ${submissionText || JSON.stringify(customAnswers || {})}
 
-OFFICIAL CAMBRIDGE MODEL ANSWER KEY & MARK SCHEME:
-${IGCSE_BIDMAS_MODEL_KEY}
+OFFICIAL MODEL ANSWER KEY & MARK SCHEME:
+${effectiveModelKey}
 
 CRITICAL MARKING & PEDAGOGICAL INSTRUCTIONS:
-1. COUNT ATTEMPTED QUESTIONS:
+1. ADAPT TO THE MODEL ANSWER KEY:
+   - Construct the "questions" array SOLELY from the questions defined in the OFFICIAL MODEL ANSWER KEY above.
+   - For example, if the key contains 2 algebra questions, output exactly 2 questions in the "questions" array. If it contains 7 BIDMAS questions, output 7 questions.
+   - Extract each question's prompt, topicExpression, and maxMarks strictly from the key. Do NOT substitute unrelated BIDMAS questions if the key is about Algebra or another topic!
+   - Sum the maxMarks across all questions in the key to determine "totalMarks".
+
+2. COUNT ATTEMPTED QUESTIONS:
    - Identify precisely how many questions the student answered in their submission text.
-   - If the student only submitted answers for 2 questions (e.g. Q1 and Q2), ONLY grade those 2 questions.
-   - For EVERY question that the student did NOT attempt or write down, you MUST assign:
+   - Match the student's answers to the questions defined in the OFFICIAL MODEL ANSWER KEY above.
+   - For EVERY question in the key that the student did NOT attempt or write down, you MUST assign:
      - status: "incorrect"
      - statusLabel: "INCORRECT"
      - earnedMarks: 0
@@ -2368,12 +2453,12 @@ CRITICAL MARKING & PEDAGOGICAL INSTRUCTIONS:
    - NEVER fabricate or assume student working for questions not in the submission!
    - NEVER award marks for unattempted questions!
 
-2. For ATTEMPTED questions:
-   - If mathematically incorrect: award 0 marks, status: "incorrect", and explain the exact BIDMAS misconception (e.g. addition before multiplication, left-to-right calculation, or bracket placement error).
-   - If mathematically correct: award full marks.
-   - If only 2 questions were submitted and BOTH are wrong: total earnedMarks MUST BE 0 / 10 marks (0%, Grade U - Ungraded).
+3. For ATTEMPTED questions:
+   - Check intermediate steps, method marks [M1], and accuracy marks [A1] as specified in the model answer key.
+   - If mathematically incorrect: award 0 or partial marks based on the mark scheme, status: "incorrect", and explain the exact misconception.
+   - If mathematically correct: award full marks, status: "correct", statusLabel: "CORRECT".
 
-3. Calculate exact total marks (sum of earnedMarks out of 10) and calculate percentage:
+4. Calculate exact total marks and earnedMarks, then calculate percentage:
    - 90-100%: "A* (Outstanding)"
    - 80-89%: "A (Excellent)"
    - 70-79%: "B (Good)"
@@ -2381,17 +2466,17 @@ CRITICAL MARKING & PEDAGOGICAL INSTRUCTIONS:
    - 50-59%: "D (Needs Improvement)"
    - <50%: "U (Ungraded - Requires Retest)"
 
-4. Write an authentic "diagnosticReview" and "generalFeedback" reflecting the exact number of attempted questions and exact score.
+5. Write an authentic "diagnosticReview", "generalFeedback", and relevant "actionPlan" reflecting the topic, student score, and constructive advice.
 
-Return a JSON object in this EXACT schema matching NotebookLM:
+Return a JSON object in this schema:
 {
   "headerTitle": "IGCSE MATHEMATICS — HOMEWORK EVALUATION REPORT",
   "reportTitle": "Student Homework Correction & Report",
   "studentName": "${safeStudentName.toUpperCase()}",
   "subject": "IGCSE Mathematics",
-  "topic": "Order of Operations (BIDMAS)",
-  "chapter": "Chapter 1 (Numbers)",
-  "assignmentTitle": "${assignment}",
+  "topic": "${effectiveAssignment}",
+  "chapter": "Mathematics Assessment",
+  "assignmentTitle": "${effectiveAssignment}",
   "teacherName": "Mr. Haitham Hussien",
   "totalMarks": 10,
   "earnedMarks": 5,
@@ -2399,34 +2484,30 @@ Return a JSON object in this EXACT schema matching NotebookLM:
   "grade": "D (Needs Improvement)",
   "performanceLevel": "Needs Improvement",
   "uploadedFile": "${fileName || ''}",
-  "generalFeedback": "Summary paragraph of student performance and key mistakes...",
-  "diagnosticReview": "Detailed diagnostic review: [Student] scored X/10. Demonstrated competence on..., but made errors in...",
+  "generalFeedback": "Summary paragraph of student performance...",
+  "diagnosticReview": "Detailed diagnostic review of attempted and unattempted questions...",
   "actionPlan": [
     {
-      "title": "BIDMAS Hierarchy Drill",
-      "detail": "Actionable drill description with example equation..."
-    },
-    {
-      "title": "Bracket Insertion Method",
-      "detail": "Step-by-step strategy for equation balancing..."
+      "title": "Action Plan Step 1",
+      "detail": "Description of actionable practice drill..."
     }
   ],
   "questions": [
     {
       "questionNumber": 1,
       "displayLabel": "Q1",
-      "topicExpression": "8 + 12 ÷ 4 = 5 (Explain error)",
-      "paperRef": "April/2018/Paper 1/ Q.4",
-      "prompt": "8 + 12 ÷ 4 = 5 (Explain error)",
+      "topicExpression": "Question expression or topic",
+      "paperRef": "Syllabus / Paper reference if in key",
+      "prompt": "Full question statement from key",
       "maxMarks": 1,
       "earnedMarks": 1,
       "markSchemeRef": "[1 Mark]",
       "status": "correct",
       "statusLabel": "CORRECT",
       "studentWorkingFound": "What student wrote or calculated",
-      "modelSolution": "Model answer steps",
-      "errorAnalysis": "Short diagnosis (e.g. 'Correct explanation given.' or 'Mistake: evaluated left to right.')",
-      "teacherFeedback": "Detailed feedback"
+      "modelSolution": "Model solution from key",
+      "errorAnalysis": "Short diagnosis",
+      "teacherFeedback": "Constructive teacher feedback"
     }
   ],
   "strengths": ["Clear strength 1", "Clear strength 2"],
@@ -2467,13 +2548,17 @@ Return a JSON object in this EXACT schema matching NotebookLM:
         ];
       }
 
-      const response = await generateWithRetry({
-        model: 'gemini-3.8-flash',
-        contents,
-        config: {
-          responseMimeType: 'application/json',
+      const response = await generateWithRetry(
+        {
+          model: 'gemini-3.8-flash',
+          contents,
+          config: {
+            responseMimeType: 'application/json',
+          },
         },
-      });
+        2,
+        25000
+      );
 
       const parsed = JSON.parse(response.text || '{}');
       if (parsed && parsed.questions && parsed.questions.length > 0) {
