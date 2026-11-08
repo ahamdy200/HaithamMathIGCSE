@@ -131,6 +131,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         'CNN Character Classification (97.57% Accuracy)',
       ],
     },
+    {
+      id: 'automark',
+      name: 'AutoMark',
+      fullName: 'adamzev/AutoMark',
+      description: 'Computer Vision math worksheet scanner, perspective warper, QR code detector & cell grader',
+      remoteUrl: 'https://github.com/adamzev/AutoMark.git',
+      branch: 'master',
+      localPath: 'repos/AutoMark',
+      isPrimary: false,
+      category: 'Worksheet Scanner & Auto-Grader',
+      status: 'Connected (repos/AutoMark)',
+      files: ['automark.py', 'cells.py', 'extractor.py', 'grader.py', 'helpers.py', 'ocr.py', 'pipeline.py', 'qr.py'],
+      features: [
+        'Automated Math Worksheet Scanning & Perspective Warper',
+        'QR Code & Form Code Answer Key Mapping (e.g. IGCSE-BIDMAS-CH1)',
+        'Cell Border Removal & Digit Segmentation Pipeline',
+        'Color-Coded Visual Marking Overlay (Green/Red/Yellow)',
+      ],
+    },
   ]);
 
   const fetchRepos = async () => {
@@ -595,10 +614,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </a>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Secondary Remote:</span>
-                    <span className="font-mono text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded">
-                      handwritten-equation-solver → Sgvkamalakar/Hand-Written-Equation-Solver
-                    </span>
+                    <span className="text-gray-400">Secondary Remotes:</span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="font-mono text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded text-[11px]">
+                        handwritten-equation-solver → Sgvkamalakar/Hand-Written-Equation-Solver
+                      </span>
+                      <span className="font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded text-[11px]">
+                        automark → adamzev/AutoMark
+                      </span>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-400">Tracking Branch:</span>
@@ -636,6 +660,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 {`git remote -v
 # origin                     https://github.com/ahamdy200/HaithamMathIGCSE.git
 # handwritten-equation-solver https://github.com/Sgvkamalakar/Hand-Written-Equation-Solver.git
+# automark                   https://github.com/adamzev/AutoMark.git
 git branch -M main
 git push -u origin main`}
                   </pre>

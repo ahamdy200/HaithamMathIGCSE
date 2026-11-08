@@ -112,31 +112,46 @@ app.get('/api/repos', (_req: Request, res: Response) => {
 
           let remoteUrl = 'https://github.com/Sgvkamalakar/Hand-Written-Equation-Solver.git';
           let role = 'Deep Learning Computer Vision & Math OCR';
-          if (item.toLowerCase().includes('equation') || item.toLowerCase().includes('hand-written')) {
+          let category = 'Deep Learning & OCR';
+          let branch = 'main';
+          let features = [
+            '44-Cell Colab Training Pipeline (Notebook.ipynb)',
+            'OpenCV Math Symbol Segmentation (32x32 ROIs)',
+            'Interactive Drawing Canvas & Stroke Adjustment',
+            'CNN Character Classification (97.57% Accuracy)',
+          ];
+
+          if (item.toLowerCase().includes('automark')) {
+            remoteUrl = 'https://github.com/adamzev/AutoMark.git';
+            role = 'Computer Vision math worksheet scanner, perspective warper, QR code detector & cell grader';
+            category = 'Worksheet Scanner & Auto-Grader';
+            branch = 'master';
+            features = [
+              'Automated Math Worksheet Scanning & Perspective Warper (AutoMark/extractor.py)',
+              'QR Code & Form Code Answer Key Mapping (AutoMark/qr.py)',
+              'Cell Border Removal & Digit Segmentation Pipeline (AutoMark/cells.py)',
+              'Color-Coded Visual Marking Overlay (Green = Correct, Red = Wrong, Yellow = Review)',
+            ];
+          } else if (item.toLowerCase().includes('equation') || item.toLowerCase().includes('hand-written')) {
             role = 'Deep Learning (CNN + RNN) Handwritten Math Symbol Recognizer & Drawing Solver';
           }
 
           reposList.push({
             id: item.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
             name: item,
-            fullName: `ahamdy200/${item}`,
+            fullName: item.toLowerCase().includes('automark') ? 'adamzev/AutoMark' : `ahamdy200/${item}`,
             description: role,
             remoteUrl,
-            branch: 'main',
+            branch,
             localPath: `repos/${item}`,
             isPrimary: false,
-            category: 'Deep Learning & OCR',
+            category,
             status: 'Connected (repos/' + item + ')',
             files,
             hasNotebook,
             hasApp,
             hasPredict,
-            features: [
-              '44-Cell Colab Training Pipeline (Notebook.ipynb)',
-              'OpenCV Math Symbol Segmentation (32x32 ROIs)',
-              'Interactive Drawing Canvas & Stroke Adjustment',
-              'CNN Character Classification (97.57% Accuracy)',
-            ],
+            features,
           });
         }
       }
@@ -150,6 +165,41 @@ app.get('/api/repos', (_req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// AutoMark Form Codes & Curriculum Answer Keys Registry
+app.get('/api/automark/form-codes', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    sourceRepo: 'AutoMark (adamzev/AutoMark)',
+    formCodes: [
+      {
+        formCode: 'IGCSE-BIDMAS-CH1',
+        title: 'Cambridge IGCSE Chapter 1 (Numbers) — Lesson 1: Order of Operations',
+        teacher: 'Mr. Haitham Hussien',
+        totalQuestions: 9,
+        totalMarks: 10,
+        answerKey: [
+          { q: 1, label: 'Q1', answer: '11', rule: 'Division before addition under BIDMAS: 12 / 4 = 3, 8 + 3 = 11' },
+          { q: 2, label: 'Q2', answer: '30', rule: '5 * (16 + 2 - 12) = 5 * 6 = 30' },
+          { q: 3, label: 'Q3', answer: '36', rule: '25 + 11 = 36' },
+          { q: 4, label: 'Q4', answer: '196', rule: '(23 - 9)^2 = 14^2 = 196' },
+          { q: 5, label: 'Q5a', answer: '22', rule: '4 + 9 * (6 - 4) = 22' },
+          { q: 6, label: 'Q5b', answer: '4', rule: '24 / (12 - 8 + 2) = 4' },
+          { q: 7, label: 'Q6a', answer: '21', rule: '(10 - 4) / 2 + 18 = 21' },
+          { q: 8, label: 'Q6b', answer: '30', rule: '7 * (3 + 1) + 2 = 30' },
+          { q: 9, label: 'Q7', answer: '282', rule: '2 + 8 * 35 = 2 + 280 = 282' },
+        ],
+      },
+      {
+        formCode: 'BCBA8F9752',
+        title: 'AutoMark Standard Math Worksheet (40 Questions)',
+        totalQuestions: 40,
+        totalMarks: 40,
+        answerKeySummary: '40-problem arithmetic worksheet from adamzev/AutoMark',
+      },
+    ],
+  });
 });
 
 // Equation & Expression Solver Endpoint powered by Handwritten Equation Solver logic & BIDMAS

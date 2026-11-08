@@ -316,11 +316,17 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               <GraduationCap className="w-7 h-7" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold uppercase tracking-wider">
                   Cambridge IGCSE Mathematics
                 </span>
                 <span className="text-xs text-gray-400">• Teacher: Mr. Haitham Hussien</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-mono border border-emerald-500/30">
+                  Form Code: IGCSE-BIDMAS-CH1
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 font-mono border border-purple-500/30">
+                  AutoMark CV Active
+                </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">
                 Student Homework AI Checking &amp; Feedback Portal
