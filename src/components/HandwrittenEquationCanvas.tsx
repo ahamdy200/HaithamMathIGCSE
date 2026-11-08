@@ -4,10 +4,6 @@ import {
   RotateCcw,
   Sparkles,
   CheckCircle2,
-  ArrowRight,
-  Layers,
-  HelpCircle,
-  ExternalLink,
   PlusCircle,
 } from 'lucide-react';
 
@@ -31,7 +27,7 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
   } | null>(null);
   const [insertSuccess, setInsertSuccess] = useState(false);
 
-  // Initialize canvas with smooth background
+  // Initialize canvas with smooth white parchment background
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -44,17 +40,23 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
     canvas.height = rect.height * 2;
     ctx.scale(2, 2);
 
-    ctx.fillStyle = '#10131b';
+    ctx.fillStyle = '#fffdfa';
     ctx.fillRect(0, 0, rect.width, rect.height);
 
     // Initial guide text
-    ctx.fillStyle = '#424c63';
+    ctx.fillStyle = '#94a3b8';
     ctx.font = '14px Inter, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Draw your handwritten math equation or expression here (e.g. 5 × (4² + 2 − 12))', rect.width / 2, rect.height / 2);
+    ctx.fillText(
+      'Draw your handwritten math equation or expression here (e.g. 5 × (4² + 2 − 12))',
+      rect.width / 2,
+      rect.height / 2
+    );
   }, []);
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const startDrawing = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -69,21 +71,23 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
 
     if (!hasDrawn) {
       // Clear initial guide text on first stroke
-      ctx.fillStyle = '#10131b';
+      ctx.fillStyle = '#fffdfa';
       ctx.fillRect(0, 0, rect.width, rect.height);
       setHasDrawn(true);
     }
 
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.strokeStyle = '#38bdf8'; // Cyan stroke
+    ctx.strokeStyle = '#800020'; // Rich Burgundy ink
     ctx.lineWidth = strokeWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     setIsDrawing(true);
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const draw = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
     if (!isDrawing) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -112,7 +116,7 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    ctx.fillStyle = '#10131b';
+    ctx.fillStyle = '#fffdfa';
     ctx.fillRect(0, 0, rect.width, rect.height);
     setHasDrawn(false);
     setSolveResult(null);
@@ -126,7 +130,7 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const rect = canvas.getBoundingClientRect();
-    ctx.fillStyle = '#38bdf8';
+    ctx.fillStyle = '#800020';
     ctx.font = 'bold 26px "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(eq, rect.width / 2, rect.height / 2 + 8);
@@ -152,7 +156,10 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
       } else {
         // Fallback local eval
         try {
-          const sanitized = recognizedEquation.replace(/x/gi, '*').replace(/÷/g, '/').replace(/\^/g, '**');
+          const sanitized = recognizedEquation
+            .replace(/x/gi, '*')
+            .replace(/÷/g, '/')
+            .replace(/\^/g, '**');
           // eslint-disable-next-line no-eval
           const val = Function(`'use strict'; return (${sanitized})`)();
           setSolveResult({
@@ -171,7 +178,10 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
     } catch {
       // Offline fallback
       try {
-        const sanitized = recognizedEquation.replace(/x/gi, '*').replace(/÷/g, '/').replace(/\^/g, '**');
+        const sanitized = recognizedEquation
+          .replace(/x/gi, '*')
+          .replace(/÷/g, '/')
+          .replace(/\^/g, '**');
         // eslint-disable-next-line no-eval
         const val = Function(`'use strict'; return (${sanitized})`)();
         setSolveResult({
@@ -179,7 +189,7 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
           steps: [`Original: ${recognizedEquation}`, `Calculated BIDMAS: ${val}`],
           sanitized,
         });
-      } catch (err: any) {
+      } catch {
         setSolveResult({
           result: 'Invalid',
           steps: ['Could not evaluate equation syntax'],
@@ -202,47 +212,47 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
   };
 
   return (
-    <div className="bg-[#171a23] border border-[#2d3445] rounded-xl p-4 space-y-4 shadow-sm">
+    <div className="bg-white border border-[#e6ccd2] rounded-xl p-4 space-y-4 shadow-sm">
       {/* Header Info */}
-      <div className="flex items-center justify-between border-b border-[#262c3b] pb-3 flex-wrap gap-2">
+      <div className="flex items-center justify-between border-b border-[#f0d8dd] pb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+          <div className="w-8 h-8 rounded-lg bg-[#fdf2f4] border border-[#f0d8dd] flex items-center justify-center text-[#800020]">
             <PenTool className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-white flex items-center gap-2">
+            <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2 font-serif">
               <span>Handwritten Canvas &amp; DL Solver</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#fdf2f4] text-[#800020] border border-[#f0d8dd] font-mono font-semibold">
                 CNN Powered
               </span>
             </h3>
-            <p className="text-[11px] text-gray-400">
-              Integrated from connected repo: <code className="text-purple-300">Hand-Written-Equation-Solver</code>
+            <p className="text-[11px] text-slate-500">
+              Integrated from connected repo: <code className="text-[#800020] font-semibold">Hand-Written-Equation-Solver</code>
             </p>
           </div>
         </div>
 
         {/* Quick presets */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] text-gray-400">Presets:</span>
+          <span className="text-[11px] text-slate-500 font-medium">Presets:</span>
           <button
             type="button"
             onClick={() => handlePreset('5 * (4^2 + 2 - 12)')}
-            className="text-[10px] px-2 py-1 rounded bg-[#212634] hover:bg-[#2c3346] text-gray-300 border border-[#343d52] transition font-mono"
+            className="text-[10px] px-2.5 py-1 rounded bg-[#fdf4f6] hover:bg-[#f8e4e8] text-[#800020] border border-[#ecd2d7] transition font-mono font-medium shadow-2xs"
           >
             Q2: 5 × (4² + 2 − 12)
           </button>
           <button
             type="button"
             onClick={() => handlePreset('8 + 12 / 4')}
-            className="text-[10px] px-2 py-1 rounded bg-[#212634] hover:bg-[#2c3346] text-gray-300 border border-[#343d52] transition font-mono"
+            className="text-[10px] px-2.5 py-1 rounded bg-[#fdf4f6] hover:bg-[#f8e4e8] text-[#800020] border border-[#ecd2d7] transition font-mono font-medium shadow-2xs"
           >
             Q1: 8 + 12 ÷ 4
           </button>
           <button
             type="button"
             onClick={() => handlePreset('(23 - 3 * 3)^2')}
-            className="text-[10px] px-2 py-1 rounded bg-[#212634] hover:bg-[#2c3346] text-gray-300 border border-[#343d52] transition font-mono"
+            className="text-[10px] px-2.5 py-1 rounded bg-[#fdf4f6] hover:bg-[#f8e4e8] text-[#800020] border border-[#ecd2d7] transition font-mono font-medium shadow-2xs"
           >
             Q4: (23 − 3 × 3)²
           </button>
@@ -250,7 +260,7 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
       </div>
 
       {/* Canvas Drawing Area */}
-      <div className="relative border border-[#2b3345] rounded-xl overflow-hidden shadow-inner bg-[#10131b]">
+      <div className="relative border border-[#e6ccd2] rounded-xl overflow-hidden shadow-inner bg-[#fffdfa]">
         <canvas
           ref={canvasRef}
           onMouseDown={startDrawing}
@@ -264,8 +274,8 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
         />
 
         {/* Canvas floating controls */}
-        <div className="absolute top-2.5 right-2.5 flex items-center gap-2 bg-[#171a23]/80 backdrop-blur-sm border border-[#2e3649] p-1.5 rounded-lg text-xs">
-          <label className="text-gray-400 text-[10px] flex items-center gap-1">
+        <div className="absolute top-2.5 right-2.5 flex items-center gap-2 bg-white/90 backdrop-blur-sm border border-[#e8d5d8] p-1.5 rounded-lg text-xs shadow-sm">
+          <label className="text-slate-600 text-[10px] flex items-center gap-1 font-medium">
             <span>Stroke:</span>
             <input
               type="range"
@@ -273,14 +283,14 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
               max="12"
               value={strokeWidth}
               onChange={(e) => setStrokeWidth(Number(e.target.value))}
-              className="w-16 accent-purple-500 cursor-pointer h-1"
+              className="w-16 accent-[#800020] cursor-pointer h-1"
             />
-            <span className="font-mono text-purple-300">{strokeWidth}px</span>
+            <span className="font-mono text-[#800020] font-semibold">{strokeWidth}px</span>
           </label>
           <button
             type="button"
             onClick={handleClear}
-            className="p-1 rounded text-gray-400 hover:text-white hover:bg-[#2a3040] transition"
+            className="p-1 rounded text-slate-500 hover:text-[#800020] hover:bg-[#fdf4f6] transition"
             title="Clear Canvas"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -290,12 +300,12 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
 
       {/* Recognized Equation Input & Solver Trigger */}
       <div className="space-y-2">
-        <label className="text-xs font-semibold text-gray-300 flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+        <label className="text-xs font-semibold text-slate-800 flex items-center justify-between">
+          <span className="flex items-center gap-1.5 font-serif">
+            <Sparkles className="w-3.5 h-3.5 text-[#800020]" />
             Recognized Mathematical Equation / Expression:
           </span>
-          <span className="text-[10px] text-gray-400">Edit formula if needed</span>
+          <span className="text-[10px] text-slate-500">Edit formula if needed</span>
         </label>
         <div className="flex gap-2">
           <input
@@ -303,13 +313,13 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
             value={recognizedEquation}
             onChange={(e) => setRecognizedEquation(e.target.value)}
             placeholder="e.g. 5 * (4^2 + 2 - 12) or 8 + 12 / 4"
-            className="flex-1 bg-[#10131b] border border-[#2b3345] rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-purple-500 transition"
+            className="flex-1 bg-[#fffdfa] border border-[#e2cbd0] rounded-lg px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-[#800020] transition shadow-2xs"
           />
           <button
             type="button"
             onClick={handleSolve}
             disabled={isSolving || !recognizedEquation.trim()}
-            className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition disabled:opacity-50"
+            className="px-4 py-2 rounded-lg bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold flex items-center gap-1.5 shadow transition disabled:opacity-50"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>{isSolving ? 'Solving...' : 'Solve (BIDMAS)'}</span>
@@ -319,20 +329,20 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
 
       {/* Solver Steps & Result Box */}
       {solveResult && (
-        <div className="bg-[#12151e] border border-purple-500/30 rounded-xl p-4 space-y-3">
+        <div className="bg-[#fdf8f9] border border-[#ecd2d7] rounded-xl p-4 space-y-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 font-serif">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               Evaluation Result:
             </span>
-            <div className="px-3 py-1 rounded-md bg-purple-500/20 border border-purple-500/40 text-purple-200 font-mono font-bold text-sm">
+            <div className="px-3 py-1 rounded-md bg-[#800020] text-white font-mono font-bold text-sm shadow-sm">
               = {solveResult.result}
             </div>
           </div>
 
-          <div className="space-y-1 bg-[#0b0d13] p-2.5 rounded-lg border border-[#222838] text-[11px] font-mono text-gray-300">
+          <div className="space-y-1 bg-white p-3 rounded-lg border border-[#ebd8dc] text-[11px] font-mono text-slate-800 shadow-2xs">
             {solveResult.steps.map((st, i) => (
-              <div key={i} className="text-gray-300">
+              <div key={i} className="text-slate-700">
                 {st}
               </div>
             ))}
@@ -343,10 +353,16 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
               <button
                 type="button"
                 onClick={handleInsert}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow transition"
+                className="px-3.5 py-1.5 rounded-lg bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-semibold flex items-center gap-1.5 shadow transition"
               >
-                {insertSuccess ? <CheckCircle2 className="w-3.5 h-3.5" /> : <PlusCircle className="w-3.5 h-3.5" />}
-                <span>{insertSuccess ? 'Inserted into Homework!' : 'Use Answer in Homework'}</span>
+                {insertSuccess ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                ) : (
+                  <PlusCircle className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {insertSuccess ? 'Inserted into Homework!' : 'Use Answer in Homework'}
+                </span>
               </button>
             </div>
           )}

@@ -243,27 +243,27 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <header className="border-b border-[#333842] bg-[#1e222a] text-[#e0e3e7] sticky top-0 z-40 select-none shadow-md">
+      <header className="border-b border-[#f0d8dd] bg-white text-slate-800 sticky top-0 z-40 select-none shadow-sm">
         {/* Top Header Row */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-[#2b303a]">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-[#f5e6e8]">
           <div className="flex items-center gap-3">
-            {/* Colab + Gemini Badge */}
-            <div className="flex items-center gap-2 pr-3 border-r border-[#333842]">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#f9ab00] via-[#ea4335] to-[#4285f4] p-[1.5px] shadow-sm">
-                <div className="w-full h-full bg-[#181a1f] rounded-[6.5px] flex items-center justify-center">
-                  <span className="text-[#f9ab00] font-black text-sm tracking-tighter">CO</span>
+            {/* Cambridge Crest + Burgundy Badge */}
+            <div className="flex items-center gap-2 pr-3 border-r border-[#f0d8dd]">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#800020] via-[#9f1239] to-[#be123c] p-[1.5px] shadow-sm">
+                <div className="w-full h-full bg-[#800020] rounded-[6.5px] flex items-center justify-center text-white font-serif font-black text-sm">
+                  ∯
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm text-gray-100 math-serif tracking-tight">
-                  HaithamMath IGCSE <span className="text-amber-400 font-sans text-xs">∯</span>
+                <span className="font-extrabold text-sm text-[#701a2d] math-serif tracking-tight">
+                  HaithamMath IGCSE
                 </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono font-medium flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-blue-400" />
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#881337] font-mono font-medium flex items-center gap-1 border border-[#fecdd3]">
+                  <Sparkles className="w-3 h-3 text-[#be123c]" />
                   Gemini 3.8
                 </span>
-                <span className="hidden lg:inline text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-mono border border-emerald-500/30">
-                  4-Repo Pool
+                <span className="hidden lg:inline text-[10px] px-1.5 py-0.5 rounded bg-[#fdf2f4] text-[#800020] font-mono font-bold border border-[#fecdd3]">
+                  5-Repo Unified Pool
                 </span>
               </div>
             </div>
@@ -278,13 +278,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onBlur={handleTitleSubmit}
                   onKeyDown={(e) => e.key === 'Enter' && handleTitleSubmit()}
                   autoFocus
-                  className="bg-[#282c34] text-white px-2 py-0.5 rounded border border-blue-500 text-sm font-medium outline-none"
+                  className="bg-white text-slate-900 px-2 py-0.5 rounded border border-[#800020] text-sm font-medium outline-none shadow-inner"
                 />
               ) : (
                 <button
                   onClick={() => setIsEditingTitle(true)}
                   title="Click to rename notebook"
-                  className="text-sm font-medium text-gray-200 hover:text-white px-2 py-0.5 rounded hover:bg-[#2b303a] transition-colors"
+                  className="text-sm font-medium text-slate-700 hover:text-[#800020] px-2 py-0.5 rounded hover:bg-[#fff1f2] transition-colors"
                 >
                   {notebookTitle}
                 </button>
@@ -294,7 +294,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right side status & action buttons */}
           <div className="flex items-center gap-2.5">
-            {/* GitHub Repository Connected Badge */}
             {/* Multi-Repository Connected Hub Badge */}
             <button
               onClick={() => {
@@ -302,42 +301,36 @@ export const Navbar: React.FC<NavbarProps> = ({
                 fetchRepos();
                 setShowGitModal(true);
               }}
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-xs text-emerald-300 transition shadow-sm"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[#fff1f2] hover:bg-[#ffe4e6] border border-[#fecdd3] text-xs text-[#881337] transition shadow-sm"
               title="View all connected repositories"
             >
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#be123c] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#881337]"></span>
               </span>
-              <GitBranch className="w-3.5 h-3.5 text-emerald-400" />
+              <GitBranch className="w-3.5 h-3.5 text-[#881337]" />
               <span className="font-semibold font-mono">
                 {reposList.length} Repos Connected
               </span>
-              <span className="hidden sm:inline text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-200 font-mono font-bold">
+              <span className="hidden sm:inline text-[10px] px-1.5 py-0.2 rounded bg-[#800020] text-white font-mono font-bold">
                 MULTI-REPO
               </span>
             </button>
 
-            {/* Runtime Status Pill */}
-            <div className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#252932] border border-[#373c47] text-xs text-gray-300">
-              <Cpu className="w-3 h-3 text-emerald-400" />
-              <span className="text-gray-400 text-[11px]">Python 3 Runtime</span>
-            </div>
-
             {/* Open in Colab */}
             <button
               onClick={onOpenColabModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#2d323d] hover:bg-[#383e4c] text-white text-xs font-medium border border-[#3e4453] transition shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-[#e2dcd5] transition shadow-sm"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-[#f9ab00]" />
+              <ExternalLink className="w-3.5 h-3.5 text-[#b45309]" />
               <span className="hidden sm:inline">Open in Colab</span>
             </button>
 
-            {/* Download Code (ZIP) */}
+            {/* Download Code (ZIP) in Burgundy */}
             <a
               href="/api/download/project-zip"
               download="HaithamMathIGCSE-source-code.zip"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#800020] hover:bg-[#66001a] text-white text-xs font-semibold shadow transition"
               title="Download full project codebase as a .zip file"
             >
               <Download className="w-3.5 h-3.5" />
@@ -347,88 +340,88 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Download .ipynb */}
             <button
               onClick={onDownloadIpynb}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#2d323d] hover:bg-[#383e4c] text-gray-200 text-xs font-semibold border border-[#3e4453] transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-[#e2dcd5] transition shadow-sm"
               title="Download Colab notebook (.ipynb)"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3.5 h-3.5 text-[#800020]" />
               <span className="hidden sm:inline">.ipynb</span>
             </button>
           </div>
         </div>
 
-        {/* Secondary Bar: Navigation Tabs & Execution Toolbar */}
-        <div className="flex items-center justify-between px-4 py-1.5 bg-[#181a1f] text-xs">
+        {/* Secondary Bar: Navigation Tabs in White & Burgundy */}
+        <div className="flex items-center justify-between px-4 py-1.5 bg-[#fcf9f9] border-t border-[#f7e6e9] text-xs">
           {/* Navigation Tabs */}
           <div className="flex items-center gap-1 overflow-x-auto">
             <button
               onClick={() => onTabChange('homework')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
                 activeTab === 'homework'
-                  ? 'bg-[#282c34] text-white border-b-2 border-blue-400 font-semibold'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#20232a]'
+                  ? 'bg-[#800020] text-white font-bold shadow-sm'
+                  : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
               }`}
             >
-              <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+              <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Student Homework &amp; Feedback</span>
             </button>
 
             <button
               onClick={() => onTabChange('modelkey')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
                 activeTab === 'modelkey'
-                  ? 'bg-[#282c34] text-white border-b-2 border-emerald-400 font-semibold'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#20232a]'
+                  ? 'bg-[#800020] text-white font-bold shadow-sm'
+                  : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
               }`}
             >
-              <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+              <BookOpen className="w-3.5 h-3.5" />
               <span>Model Answer Key (PDF)</span>
             </button>
 
             <button
               onClick={() => onTabChange('notebook')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
                 activeTab === 'notebook'
-                  ? 'bg-[#282c34] text-white border-b-2 border-cyan-400 font-semibold'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#20232a]'
+                  ? 'bg-[#800020] text-white font-bold shadow-sm'
+                  : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
               }`}
             >
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+              <Layers className="w-3.5 h-3.5" />
               <span>Colab Notebook Runner</span>
             </button>
 
             <button
               onClick={() => onTabChange('integration')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
                 activeTab === 'integration'
-                  ? 'bg-[#282c34] text-white border-b-2 border-indigo-400 font-semibold'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#20232a]'
+                  ? 'bg-[#800020] text-white font-bold shadow-sm'
+                  : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
               }`}
             >
-              <FileCode className="w-3.5 h-3.5 text-indigo-400" />
+              <FileCode className="w-3.5 h-3.5" />
               <span>Python Integration Code</span>
             </button>
 
             <button
               onClick={() => onTabChange('audio')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
                 activeTab === 'audio'
-                  ? 'bg-[#282c34] text-white border-b-2 border-purple-400 font-semibold'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#20232a]'
+                  ? 'bg-[#800020] text-white font-bold shadow-sm'
+                  : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
               }`}
             >
-              <Headphones className="w-3.5 h-3.5 text-purple-400" />
+              <Headphones className="w-3.5 h-3.5" />
               <span>Audio Overview (Podcast)</span>
             </button>
 
             <button
               onClick={() => onTabChange('guide')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
                 activeTab === 'guide'
-                  ? 'bg-[#282c34] text-white border-b-2 border-amber-400 font-semibold'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#20232a]'
+                  ? 'bg-[#800020] text-white font-bold shadow-sm'
+                  : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
               }`}
             >
-              <Key className="w-3.5 h-3.5 text-amber-400" />
+              <Key className="w-3.5 h-3.5" />
               <span>Colab Secrets Guide</span>
             </button>
           </div>

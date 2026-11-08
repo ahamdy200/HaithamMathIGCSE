@@ -4,8 +4,8 @@
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #0d1117;
-    color: #e5e7eb;
+    background-color: #fbfaf8;
+    color: #1e293b;
     margin: 0;
     padding: 0;
     overflow-x: hidden;
@@ -16,27 +16,44 @@
   }
 }
 
-/* Mathematical Classroom & Graph Paper Grid Patterns */
+/* White Mathematical Classroom & Burgundy Grid Patterns */
 .math-paper {
-  background-color: #0c1017;
+  background-color: #ffffff;
   background-image: 
-    linear-gradient(rgba(56, 189, 248, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(128, 0, 32, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(128, 0, 32, 0.035) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
 .math-paper-dense {
-  background-color: #0a0d14;
+  background-color: #faf8f5;
   background-image: 
-    linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+    linear-gradient(rgba(136, 19, 55, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(136, 19, 55, 0.04) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 
-/* Chalkboard slate textures */
+/* Academic Regal Burgundy Textures */
+.burgundy-banner {
+  background: linear-gradient(135deg, #701a2d 0%, #881337 50%, #4c0519 100%);
+  color: #ffffff;
+}
+
+.burgundy-card-light {
+  background-color: #ffffff;
+  border: 1px solid #fecdd3;
+  box-shadow: 0 4px 15px -3px rgba(128, 0, 32, 0.05);
+}
+
+.chalkboard-burgundy {
+  background: radial-gradient(circle at 50% 15%, #631124 0%, #3d0512 100%);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.4);
+}
+
 .chalkboard-slate {
-  background: radial-gradient(circle at 50% 15%, #182333 0%, #0c121d 100%);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: radial-gradient(circle at 50% 15%, #631124 0%, #3d0512 100%);
+  border: 1px solid rgba(244, 63, 94, 0.25);
 }
 
 .chalkboard-green {
@@ -57,9 +74,9 @@
 
 /* Ink-friendly paper preview mode for students & teachers */
 .ink-friendly-paper {
-  background-color: #fcfbf7;
+  background-color: #ffffff;
   color: #1a202c;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 25px -5px rgba(128, 0, 32, 0.08);
 }
 
 /* Colab-style Prism Syntax Highlighting */

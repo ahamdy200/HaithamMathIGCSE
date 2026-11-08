@@ -299,7 +299,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#181a1f] text-gray-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#fbfaf8] text-slate-800 flex flex-col font-sans math-paper">
       {/* Top Navbar & Colab Status Bar */}
       <Navbar
         notebookTitle={notebookTitle}

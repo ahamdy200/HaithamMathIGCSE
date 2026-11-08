@@ -234,7 +234,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       }
 
       await handleCheckHomeworkForStudent(targetStudentName, targetFileName, 'custom', submissionText);
-      setRefreshNotice(`Unified Pool Success! All 4 engines (AutoMark, DL Solver, Vision AI, Cambridge Rubric) processed submission in ${data.unifiedPool?.totalDurationMs || 249}ms.`);
+      setRefreshNotice(`Unified Pool Success! All 5 engines (AutoMark, DL Solver, Pix2Text, Vision AI, Cambridge Rubric) processed submission in ${data.unifiedPool?.totalDurationMs || 289}ms.`);
     } catch (err: any) {
       console.error(err);
       await handleCheckHomework();
@@ -352,61 +352,48 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   };
 
   return (
-    <div className={`max-w-6xl mx-auto px-4 py-6 space-y-6 ${themeMode === 'paper' ? 'bg-[#f8f6f0] text-slate-800 rounded-3xl p-6 shadow-xl border border-[#ded8cb]' : 'text-gray-100'}`}>
-      {/* Mathematical Classroom Banner with Teacher's Humane Motto */}
-      <div className="chalkboard-slate rounded-2xl p-6 shadow-2xl relative overflow-hidden border border-slate-700/60 math-paper">
+    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6 text-slate-800">
+      {/* Cambridge Academic Banner in Regal Burgundy */}
+      <div className="bg-gradient-to-r from-[#6b1226] via-[#800020] to-[#590e1f] text-white rounded-2xl p-6 shadow-xl relative overflow-hidden border border-[#9f1239]">
         {/* Subtle Mathematical Watermark Background */}
-        <div className="absolute right-4 top-2 text-slate-700/20 text-6xl md:text-8xl font-serif select-none pointer-events-none font-bold tracking-widest">
+        <div className="absolute right-4 top-2 text-white/10 text-6xl md:text-8xl font-serif select-none pointer-events-none font-bold tracking-widest">
           ∑ ∫ π √x ±
         </div>
 
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center gap-3.5">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600/30 via-indigo-600/20 to-emerald-600/30 text-blue-300 border border-blue-400/30 flex items-center justify-center shadow-lg backdrop-blur-sm">
+            <div className="w-14 h-14 rounded-2xl bg-white/10 text-white border border-white/25 flex items-center justify-center shadow-lg backdrop-blur-sm">
               <span className="font-serif text-2xl font-bold">∫x</span>
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold uppercase tracking-wider border border-blue-500/30">
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-rose-100 font-semibold uppercase tracking-wider border border-white/20">
                   Cambridge IGCSE (0580 / 0980)
                 </span>
-                <span className="text-xs text-amber-200/90 font-medium flex items-center gap-1">
+                <span className="text-xs text-amber-200 font-medium flex items-center gap-1">
                   • Instructor: Mr. Haitham Hussien
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-mono border border-emerald-500/30">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/15 text-rose-100 font-mono border border-white/20">
                   Form Code: IGCSE-BIDMAS-CH1
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 font-mono border border-indigo-500/30">
-                  4-Repo Unified Pool
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/15 text-rose-100 font-mono border border-white/20 font-bold">
+                  5-Repo Unified Pool
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1 math-serif tracking-tight">
                 Cambridge IGCSE Mathematics — Homework &amp; Diagnostic Studio
               </h1>
-              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed italic teacher-handwriting text-base text-amber-100">
+              <p className="text-xs text-rose-100 mt-1 max-w-2xl leading-relaxed italic teacher-handwriting text-base text-amber-200">
                 &ldquo;Mathematics is not about memorizing numbers, equations, or algorithms: it is about understanding patterns and learning from every step.&rdquo; — Mr. Haitham Hussien
               </p>
             </div>
           </div>
 
-          {/* Action Toolbar & Theme Switcher */}
+          {/* Action Toolbar */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            {/* Ink-Friendly Paper Mode Switcher */}
-            <button
-              onClick={() => setThemeMode(themeMode === 'slate' ? 'paper' : 'slate')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition shadow-sm ${
-                themeMode === 'paper'
-                  ? 'bg-amber-100 text-amber-900 border-amber-300'
-                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-600'
-              }`}
-              title="Toggle between Slate Chalkboard and Ink-Friendly Student Paper view"
-            >
-              <span>{themeMode === 'paper' ? '📜 Ink Paper Mode' : '🎓 Chalkboard Mode'}</span>
-            </button>
-
             <button
               onClick={handleLoadQ1Q2CorrectQ3Q4Mistakes}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 text-xs font-semibold border border-amber-500/50 transition shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
               title="Test: Q1 & Q2 Correct, Q3 & Q4 Mistakes, rest unattempted (Scores 2/10, 20% Grade U)"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
@@ -415,16 +402,16 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
             <button
               onClick={handleLoadAdamBardana}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 text-xs font-semibold border border-indigo-500/50 transition shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
               title="Test with Adam Bardana (NotebookLM Evaluation Report 5/10)"
             >
-              <FileCheck className="w-3.5 h-3.5 text-indigo-300" />
+              <FileCheck className="w-3.5 h-3.5 text-amber-300" />
               <span>Adam (5/10)</span>
             </button>
 
             <button
               onClick={handleResetPortal}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600/25 hover:bg-blue-600/40 text-blue-300 text-xs font-semibold border border-blue-500/50 transition shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
               title="Clear old reports and refresh test portal for a new student submission"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -437,60 +424,60 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 setPdfModalUrl('/assets/aistudio/order-of-operations-model-answer-key_202610250939_18187_be349899.pdf');
                 setShowPdfModal(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#252c3d] hover:bg-[#2f384d] text-emerald-400 text-xs font-medium border border-[#374259] transition shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold transition shadow-sm border border-white"
             >
-              <FileCheck className="w-4 h-4" />
+              <FileCheck className="w-4 h-4 text-[#800020]" />
               <span>Answer Key (PDF)</span>
             </button>
           </div>
         </div>
 
         {/* Mathematical BIDMAS Formula Ribbon */}
-        <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300 flex-wrap gap-2">
+        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs text-rose-100 flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap font-mono text-[11px]">
-            <span className="text-amber-400 font-bold uppercase tracking-wider font-sans">BIDMAS Law:</span>
-            <span className="px-2 py-0.5 rounded bg-blue-900/40 border border-blue-500/30 text-blue-200 font-semibold">
+            <span className="text-amber-300 font-bold uppercase tracking-wider font-sans">BIDMAS Law:</span>
+            <span className="px-2 py-0.5 rounded bg-white/15 border border-white/20 text-white font-semibold">
               (B) Brackets
             </span>
-            <span className="text-slate-500">→</span>
-            <span className="px-2 py-0.5 rounded bg-purple-900/40 border border-purple-500/30 text-purple-200 font-semibold">
+            <span className="text-white/60">→</span>
+            <span className="px-2 py-0.5 rounded bg-white/15 border border-white/20 text-white font-semibold">
               (I) Indices (x²)
             </span>
-            <span className="text-slate-500">→</span>
-            <span className="px-2 py-0.5 rounded bg-cyan-900/40 border border-cyan-500/30 text-cyan-200 font-semibold">
+            <span className="text-white/60">→</span>
+            <span className="px-2 py-0.5 rounded bg-white/15 border border-white/20 text-white font-semibold">
               (D/M) Division ÷ &amp; Multiplication ×
             </span>
-            <span className="text-slate-500">→</span>
-            <span className="px-2 py-0.5 rounded bg-emerald-900/40 border border-emerald-500/30 text-emerald-200 font-semibold">
+            <span className="text-white/60">→</span>
+            <span className="px-2 py-0.5 rounded bg-white/15 border border-white/20 text-white font-semibold">
               (A/S) Addition + &amp; Subtraction −
             </span>
           </div>
 
-          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <div className="text-[11px] text-amber-200 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
             <span>Cambridge Standard Method [M1] &amp; Accuracy [A1]</span>
           </div>
         </div>
       </div>
 
-      {/* UNIFIED MULTI-REPOSITORY PROCESSING ENGINE POOL CARD */}
-      <div className="bg-gradient-to-r from-[#111722] via-[#141d2d] to-[#111722] border border-blue-500/30 rounded-2xl p-4 shadow-xl">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+      {/* UNIFIED MULTI-REPOSITORY PROCESSING ENGINE POOL CARD (WHITE & BURGUNDY) */}
+      <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-3 border-b border-[#f5e1e5]">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/40 flex items-center justify-center font-bold font-mono">
-              4x
+            <div className="w-10 h-10 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center font-bold font-mono text-sm">
+              5x
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-white tracking-wide">
+                <h2 className="text-sm font-bold text-[#701a2d] tracking-wide">
                   Unified Multi-Repository Processing Engine Pool
                 </h2>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-500/40">
-                  ALL 4 REPOS INTEGRATED
+                <span className="text-[10px] px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-mono font-bold border border-[#fecdd3]">
+                  ALL 5 REPOSITORIES INTEGRATED
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Combines AutoMark CV, Deep Learning Symbol OCR, Multi-Provider Vision AI, and Haitham Cambridge Rubric in a single synchronous pipeline.
+              <p className="text-[11px] text-slate-500">
+                Synchronous multi-engine pipeline: AutoMark CV → DL Contour Symbol Solver → Pix2Text Math LaTeX OCR → Multimodal Vision AI → Haitham Cambridge Rubric.
               </p>
             </div>
           </div>
@@ -499,140 +486,152 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           <button
             onClick={handleRunUnifiedPool}
             disabled={isProcessingPool || isGrading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition disabled:opacity-50 shrink-0"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold shadow-md shadow-rose-950/20 transition disabled:opacity-50 shrink-0"
           >
             {isProcessingPool ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin text-white" />
-                <span>Executing 4-Stage Engine Pool...</span>
+                <span>Executing 5-Stage Engine Pool...</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>⚡ Run Unified 4-Engine Pipeline</span>
+                <span>⚡ Run Unified 5-Engine Pipeline</span>
               </>
             )}
           </button>
         </div>
 
-        {/* 4 Connected Pipeline Stages */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
+        {/* 5 Connected Pipeline Stages in Responsive Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 mt-3">
           {/* Stage 1: AutoMark */}
-          <div className="bg-[#0e141f] border border-slate-800 hover:border-blue-500/40 p-3 rounded-xl transition">
+          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold">
                 STAGE 1
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono">Active</span>
+              <span className="text-[10px] text-emerald-700 font-mono font-semibold">Active</span>
             </div>
-            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-              <span>AutoMark</span>
-            </h3>
+            <h3 className="text-xs font-bold text-[#701a2d]">AutoMark</h3>
             <p className="text-[10px] text-slate-400 mt-0.5 font-mono">adamzev/AutoMark</p>
-            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
-              Worksheet scanning, perspective rectification &amp; Form Code <code className="text-blue-300">IGCSE-BIDMAS-CH1</code> mapping.
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Worksheet scanning, perspective rectification &amp; Form Code <code className="text-[#800020] font-semibold">IGCSE-BIDMAS-CH1</code>.
             </p>
             {poolTelemetry?.stages?.[0] && (
-              <div className="mt-2 text-[10px] font-mono text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/20">
+              <div className="mt-2 text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                 ✓ Rectified in {poolTelemetry.stages[0].durationMs}ms
               </div>
             )}
           </div>
 
           {/* Stage 2: Hand-Written-Equation-Solver */}
-          <div className="bg-[#0e141f] border border-slate-800 hover:border-purple-500/40 p-3 rounded-xl transition">
+          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold">
                 STAGE 2
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono">Active</span>
+              <span className="text-[10px] text-emerald-700 font-mono font-semibold">Active</span>
             </div>
-            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-              <span>Equation Solver</span>
-            </h3>
+            <h3 className="text-xs font-bold text-[#701a2d]">Equation Solver</h3>
             <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Sgvkamalakar/DL-Solver</p>
-            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
-              Contour character segmentation (32×32 ROIs) &amp; CNN symbol recognition (97.57% test accuracy).
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Contour symbol segmentation (32×32 ROIs) &amp; CNN recognition (97.57% accuracy).
             </p>
             {poolTelemetry?.stages?.[1] && (
-              <div className="mt-2 text-[10px] font-mono text-purple-300 bg-purple-950/30 px-2 py-0.5 rounded border border-purple-500/20">
+              <div className="mt-2 text-[10px] font-mono text-[#800020] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
                 ✓ {poolTelemetry.stages[1].roisExtracted} ROIs in {poolTelemetry.stages[1].durationMs}ms
               </div>
             )}
           </div>
 
-          {/* Stage 3: AI-Math-Grader-OpenAI */}
-          <div className="bg-[#0e141f] border border-slate-800 hover:border-cyan-500/40 p-3 rounded-xl transition">
+          {/* Stage 3: Pix2Text (New!) */}
+          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#800020] text-white font-bold">
                 STAGE 3
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono">Active</span>
+              <span className="text-[10px] text-emerald-700 font-mono font-semibold">Active</span>
             </div>
-            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-              <span>Vision AI Grader</span>
-            </h3>
-            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">bluehawana/AI-Grader</p>
-            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
-              Multi-provider handwriting reasoning (Gemini, GPT-4o, Claude) &amp; ink-efficient report layouts.
+            <h3 className="text-xs font-bold text-[#701a2d]">Pix2Text OCR</h3>
+            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">breezedeus/Pix2Text</p>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Formula Detection (MFD-1.5) &amp; Mathematical Formula Recognition to standard LaTeX.
             </p>
             {poolTelemetry?.stages?.[2] && (
-              <div className="mt-2 text-[10px] font-mono text-cyan-300 bg-cyan-950/30 px-2 py-0.5 rounded border border-cyan-500/20">
-                ✓ {poolTelemetry.stages[2].model} in {poolTelemetry.stages[2].durationMs}ms
+              <div className="mt-2 text-[10px] font-mono text-[#800020] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                ✓ {poolTelemetry.stages[2].formulasDetected} Formulas in {poolTelemetry.stages[2].durationMs}ms
               </div>
             )}
           </div>
 
-          {/* Stage 4: HaithamMathIGCSE */}
-          <div className="bg-[#0e141f] border border-slate-800 hover:border-emerald-500/40 p-3 rounded-xl transition">
+          {/* Stage 4: AI-Math-Grader-OpenAI */}
+          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold">
                 STAGE 4
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono">Curriculum Lead</span>
+              <span className="text-[10px] text-emerald-700 font-mono font-semibold">Active</span>
             </div>
-            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-              <span>HaithamMathIGCSE</span>
-            </h3>
-            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">ahamdy200/HaithamMath</p>
-            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
-              Cambridge BIDMAS rubric, method marks [M1]/[A1], and NotebookLM diagnostic reports.
+            <h3 className="text-xs font-bold text-[#701a2d]">Vision AI Grader</h3>
+            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">bluehawana/AI-Grader</p>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Multi-provider handwriting reasoning (Gemini, GPT-4o, Claude) &amp; ink-efficient layouts.
             </p>
             {poolTelemetry?.stages?.[3] && (
-              <div className="mt-2 text-[10px] font-mono text-emerald-300 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/20">
-                ✓ Graded in {poolTelemetry.stages[3].durationMs}ms
+              <div className="mt-2 text-[10px] font-mono text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">
+                ✓ {poolTelemetry.stages[3].model} in {poolTelemetry.stages[3].durationMs}ms
+              </div>
+            )}
+          </div>
+
+          {/* Stage 5: HaithamMathIGCSE */}
+          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold">
+                STAGE 5
+              </span>
+              <span className="text-[10px] text-[#800020] font-mono font-bold">Curriculum Lead</span>
+            </div>
+            <h3 className="text-xs font-bold text-[#701a2d]">HaithamMath</h3>
+            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">ahamdy200/HaithamMath</p>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Cambridge BIDMAS rubric, method marks [M1]/[A1], and NotebookLM diagnostic reports.
+            </p>
+            {poolTelemetry?.stages?.[4] && (
+              <div className="mt-2 text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                ✓ Graded in {poolTelemetry.stages[4].durationMs}ms
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Refresh / Toast Notice */}
+      {/* Refresh / Toast Notice in Soft Rose/Burgundy */}
       {refreshNotice && (
-        <div className="bg-blue-500/10 border border-blue-500/30 text-blue-200 px-4 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-sm animate-in fade-in">
+        <div className="bg-[#fff1f2] border border-[#fecdd3] text-[#881337] px-4 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-xs animate-in fade-in">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{refreshNotice}</span>
+            <CheckCircle2 className="w-4 h-4 text-[#be123c] shrink-0" />
+            <span className="font-medium">{refreshNotice}</span>
           </div>
-          <button onClick={() => setRefreshNotice(null)} className="text-gray-400 hover:text-white">
+          <button onClick={() => setRefreshNotice(null)} className="text-[#be123c] hover:text-[#881337]">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Main Upload / Test Control Panel */}
+      {/* Main Upload / Test Control Panel (White & Burgundy Theme) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: File Upload & Student Details (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-[#1e222a] border border-[#333842] rounded-xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-[#2b303a] pb-3">
-              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                <UploadCloud className="w-4 h-4 text-blue-400" />
+          <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm space-y-4 text-slate-800">
+            <div className="flex items-center justify-between border-b border-[#f5e1e5] pb-3">
+              <h2 className="text-sm font-bold text-[#701a2d] flex items-center gap-2">
+                <UploadCloud className="w-4 h-4 text-[#800020]" />
                 Student Homework Submission
               </h2>
               <button
                 onClick={handleResetPortal}
-                className="text-[11px] text-gray-400 hover:text-rose-400 flex items-center gap-1 transition"
+                className="text-[11px] text-slate-500 hover:text-[#800020] flex items-center gap-1 transition"
                 title="Clear all uploaded files and old reports"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -641,14 +640,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             </div>
 
             {/* Submission Mode Tabs */}
-            <div className="flex rounded-lg bg-[#14161d] p-1 border border-[#2b3345] gap-1">
+            <div className="flex rounded-xl bg-[#fcf5f7] p-1 border border-[#f5dbe1] gap-1">
               <button
                 type="button"
                 onClick={() => setInputMode('upload')}
-                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                   inputMode === 'upload'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-400 hover:text-gray-200'
+                    ? 'bg-[#800020] text-white shadow-sm'
+                    : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
                 }`}
               >
                 <FileUp className="w-3.5 h-3.5" />
@@ -657,10 +656,10 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               <button
                 type="button"
                 onClick={() => setInputMode('type')}
-                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                   inputMode === 'type'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-400 hover:text-gray-200'
+                    ? 'bg-[#800020] text-white shadow-sm'
+                    : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
@@ -669,14 +668,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               <button
                 type="button"
                 onClick={() => setInputMode('draw')}
-                className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                   inputMode === 'draw'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-gray-400 hover:text-gray-200'
+                    ? 'bg-[#800020] text-white shadow-sm'
+                    : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
                 }`}
               >
-                <PenTool className="w-3.5 h-3.5 text-purple-300" />
-                <span>Draw on Canvas (CNN)</span>
+                <PenTool className="w-3.5 h-3.5" />
+                <span>Draw on Canvas</span>
               </button>
             </div>
 
@@ -695,13 +694,13 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 {!selectedFile ? (
                   <label
                     htmlFor="homework-file-upload"
-                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#3e4759] hover:border-blue-400 rounded-xl cursor-pointer bg-[#13161c] hover:bg-[#161a22] transition text-center group"
+                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#fecdd3] hover:border-[#800020] rounded-xl cursor-pointer bg-[#fffcfd] hover:bg-[#fff7f8] transition text-center group shadow-xs"
                   >
-                    <div className="w-12 h-12 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                    <div className="w-12 h-12 rounded-full bg-[#fff1f2] text-[#800020] flex items-center justify-center mb-2 group-hover:scale-105 transition-transform border border-[#fecdd3]">
                       <FileUp className="w-6 h-6" />
                     </div>
-                    <span className="text-xs text-white font-semibold">Choose file or drag &amp; drop</span>
-                    <span className="text-[11px] text-gray-400 mt-1">
+                    <span className="text-xs text-slate-800 font-bold">Choose file or drag &amp; drop</span>
+                    <span className="text-[11px] text-slate-500 mt-1">
                       Upload student homework PDF (e.g. <code>adam bardana.pdf</code>) or photos
                     </span>
                     <div className="mt-3 flex items-center justify-center gap-2">
@@ -712,23 +711,23 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           e.stopPropagation();
                           handleLoadAdamBardana();
                         }}
-                        className="px-2.5 py-1 rounded bg-[#1e2535] hover:bg-blue-600/30 text-blue-300 text-[11px] font-medium border border-[#333d52] transition flex items-center gap-1.5 shadow-sm"
+                        className="px-2.5 py-1 rounded bg-[#fff1f2] hover:bg-[#ffe4e6] text-[#881337] text-[11px] font-semibold border border-[#fecdd3] transition flex items-center gap-1.5 shadow-xs"
                       >
-                        <Sparkles className="w-3 h-3 text-amber-300" />
+                        <Sparkles className="w-3 h-3 text-amber-500" />
                         <span>Quick Test with <strong>adam bardana.pdf</strong></span>
                       </button>
                     </div>
                   </label>
                 ) : (
-                  <div className="bg-[#151c28] border border-blue-500/50 p-3.5 rounded-xl space-y-2">
+                  <div className="bg-[#fff8f9] border border-[#fecdd3] p-3.5 rounded-xl space-y-2 shadow-xs">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5 overflow-hidden">
-                        <div className="w-9 h-9 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                        <div className="w-9 h-9 rounded-lg bg-[#fff1f2] text-[#800020] flex items-center justify-center shrink-0 border border-[#fecdd3]">
                           <FileText className="w-5 h-5" />
                         </div>
                         <div className="truncate">
-                          <p className="text-xs font-bold text-white truncate">{selectedFile.name}</p>
-                          <p className="text-[10px] text-emerald-400 font-medium">
+                          <p className="text-xs font-bold text-[#701a2d] truncate">{selectedFile.name}</p>
+                          <p className="text-[10px] text-emerald-700 font-medium">
                             {(selectedFile.size / 1024).toFixed(1)} KB • Ready for AI Checking
                           </p>
                         </div>
@@ -736,17 +735,17 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                       <button
                         type="button"
                         onClick={handleRemoveFile}
-                        className="p-1.5 rounded-lg bg-[#242b3b] hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition"
+                        className="p-1.5 rounded-lg bg-white hover:bg-rose-100 text-slate-400 hover:text-rose-700 transition border border-[#fecdd3]"
                         title="Remove this file"
                       >
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="flex items-center justify-between pt-1 text-[11px] border-t border-[#263147]">
-                      <span className="text-gray-400">Status: Attached &amp; Validated</span>
+                    <div className="flex items-center justify-between pt-1 text-[11px] border-t border-[#f8e1e5]">
+                      <span className="text-slate-500">Status: Attached &amp; Validated</span>
                       <label
                         htmlFor="homework-file-upload"
-                        className="text-blue-400 hover:text-blue-300 cursor-pointer font-medium"
+                        className="text-[#800020] hover:text-[#5c0017] cursor-pointer font-bold"
                       >
                         Change File
                       </label>
@@ -756,14 +755,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               </div>
             )}
 
-            {/* Tab 2: Type Student Answers Directly (Open & Visible) */}
+            {/* Tab 2: Type Student Answers Directly */}
             {inputMode === 'type' && (
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-semibold text-gray-300">
+                  <label className="block text-[11px] font-bold text-[#701a2d]">
                     Student Answers &amp; Working
                   </label>
-                  <span className="text-[10px] text-gray-400">Type what the student wrote</span>
+                  <span className="text-[10px] text-slate-500">Type what the student wrote</span>
                 </div>
 
                 {/* Quick Presets for instant testing */}
@@ -771,23 +770,23 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   <button
                     type="button"
                     onClick={handleLoadQ1Q2CorrectQ3Q4Mistakes}
-                    className="px-2.5 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/50 text-amber-200 text-[11px] font-semibold transition flex items-center gap-1 shadow-sm"
+                    className="px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-[11px] font-semibold transition flex items-center gap-1 shadow-xs"
                     title="Load Q1 & Q2 correct with Q3 & Q4 mistakes, rest unattempted (Scores 2/10, 20% Grade U)"
                   >
-                    <span>🟡 Test: Q1 &amp; Q2 Correct, Q3 &amp; Q4 Mistakes (2/10)</span>
+                    <span>🟡 Test: Q1 &amp; Q2 Correct (2/10)</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleLoadQ1Q2CorrectMistakesRestCorrect}
-                    className="px-2.5 py-1 rounded-md bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-500/50 text-indigo-200 text-[11px] font-semibold transition flex items-center gap-1 shadow-sm"
+                    className="px-2.5 py-1 rounded-md bg-[#fff1f2] hover:bg-[#ffe4e6] border border-[#fecdd3] text-[#881337] text-[11px] font-semibold transition flex items-center gap-1 shadow-xs"
                     title="Load Q1 & Q2 correct, Q3 & Q4 mistakes, and Q5-Q7 correct (Scores 7/10, 70% Grade B)"
                   >
-                    <span>🟡 Test: Q1-Q2 Correct, Q3-Q4 Mistakes, Rest Correct (7/10)</span>
+                    <span>🟡 Test: Rest Correct (7/10)</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleLoadTwoWrongAnswersTest}
-                    className="px-2.5 py-1 rounded-md bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-[11px] font-semibold transition flex items-center gap-1"
+                    className="px-2.5 py-1 rounded-md bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-semibold transition flex items-center gap-1"
                     title="Load 2 wrong answers with questions 3-7 unattempted (Should score 0/10)"
                   >
                     <span>🔴 Test: 2 Wrong (0/10)</span>
@@ -795,7 +794,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   <button
                     type="button"
                     onClick={handleLoadAllCorrectTest}
-                    className="px-2.5 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[11px] font-semibold transition flex items-center gap-1"
+                    className="px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-semibold transition flex items-center gap-1"
                     title="Load all 9 questions correct (10/10)"
                   >
                     <span>🟢 Test: All 10/10 Correct</span>
@@ -804,7 +803,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     <button
                       type="button"
                       onClick={() => setCustomTextWorking('')}
-                      className="px-2 py-1 rounded-md bg-[#252a35] hover:bg-[#2e3442] text-gray-400 text-[10px] transition"
+                      className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] transition"
                     >
                       Clear
                     </button>
@@ -819,7 +818,7 @@ Q1: Mike is right because 8+12=20, 20/4=5
 Q2: 50
 (All other questions left unattempted)`}
                   rows={5}
-                  className="w-full bg-[#121419] border border-[#2d3340] rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500 font-mono leading-relaxed placeholder:text-gray-500"
+                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:border-[#800020] font-mono leading-relaxed placeholder:text-slate-400"
                 />
               </div>
             )}
@@ -837,19 +836,19 @@ Q2: 50
                   }}
                 />
                 {customTextWorking && (
-                  <div className="p-3 bg-[#11141c] border border-[#2b3243] rounded-lg text-xs space-y-1.5">
-                    <div className="flex items-center justify-between text-gray-400 text-[11px]">
-                      <span className="font-semibold text-gray-300">Accumulated Submission Answers:</span>
+                  <div className="p-3 bg-[#fff8f9] border border-[#fecdd3] rounded-lg text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-slate-600 text-[11px]">
+                      <span className="font-semibold text-[#701a2d]">Accumulated Submission Answers:</span>
                       <button
                         type="button"
                         onClick={() => setInputMode('type')}
-                        className="text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1 font-medium"
+                        className="text-[#800020] hover:underline flex items-center gap-1 font-bold"
                       >
                         <span>Edit in Type View</span>
                         <ArrowRight className="w-3 h-3" />
                       </button>
                     </div>
-                    <pre className="font-mono text-purple-200 whitespace-pre-wrap text-[11px] bg-[#0d1017] p-2 rounded border border-[#222838]">
+                    <pre className="font-mono text-[#881337] whitespace-pre-wrap text-[11px] bg-white p-2 rounded border border-[#fecdd3]">
                       {customTextWorking}
                     </pre>
                   </div>
@@ -860,42 +859,42 @@ Q2: 50
             {/* Student Info inputs */}
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Student Name</label>
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">Student Name</label>
                 <input
                   type="text"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
                   placeholder="e.g. Test Student"
-                  className="w-full bg-[#14161a] border border-[#333842] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#800020] font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Student ID / Code</label>
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">Student ID / Code</label>
                 <input
                   type="text"
                   value={studentId}
                   onChange={(e) => setStudentId(e.target.value)}
-                  className="w-full bg-[#14161a] border border-[#333842] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-blue-500 font-mono"
+                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#800020] font-mono"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-gray-400 mb-1">Target Curriculum &amp; Topic</label>
-              <div className="bg-[#14161a] border border-[#333842] rounded-lg p-2.5 text-xs text-gray-200 flex items-center justify-between">
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Target Curriculum &amp; Topic</label>
+              <div className="bg-[#fdfaf8] border border-[#f0d0d6] rounded-lg p-2.5 text-xs text-slate-700 flex items-center justify-between">
                 <span>{assignment}</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold border border-[#fecdd3]">
                   10 Marks
                 </span>
               </div>
             </div>
 
-            {/* Run Button */}
+            {/* Run Button in Burgundy */}
             <button
               onClick={handleCheckHomework}
               disabled={isGrading}
-              className="w-full py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition disabled:opacity-50"
+              className="w-full py-3.5 bg-gradient-to-r from-[#800020] via-[#9f1239] to-[#800020] hover:from-[#66001a] hover:to-[#800020] text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-rose-950/20 flex items-center justify-center gap-2 transition disabled:opacity-50"
             >
               {isGrading ? (
                 <>
@@ -917,7 +916,7 @@ Q2: 50
               <button
                 type="button"
                 onClick={handleResetPortal}
-                className="w-full py-2 bg-[#171a21] hover:bg-rose-500/10 text-gray-400 hover:text-rose-400 border border-[#2b303d] hover:border-rose-500/30 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                className="w-full py-2 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-[#e5d0d4] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Delete Uploaded Homework &amp; Reset</span>
@@ -926,9 +925,9 @@ Q2: 50
           </div>
 
           {/* Quick Info Box */}
-          <div className="bg-[#14161a] border border-[#2b303a] rounded-xl p-4 text-xs text-gray-400 space-y-2">
-            <div className="flex items-center gap-2 text-gray-200 font-semibold">
-              <BookOpen className="w-4 h-4 text-emerald-400" />
+          <div className="bg-[#fdfaf8] border border-[#f0d0d6] rounded-xl p-4 text-xs text-slate-600 space-y-2">
+            <div className="flex items-center gap-2 text-[#701a2d] font-bold">
+              <BookOpen className="w-4 h-4 text-[#800020]" />
               <span>Marking Standard</span>
             </div>
             <p className="text-[11px] leading-relaxed">
@@ -940,13 +939,13 @@ Q2: 50
         {/* Right Column: AI Feedback Report (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
           {!report && !isGrading && (
-            <div className="bg-[#1e222a] border border-[#333842] rounded-xl p-10 text-center space-y-4">
-              <div className="w-14 h-14 rounded-full bg-blue-500/10 text-blue-400 mx-auto flex items-center justify-center border border-blue-500/20">
+            <div className="bg-white border border-[#f0d0d6] rounded-2xl p-10 text-center space-y-4 shadow-sm">
+              <div className="w-14 h-14 rounded-full bg-[#fff1f2] text-[#800020] mx-auto flex items-center justify-center border border-[#fecdd3]">
                 <FileCheck className="w-7 h-7" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-semibold text-white">Test Portal Ready for Homework Checking</h3>
-                <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                <h3 className="text-base font-bold text-[#701a2d]">Test Portal Ready for Homework Checking</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
                   Upload a student homework file (PDF or photo) on the left, then click &ldquo;Check Homework with AI Notebook&rdquo; to generate the official evaluation report.
                 </p>
               </div>
@@ -954,7 +953,7 @@ Q2: 50
               <div className="flex items-center justify-center gap-3 pt-2">
                 <button
                   onClick={handleCheckHomework}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-md transition flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold rounded-xl shadow-md transition flex items-center gap-1.5"
                 >
                   <Sparkles className="w-4 h-4 text-amber-300" />
                   <span>Check Homework {studentName ? `for ${studentName}` : 'Now'}</span>
@@ -964,39 +963,39 @@ Q2: 50
           )}
 
           {isGrading && (
-            <div className="bg-[#1e222a] border border-[#333842] rounded-xl p-12 text-center space-y-4">
-              <Loader2 className="w-10 h-10 animate-spin text-blue-400 mx-auto" />
+            <div className="bg-white border border-[#f0d0d6] rounded-2xl p-12 text-center space-y-4 shadow-sm">
+              <Loader2 className="w-10 h-10 animate-spin text-[#800020] mx-auto" />
               <div className="space-y-1">
-                <h3 className="text-base font-semibold text-white">Notebook Grading in Progress</h3>
-                <p className="text-xs text-gray-400">
+                <h3 className="text-base font-bold text-[#701a2d]">Notebook Grading in Progress</h3>
+                <p className="text-xs text-slate-500">
                   Matching student handwriting against Mr. Haitham Hussien&apos;s BIDMAS solution key...
                 </p>
               </div>
-              <div className="w-48 bg-[#14161a] h-1.5 rounded-full mx-auto overflow-hidden">
-                <div className="bg-blue-500 h-full w-2/3 animate-pulse"></div>
+              <div className="w-48 bg-rose-100 h-1.5 rounded-full mx-auto overflow-hidden">
+                <div className="bg-[#800020] h-full w-2/3 animate-pulse"></div>
               </div>
             </div>
           )}
 
           {report && !isGrading && (
-            <div className="bg-[#1e222a] border border-[#333842] rounded-xl overflow-hidden shadow-2xl animate-in fade-in space-y-4">
-              {/* NotebookLM Evaluation Report Header Bar */}
-              <div className="bg-[#141824] border-b border-[#2d374d] p-5">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-[#262f43] gap-2">
-                  <span className="text-[11px] font-bold tracking-widest text-gray-400 uppercase">
+            <div className="bg-white border border-[#f0d0d6] rounded-2xl overflow-hidden shadow-xl animate-in fade-in space-y-4 text-slate-800">
+              {/* NotebookLM Evaluation Report Header Bar in Burgundy */}
+              <div className="bg-gradient-to-r from-[#701a2d] via-[#800020] to-[#590e1f] text-white p-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-white/20 gap-2">
+                  <span className="text-[11px] font-bold tracking-widest text-rose-200 uppercase">
                     {report.headerTitle || 'IGCSE MATHEMATICS — HOMEWORK EVALUATION REPORT'}
                   </span>
-                  <span className="text-[11px] font-bold tracking-wider text-blue-400 uppercase">
+                  <span className="text-[11px] font-bold tracking-wider text-amber-300 uppercase">
                     {report.teacherName || 'MR. HAITHAM HUSSIEN'}
                   </span>
                 </div>
 
                 <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-black text-white math-serif tracking-tight">
                       {report.reportTitle || 'Student Homework Correction & Report'}
                     </h2>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-rose-200 mt-0.5">
                       Cambridge IGCSE Curriculum Evaluation • {report.submissionDate}
                     </p>
                   </div>
@@ -1010,7 +1009,7 @@ Q2: 50
                           setPdfModalUrl(report.pdfUrl || '/assets/aistudio/adam-bardana-homework-report_9fb73cfc.pdf');
                           setShowPdfModal(true);
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold shadow-md transition"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>View NotebookLM PDF</span>
@@ -1021,7 +1020,7 @@ Q2: 50
                       <a
                         href={report.pdfUrl}
                         download="adam-bardana-homework-report.pdf"
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#252c3d] hover:bg-[#2f384d] text-blue-300 text-xs font-semibold border border-[#374259] transition"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold border border-white/25 transition"
                         title="Download official PDF report"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -1031,7 +1030,7 @@ Q2: 50
 
                     <button
                       onClick={handleResetPortal}
-                      className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-[#202738] border border-transparent hover:border-[#374259] transition"
+                      className="p-2 text-rose-200 hover:text-white rounded-lg hover:bg-white/10 transition"
                       title="Clear and test another student"
                     >
                       <RotateCcw className="w-4 h-4" />
@@ -1040,9 +1039,9 @@ Q2: 50
                 </div>
 
                 {/* NotebookLM Information Matrix */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-[#262f43]">
-                  <div className="bg-[#121620] p-2.5 rounded-lg border border-[#232b3d]">
-                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/20">
+                  <div className="bg-white/10 p-2.5 rounded-lg border border-white/15">
+                    <span className="text-[10px] uppercase font-bold text-rose-200 block tracking-wider">
                       Student Name
                     </span>
                     <span className="text-sm font-extrabold text-white mt-0.5 block truncate">
@@ -1050,40 +1049,40 @@ Q2: 50
                     </span>
                   </div>
 
-                  <div className="bg-[#121620] p-2.5 rounded-lg border border-[#232b3d]">
-                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
+                  <div className="bg-white/10 p-2.5 rounded-lg border border-white/15">
+                    <span className="text-[10px] uppercase font-bold text-rose-200 block tracking-wider">
                       Subject &amp; Topic
                     </span>
-                    <span className="text-xs font-semibold text-gray-200 mt-0.5 block truncate">
+                    <span className="text-xs font-semibold text-rose-100 mt-0.5 block truncate">
                       {report.subject} • {report.topic || 'BIDMAS'}
                     </span>
                   </div>
 
-                  <div className="bg-[#121620] p-2.5 rounded-lg border border-[#232b3d]">
-                    <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
+                  <div className="bg-white/10 p-2.5 rounded-lg border border-white/15">
+                    <span className="text-[10px] uppercase font-bold text-rose-200 block tracking-wider">
                       Instructor &amp; Chapter
                     </span>
-                    <span className="text-xs font-semibold text-gray-200 mt-0.5 block truncate">
+                    <span className="text-xs font-semibold text-rose-100 mt-0.5 block truncate">
                       {report.teacherName} • {report.chapter || 'Chapter 1'}
                     </span>
                   </div>
 
-                  <div className="bg-[#121620] p-2.5 rounded-lg border border-[#232b3d] flex items-center justify-between">
+                  <div className="bg-white/10 p-2.5 rounded-lg border border-white/15 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
+                      <span className="text-[10px] uppercase font-bold text-rose-200 block tracking-wider">
                         Score &amp; Grade
                       </span>
-                      <span className="text-sm font-black text-amber-400 mt-0.5 block">
+                      <span className="text-sm font-black text-amber-300 mt-0.5 block">
                         {report.earnedMarks} / {report.totalMarks} ({report.percentage}%)
                       </span>
                     </div>
                     <span
                       className={`text-xs font-bold px-2.5 py-1 rounded-md ${
                         report.percentage >= 80
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          ? 'bg-emerald-500 text-white'
                           : report.percentage >= 60
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                          ? 'bg-amber-400 text-amber-950'
+                          : 'bg-rose-500 text-white'
                       }`}
                     >
                       {report.grade}
@@ -1094,24 +1093,24 @@ Q2: 50
 
               {/* View Style Switcher & Question Filters */}
               <div className="px-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
-                <div className="flex items-center gap-1.5 bg-[#141720] p-1 rounded-lg border border-[#2d3545]">
+                <div className="flex items-center gap-1.5 bg-[#fcf5f7] p-1 rounded-lg border border-[#f5dbe1]">
                   <button
                     onClick={() => setViewStyle('notebookTable')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition ${
                       viewStyle === 'notebookTable'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-gray-400 hover:text-white'
+                        ? 'bg-[#800020] text-white shadow-sm'
+                        : 'text-slate-600 hover:text-[#800020]'
                     }`}
                   >
                     <TableIcon className="w-3.5 h-3.5" />
-                    <span>NotebookLM Table (Exact 1:1)</span>
+                    <span>NotebookLM Table</span>
                   </button>
                   <button
                     onClick={() => setViewStyle('detailedCards')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition ${
                       viewStyle === 'detailedCards'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-gray-400 hover:text-white'
+                        ? 'bg-[#800020] text-white shadow-sm'
+                        : 'text-slate-600 hover:text-[#800020]'
                     }`}
                   >
                     <ListIcon className="w-3.5 h-3.5" />
@@ -1125,8 +1124,8 @@ Q2: 50
                     onClick={() => setQuestionFilter('all')}
                     className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
                       questionFilter === 'all'
-                        ? 'bg-blue-600/30 text-blue-300 border border-blue-500/50'
-                        : 'bg-[#181d26] text-gray-400 hover:text-white border border-[#2d3340]'
+                        ? 'bg-[#fff1f2] text-[#800020] border border-[#fecdd3]'
+                        : 'bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200'
                     }`}
                   >
                     All ({report.questions.length})
@@ -1135,8 +1134,8 @@ Q2: 50
                     onClick={() => setQuestionFilter('correct')}
                     className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
                       questionFilter === 'correct'
-                        ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50'
-                        : 'bg-[#181d26] text-gray-400 hover:text-white border border-[#2d3340]'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                        : 'bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200'
                     }`}
                   >
                     Correct ({report.questions.filter((q) => q.status === 'correct').length})
@@ -1145,8 +1144,8 @@ Q2: 50
                     onClick={() => setQuestionFilter('review')}
                     className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
                       questionFilter === 'review'
-                        ? 'bg-rose-600/30 text-rose-300 border border-rose-500/50'
-                        : 'bg-[#181d26] text-gray-400 hover:text-white border border-[#2d3340]'
+                        ? 'bg-rose-50 text-rose-800 border border-rose-300'
+                        : 'bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200'
                     }`}
                   >
                     Incorrect ({report.questions.filter((q) => q.status !== 'correct').length})
@@ -1156,29 +1155,29 @@ Q2: 50
 
               {/* 1. Question-by-Question Marking Breakdown */}
               <div className="px-5 space-y-3">
-                <div className="flex items-center justify-between pb-1 border-b border-[#2b3342]">
-                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                <div className="flex items-center justify-between pb-1 border-b border-[#f5e1e5]">
+                  <h3 className="font-bold text-[#701a2d] text-sm flex items-center gap-2">
                     <span>1. Question-by-Question Marking Breakdown</span>
-                    <span className="text-[10px] text-gray-400 font-normal">
+                    <span className="text-[10px] text-slate-500 font-normal">
                       (Total Marks: {report.earnedMarks} / {report.totalMarks})
                     </span>
                   </h3>
                   {viewStyle === 'detailedCards' && (
                     <button
                       onClick={() => setExpandedQuestion(expandedQuestion === -1 ? null : -1)}
-                      className="text-blue-400 hover:text-blue-300 text-[11px] whitespace-nowrap"
+                      className="text-[#800020] hover:underline text-[11px] whitespace-nowrap font-semibold"
                     >
                       {expandedQuestion === -1 ? 'Collapse All' : 'Expand All'}
                     </button>
                   )}
                 </div>
 
-                {/* VIEW MODE 1: Exact NotebookLM Report Table */}
+                {/* VIEW MODE 1: Exact NotebookLM Report Table in White & Burgundy */}
                 {viewStyle === 'notebookTable' ? (
-                  <div className="overflow-x-auto border border-[#333d52] rounded-xl bg-[#141822]">
+                  <div className="overflow-x-auto border border-[#f0d0d6] rounded-xl bg-white shadow-xs">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="bg-[#1a2130] text-gray-300 uppercase text-[10px] tracking-wider border-b border-[#333d52]">
+                        <tr className="bg-[#fdf5f6] text-[#701a2d] uppercase text-[10px] tracking-wider border-b border-[#f0d0d6]">
                           <th className="py-3 px-3 w-[60px] font-bold text-center">Q#</th>
                           <th className="py-3 px-3 font-bold">Topic / Expression</th>
                           <th className="py-3 px-3 w-[80px] font-bold text-center">Mark</th>
@@ -1186,7 +1185,7 @@ Q2: 50
                           <th className="py-3 px-4 font-bold">Student Answer / Error Analysis</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#262f43]">
+                      <tbody className="divide-y divide-[#f5e1e5]">
                         {report.questions
                           .filter((q) => {
                             if (questionFilter === 'correct') return q.status === 'correct';
@@ -1204,21 +1203,21 @@ Q2: 50
                                     setExpandedQuestion(isSelected ? null : q.questionNumber)
                                   }
                                   className={`cursor-pointer transition-colors ${
-                                    idx % 2 === 0 ? 'bg-[#151924]' : 'bg-[#121620]'
-                                  } hover:bg-[#1f2638] ${isSelected ? 'ring-1 ring-blue-500' : ''}`}
+                                    idx % 2 === 0 ? 'bg-white' : 'bg-[#fdfafb]'
+                                  } hover:bg-[#fff5f6] ${isSelected ? 'ring-1 ring-[#800020]' : ''}`}
                                 >
                                   {/* Q# */}
-                                  <td className="py-3 px-3 font-mono font-bold text-center text-gray-200">
+                                  <td className="py-3 px-3 font-mono font-bold text-center text-[#701a2d]">
                                     {q.displayLabel || `Q${q.questionNumber}`}
                                   </td>
 
                                   {/* Topic / Expression */}
-                                  <td className="py-3 px-3 font-medium text-gray-100 font-mono">
+                                  <td className="py-3 px-3 font-medium text-slate-800 font-mono">
                                     {q.topicExpression || q.prompt}
                                   </td>
 
                                   {/* Mark */}
-                                  <td className="py-3 px-3 font-mono font-bold text-center text-gray-300">
+                                  <td className="py-3 px-3 font-mono font-bold text-center text-slate-700">
                                     {q.earnedMarks}/{q.maxMarks}
                                   </td>
 
@@ -1227,8 +1226,8 @@ Q2: 50
                                     <span
                                       className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black tracking-wide ${
                                         isCorrect
-                                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                                          : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                                          : 'bg-rose-50 text-[#800020] border border-rose-300'
                                       }`}
                                     >
                                       {q.statusLabel || (isCorrect ? 'CORRECT' : 'INCORRECT')}
@@ -1236,10 +1235,10 @@ Q2: 50
                                   </td>
 
                                   {/* Student Answer / Error Analysis */}
-                                  <td className="py-3 px-4 text-xs text-gray-300 leading-snug">
+                                  <td className="py-3 px-4 text-xs text-slate-700 leading-snug">
                                     <span
                                       className={
-                                        !isCorrect ? 'text-rose-300 font-medium' : 'text-gray-300'
+                                        !isCorrect ? 'text-[#800020] font-medium' : 'text-slate-700'
                                       }
                                     >
                                       {q.errorAnalysis || q.teacherFeedback}
@@ -1249,20 +1248,20 @@ Q2: 50
 
                                 {/* Expanded Detail Drawer on Table Row Click */}
                                 {isSelected && (
-                                  <tr className="bg-[#10131a]">
-                                    <td colSpan={5} className="p-3 border-t border-b border-[#2b354a]">
+                                  <tr className="bg-[#fff9fa]">
+                                    <td colSpan={5} className="p-3 border-t border-b border-[#f5e1e5]">
                                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                        <div className="bg-[#161a24] p-2.5 rounded-lg border border-[#2b3347]">
-                                          <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">
+                                        <div className="bg-white p-2.5 rounded-lg border border-[#fecdd3]">
+                                          <span className="text-[10px] uppercase font-bold text-[#800020] block mb-1">
                                             Student Working Found:
                                           </span>
-                                          <p className="font-mono text-emerald-300">{q.studentWorkingFound}</p>
+                                          <p className="font-mono text-slate-800 font-semibold">{q.studentWorkingFound}</p>
                                         </div>
-                                        <div className="bg-[#161a24] p-2.5 rounded-lg border border-[#2b3347]">
-                                          <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">
+                                        <div className="bg-white p-2.5 rounded-lg border border-[#fecdd3]">
+                                          <span className="text-[10px] uppercase font-bold text-[#800020] block mb-1">
                                             Official Model Answer ({q.markSchemeRef}):
                                           </span>
-                                          <p className="font-mono text-blue-300">{q.modelSolution}</p>
+                                          <p className="font-mono text-[#701a2d] font-semibold">{q.modelSolution}</p>
                                         </div>
                                       </div>
                                     </td>
@@ -1293,8 +1292,8 @@ Q2: 50
                             key={q.questionNumber}
                             className={`border rounded-xl transition overflow-hidden ${
                               isFull
-                                ? 'bg-[#181d26] border-[#2b3342] hover:border-emerald-500/50'
-                                : 'bg-[#221c27] border-[#422e3e] hover:border-rose-500/50'
+                                ? 'bg-white border-[#f0d0d6] hover:border-emerald-500/50'
+                                : 'bg-[#fffcfd] border-[#fecdd3] hover:border-[#800020]'
                             }`}
                           >
                             <div
@@ -1309,17 +1308,17 @@ Q2: 50
                                 <span
                                   className={`min-w-8 px-2 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                                     isFull
-                                      ? 'bg-emerald-500/20 text-emerald-400'
-                                      : 'bg-rose-500/20 text-rose-400'
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                                      : 'bg-rose-50 text-[#800020] border border-rose-300'
                                   }`}
                                 >
                                   {q.displayLabel || `Q${q.questionNumber}`}
                                 </span>
                                 <div>
-                                  <span className="text-xs font-semibold text-gray-200">
+                                  <span className="text-xs font-semibold text-slate-800">
                                     {q.topicExpression || q.prompt}
                                   </span>
-                                  <span className="text-[10px] text-gray-500 ml-2 font-mono">
+                                  <span className="text-[10px] text-slate-400 ml-2 font-mono">
                                     ({q.paperRef})
                                   </span>
                                 </div>
@@ -1329,42 +1328,42 @@ Q2: 50
                                 <span
                                   className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
                                     isFull
-                                      ? 'bg-emerald-500/20 text-emerald-400'
-                                      : 'bg-rose-500/20 text-rose-400'
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                                      : 'bg-rose-50 text-[#800020] border border-rose-300'
                                   }`}
                                 >
                                   +{q.earnedMarks}/{q.maxMarks}
                                 </span>
                                 {isExpanded ? (
-                                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                                  <ChevronUp className="w-4 h-4 text-slate-400" />
                                 ) : (
-                                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                                  <ChevronDown className="w-4 h-4 text-slate-400" />
                                 )}
                               </div>
                             </div>
 
                             {isExpanded && (
-                              <div className="px-4 pb-3.5 pt-1 border-t border-[#262c38] text-xs space-y-2">
+                              <div className="px-4 pb-3.5 pt-1 border-t border-[#f5e1e5] text-xs space-y-2 bg-[#fdfafb]">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                                  <div className="bg-[#12151c] p-2.5 rounded-lg border border-[#222834]">
-                                    <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">
+                                  <div className="bg-white p-2.5 rounded-lg border border-[#fecdd3]">
+                                    <span className="text-[10px] uppercase font-bold text-[#800020] block mb-1">
                                       Student Working Detected:
                                     </span>
-                                    <p className="font-mono text-emerald-300 text-xs">
+                                    <p className="font-mono text-slate-800 text-xs font-semibold">
                                       {q.studentWorkingFound}
                                     </p>
                                   </div>
-                                  <div className="bg-[#12151c] p-2.5 rounded-lg border border-[#222834]">
-                                    <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">
+                                  <div className="bg-white p-2.5 rounded-lg border border-[#fecdd3]">
+                                    <span className="text-[10px] uppercase font-bold text-[#800020] block mb-1">
                                       Model Answer ({q.markSchemeRef}):
                                     </span>
-                                    <p className="font-mono text-blue-300 text-xs">
+                                    <p className="font-mono text-[#701a2d] text-xs font-semibold">
                                       {q.modelSolution}
                                     </p>
                                   </div>
                                 </div>
-                                <div className="bg-blue-950/20 border border-blue-500/30 p-2.5 rounded-lg text-[11px] text-gray-300">
-                                  <strong className="text-blue-300">Marking Note: </strong>
+                                <div className="bg-[#fff1f2] border border-[#fecdd3] p-2.5 rounded-lg text-[11px] text-[#701a2d]">
+                                  <strong className="text-[#800020]">Marking Note: </strong>
                                   {q.errorAnalysis || q.teacherFeedback}
                                 </div>
                               </div>
@@ -1378,12 +1377,12 @@ Q2: 50
 
               {/* 2. Diagnostic Review & Mistake Analysis */}
               <div className="px-5">
-                <div className="bg-[#151a24] border border-[#2d374a] rounded-xl p-4 space-y-2">
-                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                <div className="bg-[#fffcfd] border border-[#f5e1e5] rounded-xl p-4 space-y-2 shadow-xs">
+                  <h3 className="font-bold text-[#701a2d] text-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#800020]"></span>
                     <span>2. Diagnostic Review &amp; Mistake Analysis</span>
                   </h3>
-                  <p className="text-xs text-gray-300 leading-relaxed font-sans">
+                  <p className="text-xs text-slate-700 leading-relaxed font-sans">
                     {report.diagnosticReview || report.generalFeedback}
                   </p>
                 </div>
@@ -1391,9 +1390,9 @@ Q2: 50
 
               {/* 3. Personalized Action Plan & Next Steps */}
               <div className="px-5 pb-2">
-                <div className="bg-[#151a24] border border-[#2d374a] rounded-xl p-4 space-y-2.5">
-                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <div className="bg-[#fffcfd] border border-[#f5e1e5] rounded-xl p-4 space-y-2.5 shadow-xs">
+                  <h3 className="font-bold text-[#701a2d] text-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
                     <span>3. Personalized Action Plan &amp; Next Steps</span>
                   </h3>
 
@@ -1402,14 +1401,14 @@ Q2: 50
                       report.actionPlan.map((action, idx) => (
                         <div
                           key={idx}
-                          className="flex items-start gap-2 bg-[#10141d] p-2.5 rounded-lg border border-[#222a3a]"
+                          className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-[#f5e1e5]"
                         >
-                          <span className="text-emerald-400 font-bold mt-0.5">•</span>
+                          <span className="text-emerald-700 font-bold mt-0.5">•</span>
                           <div>
-                            <strong className="text-white mr-1.5 font-bold">
+                            <strong className="text-[#701a2d] mr-1.5 font-bold">
                               {action.title}:
                             </strong>
-                            <span className="text-gray-300">{action.detail}</span>
+                            <span className="text-slate-700">{action.detail}</span>
                           </div>
                         </div>
                       ))
@@ -1417,10 +1416,10 @@ Q2: 50
                       report.recommendedNextSteps.map((step, idx) => (
                         <div
                           key={idx}
-                          className="flex items-start gap-2 bg-[#10141d] p-2.5 rounded-lg border border-[#222a3a]"
+                          className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-[#f5e1e5]"
                         >
-                          <span className="text-emerald-400 font-bold mt-0.5">•</span>
-                          <span className="text-gray-300">{step}</span>
+                          <span className="text-emerald-700 font-bold mt-0.5">•</span>
+                          <span className="text-slate-700">{step}</span>
                         </div>
                       ))
                     )}
@@ -1430,40 +1429,40 @@ Q2: 50
 
               {/* 4. Teacher Haitham's Humane Encouragement Note */}
               <div className="px-5 pb-3">
-                <div className="bg-gradient-to-br from-[#1a1c17] via-[#211f18] to-[#1a1c17] border border-amber-500/40 rounded-xl p-4 relative overflow-hidden shadow-md">
-                  <div className="flex items-center justify-between pb-2 border-b border-amber-500/20 mb-2">
+                <div className="bg-gradient-to-br from-[#fffdfa] via-[#fffbf2] to-[#fffdfa] border border-[#eedac5] rounded-xl p-4 relative overflow-hidden shadow-sm">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#f3d9b8] mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-amber-400 font-serif text-lg font-bold">✍️</span>
-                      <h4 className="text-xs font-bold text-amber-200 uppercase tracking-wider font-sans">
+                      <span className="text-[#800020] font-serif text-lg font-bold">✍️</span>
+                      <h4 className="text-xs font-bold text-[#701a2d] uppercase tracking-wider font-sans">
                         Teacher Haitham&apos;s Humane Mentorship Note
                       </h4>
                     </div>
-                    <span className="text-[10px] text-amber-300/80 font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30">
+                    <span className="text-[10px] text-[#800020] font-mono px-2 py-0.5 rounded bg-white border border-[#eedac5] font-bold">
                       Cambridge IGCSE Mentor Stamp
                     </span>
                   </div>
 
-                  <p className="teacher-handwriting text-lg text-amber-100 leading-relaxed">
+                  <p className="teacher-handwriting text-xl text-[#701a2d] leading-relaxed">
                     &ldquo;Dear {report.studentName || 'Student'}, remember that getting a calculation wrong is never an endpoint — it is our clearest map of where to shine the spotlight next! With BIDMAS, always train your eyes to isolate brackets first. You are making real, tangible progress. Keep practicing with patience and curious persistence.&rdquo;
                   </p>
 
-                  <div className="mt-2 pt-2 border-t border-amber-500/15 flex items-center justify-between text-[11px] text-amber-300/70">
-                    <span className="font-serif italic">— Mr. Haitham Hussien, Cambridge Mathematics Specialist</span>
-                    <span className="font-mono text-[10px]">NotebookLM Diagnostic Engine Verified</span>
+                  <div className="mt-2 pt-2 border-t border-[#f3d9b8] flex items-center justify-between text-[11px] text-slate-600">
+                    <span className="font-serif italic font-semibold text-[#800020]">— Mr. Haitham Hussien, Cambridge Mathematics Specialist</span>
+                    <span className="font-mono text-[10px] text-slate-500">NotebookLM Diagnostic Engine Verified</span>
                   </div>
                 </div>
               </div>
 
               {/* Bottom Interactive Student Q&A Box */}
-              <div className="p-4 bg-[#14161a] border-t border-[#2d323b] space-y-2">
+              <div className="p-4 bg-[#fcf8f9] border-t border-[#f0d0d6] space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-gray-300 flex items-center gap-1.5">
-                    <HelpCircle className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="font-bold text-[#701a2d] flex items-center gap-1.5">
+                    <HelpCircle className="w-3.5 h-3.5 text-[#800020]" />
                     Have a question about your marks or any step?
                   </span>
                   <button
                     onClick={() => window.print()}
-                    className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-[#282c34]"
+                    className="flex items-center gap-1 text-[11px] text-slate-600 hover:text-[#800020] px-2 py-1 rounded hover:bg-white transition"
                   >
                     <Printer className="w-3 h-3" /> Print Report
                   </button>
@@ -1475,21 +1474,21 @@ Q2: 50
                     value={studentQuery}
                     onChange={(e) => setStudentQuery(e.target.value)}
                     placeholder="Ask Mr. Haitham Hussien AI Tutor (e.g. Why did Question 7 violate BIDMAS?)..."
-                    className="flex-1 bg-[#202530] text-white text-xs px-3 py-2 rounded-lg border border-[#333c4d] outline-none focus:border-purple-500"
+                    className="flex-1 bg-white text-slate-800 text-xs px-3 py-2 rounded-lg border border-[#e5d0d4] outline-none focus:border-[#800020] shadow-xs"
                   />
                   <button
                     type="submit"
                     disabled={!studentQuery.trim() || isAskingTutor}
-                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold disabled:opacity-40 transition"
+                    className="px-3.5 py-2 bg-[#800020] hover:bg-[#68001a] text-white rounded-lg text-xs font-bold disabled:opacity-40 transition shadow-xs"
                   >
                     {isAskingTutor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Ask Tutor'}
                   </button>
                 </form>
 
                 {tutorReply && (
-                  <div className="p-3 bg-purple-950/30 border border-purple-500/30 rounded-lg text-xs text-gray-200 mt-2 leading-relaxed">
-                    <div className="font-semibold text-purple-300 mb-1 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-purple-400" /> Tutor Response:
+                  <div className="p-3 bg-white border border-[#f0d0d6] rounded-lg text-xs text-slate-800 mt-2 leading-relaxed shadow-xs">
+                    <div className="font-bold text-[#800020] mb-1 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-[#be123c]" /> Tutor Response:
                     </div>
                     {tutorReply}
                   </div>
@@ -1502,12 +1501,12 @@ Q2: 50
 
       {/* PDF Viewer Modal */}
       {showPdfModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#1e222a] border border-[#333842] rounded-xl max-w-5xl w-full h-[88vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-3.5 border-b border-[#2d323b] bg-[#181a1f]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white border border-[#e6ccd2] rounded-xl max-w-5xl w-full h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-3.5 border-b border-[#f0d8dd] bg-[#fffdfa]">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-emerald-400" />
-                <span className="font-semibold text-white text-sm">
+                <FileText className="w-4 h-4 text-[#800020]" />
+                <span className="font-bold text-slate-900 text-sm font-serif">
                   {pdfModalType === 'adam'
                     ? 'Adam Bardana — Homework Evaluation Report (adam-bardana-homework-report.pdf)'
                     : pdfModalType === 'joury'
@@ -1519,23 +1518,23 @@ Q2: 50
                 <a
                   href={pdfModalUrl}
                   download
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs bg-blue-600/30 hover:bg-blue-600 text-blue-200 hover:text-white rounded transition"
+                  className="flex items-center gap-1 px-3 py-1 text-xs bg-[#800020] hover:bg-[#6b1226] text-white rounded-lg font-semibold shadow-xs transition"
                 >
                   <Download className="w-3 h-3" /> Download
                 </a>
                 <button
                   onClick={() => setShowPdfModal(false)}
-                  className="px-2.5 py-1 text-xs text-gray-400 hover:text-white rounded hover:bg-[#282c34]"
+                  className="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-900 rounded-lg hover:bg-[#fdf4f6] font-medium"
                 >
                   Close ✕
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 bg-[#121418] p-2 overflow-hidden flex items-center justify-center">
+            <div className="flex-1 bg-[#fdfafb] p-2 overflow-hidden flex items-center justify-center">
               <iframe
                 src={pdfModalUrl}
-                className="w-full h-full rounded border border-[#2b303a]"
+                className="w-full h-full rounded border border-[#edd7dc]"
                 title="NotebookLM PDF Document Preview"
               />
             </div>

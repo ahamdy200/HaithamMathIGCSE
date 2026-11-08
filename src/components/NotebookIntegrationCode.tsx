@@ -4,12 +4,10 @@ import {
   Terminal,
   Copy,
   Check,
-  Download,
   ExternalLink,
   Sparkles,
   BookOpen,
   ShieldCheck,
-  FileText,
 } from 'lucide-react';
 
 export const NotebookIntegrationCode: React.FC = () => {
@@ -131,21 +129,22 @@ if __name__ == "__main__":
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#172133] via-[#1b263b] to-[#172133] border border-[#2d3a52] rounded-2xl p-6 shadow-xl">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* Header Banner in Cambridge Burgundy */}
+      <div className="bg-gradient-to-r from-[#6b1226] via-[#800020] to-[#590d1e] text-white border border-[#9b1d35] rounded-2xl p-6 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-full opacity-10 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
-              <Code2 className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-white/10 text-white border border-white/20 flex items-center justify-center backdrop-blur-sm">
+              <Code2 className="w-5 h-5 text-white" />
             </div>
             <div>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-semibold uppercase tracking-wider">
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-white/15 text-rose-100 font-semibold uppercase tracking-wider border border-white/20">
                 Teacher &amp; Team Integration Code
               </span>
-              <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-white mt-1 font-serif">
                 Google Colab &amp; NotebookLM Python Integration
               </h1>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-rose-100/90 max-w-xl">
                 Use this Python pipeline to run the exact homework checker inside your own Google Colab notebooks or Python backend.
               </p>
             </div>
@@ -154,9 +153,13 @@ if __name__ == "__main__":
           <div className="flex items-center gap-2">
             <button
               onClick={() => handleCopy(colabPythonScript, 'script')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow transition"
+              className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-rose-50 text-[#800020] rounded-lg text-xs font-bold shadow transition"
             >
-              {copied === 'script' ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+              {copied === 'script' ? (
+                <Check className="w-4 h-4 text-emerald-600" />
+              ) : (
+                <Copy className="w-4 h-4 text-[#800020]" />
+              )}
               <span>{copied === 'script' ? 'Copied Script!' : 'Copy Python Code'}</span>
             </button>
 
@@ -164,9 +167,9 @@ if __name__ == "__main__":
               href="https://colab.research.google.com/#create=true"
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#252c3d] hover:bg-[#2f384d] text-white rounded-lg text-xs font-semibold border border-[#3b455c] transition"
+              className="flex items-center gap-1.5 px-3 py-2 bg-black/20 hover:bg-black/30 text-white rounded-lg text-xs font-semibold border border-white/30 backdrop-blur-sm transition"
             >
-              <ExternalLink className="w-4 h-4 text-[#f9ab00]" />
+              <ExternalLink className="w-4 h-4 text-amber-300" />
               <span>Launch in Colab</span>
             </a>
           </div>
@@ -174,54 +177,54 @@ if __name__ == "__main__":
       </div>
 
       {/* Code Box */}
-      <div className="bg-[#1e222a] border border-[#333842] rounded-xl overflow-hidden shadow-lg">
-        <div className="p-3 bg-[#181a1f] border-b border-[#2b303a] flex items-center justify-between text-xs text-gray-400">
+      <div className="bg-white border border-[#e6ccd2] rounded-xl overflow-hidden shadow-sm">
+        <div className="p-3 bg-[#fdf2f4] border-b border-[#f0d8dd] flex items-center justify-between text-xs text-slate-600">
           <div className="flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-emerald-400" />
-            <span className="font-semibold text-gray-200">igcse_math_homework_grader.py</span>
-            <span className="text-[11px] text-gray-500 font-mono">(Python 3 • google-genai)</span>
+            <Terminal className="w-4 h-4 text-[#800020]" />
+            <span className="font-bold text-slate-900 font-mono">igcse_math_homework_grader.py</span>
+            <span className="text-[11px] text-slate-500 font-mono">(Python 3 • google-genai)</span>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-mono">
-              <ShieldCheck className="w-3.5 h-3.5" /> Colab Secrets Supported
+            <span className="text-[11px] text-emerald-700 flex items-center gap-1 font-mono font-semibold">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Colab Secrets Supported
             </span>
           </div>
         </div>
 
-        <pre className="p-4 bg-[#14161a] text-xs font-mono text-gray-200 overflow-x-auto leading-relaxed max-h-[580px]">
+        <pre className="p-4 bg-[#fffdfa] text-xs font-mono text-slate-800 overflow-x-auto leading-relaxed max-h-[580px]">
           {colabPythonScript}
         </pre>
       </div>
 
       {/* 3 Integration Highlights */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <div className="bg-[#1e222a] border border-[#2b303a] p-4 rounded-xl space-y-2">
-          <div className="flex items-center gap-2 text-blue-400 font-semibold">
-            <Sparkles className="w-4 h-4" />
+        <div className="bg-white border border-[#e6ccd2] p-4 rounded-xl space-y-2 shadow-sm">
+          <div className="flex items-center gap-2 text-[#800020] font-bold font-serif">
+            <Sparkles className="w-4 h-4 text-[#800020]" />
             <span>Pydantic Schema Validation</span>
           </div>
-          <p className="text-gray-400 leading-relaxed text-[11px]">
-            Uses <code className="text-blue-300 font-mono">types.GenerateContentConfig</code> with strict JSON responseSchema so the AI returns structured question marks.
+          <p className="text-slate-600 leading-relaxed text-[11px]">
+            Uses <code className="text-[#800020] font-mono font-semibold">types.GenerateContentConfig</code> with strict JSON responseSchema so the AI returns structured question marks.
           </p>
         </div>
 
-        <div className="bg-[#1e222a] border border-[#2b303a] p-4 rounded-xl space-y-2">
-          <div className="flex items-center gap-2 text-emerald-400 font-semibold">
-            <ShieldCheck className="w-4 h-4" />
+        <div className="bg-white border border-[#e6ccd2] p-4 rounded-xl space-y-2 shadow-sm">
+          <div className="flex items-center gap-2 text-[#800020] font-bold font-serif">
+            <ShieldCheck className="w-4 h-4 text-[#800020]" />
             <span>Encrypted Secrets Storage</span>
           </div>
-          <p className="text-gray-400 leading-relaxed text-[11px]">
-            Reads <code className="text-emerald-300 font-mono">userdata.get(&apos;GEMINI_API_KEY&apos;)</code> to keep teacher keys encrypted and private.
+          <p className="text-slate-600 leading-relaxed text-[11px]">
+            Reads <code className="text-[#800020] font-mono font-semibold">userdata.get(&apos;GEMINI_API_KEY&apos;)</code> to keep teacher keys encrypted and private.
           </p>
         </div>
 
-        <div className="bg-[#1e222a] border border-[#2b303a] p-4 rounded-xl space-y-2">
-          <div className="flex items-center gap-2 text-purple-400 font-semibold">
-            <BookOpen className="w-4 h-4" />
+        <div className="bg-white border border-[#e6ccd2] p-4 rounded-xl space-y-2 shadow-sm">
+          <div className="flex items-center gap-2 text-[#800020] font-bold font-serif">
+            <BookOpen className="w-4 h-4 text-[#800020]" />
             <span>Official Cambridge Mark Scheme</span>
           </div>
-          <p className="text-gray-400 leading-relaxed text-[11px]">
+          <p className="text-slate-600 leading-relaxed text-[11px]">
             Grounds marking strictly in Mr. Haitham Hussien&apos;s BIDMAS solution key with [M1] and [A1] mark schemes.
           </p>
         </div>
