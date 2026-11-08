@@ -1,0 +1,48 @@
+{
+  "name": "ai-math-grader-openai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.8",
+    "@ai-sdk/google": "^3.0.5",
+    "@ai-sdk/groq": "^3.0.4",
+    "@ai-sdk/openai": "^3.0.7",
+    "@langchain/anthropic": "^1.3.6",
+    "@langchain/core": "^1.1.11",
+    "@langchain/google-genai": "^2.1.6",
+    "@langchain/openai": "^1.2.1",
+    "ai": "^6.0.14",
+    "heic-convert": "^2.1.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.2",
+    "langchain": "^1.2.6",
+    "next": "16.1.1",
+    "openai": "^6.15.0",
+    "pdf-parse": "^2.4.5",
+    "pdf2json": "^4.0.0",
+    "pdfjs-dist": "^5.4.624",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-dropzone": "^14.3.8",
+    "sharp": "^0.34.5",
+    "zod": "^4.3.5",
+    "zod-to-json-schema": "^3.25.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

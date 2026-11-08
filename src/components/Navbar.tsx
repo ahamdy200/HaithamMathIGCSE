@@ -150,6 +150,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         'Color-Coded Visual Marking Overlay (Green/Red/Yellow)',
       ],
     },
+    {
+      id: 'ai-math-grader-openai',
+      name: 'AI-Math-Grader-OpenAI',
+      fullName: 'bluehawana/AI-Math-Grader-OpenAI',
+      description: 'Multi-Provider Vision-AI Math Exam Grader (Gemini, GPT-4o, Claude)',
+      remoteUrl: 'https://github.com/bluehawana/AI-Math-Grader-OpenAI.git',
+      branch: 'main',
+      localPath: 'repos/AI-Math-Grader-OpenAI',
+      isPrimary: false,
+      category: 'Multimodal AI Exam Grader',
+      status: 'Connected (repos/AI-Math-Grader-OpenAI)',
+      files: ['grade-image/route.ts', 'grade/route.ts', 'providers.ts', 'GradingResults.tsx', 'ARCHITECTURE.md'],
+      features: [
+        'Multimodal Vision-AI: Intelligent OCR & reasoning for student handwriting',
+        'Multi-Provider Architecture: Google Gemini, OpenAI GPT-4o, Anthropic Claude',
+        'Multi-Page Context (up to 10 pages) for long-form mathematics solutions',
+        'Ink-Efficient Black & White Assessment Reports for printing',
+      ],
+    },
   ]);
 
   const fetchRepos = async () => {
@@ -622,6 +641,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span className="font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded text-[11px]">
                         automark → adamzev/AutoMark
                       </span>
+                      <span className="font-mono text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded text-[11px]">
+                        ai-math-grader → bluehawana/AI-Math-Grader-OpenAI
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
@@ -661,6 +683,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 # origin                     https://github.com/ahamdy200/HaithamMathIGCSE.git
 # handwritten-equation-solver https://github.com/Sgvkamalakar/Hand-Written-Equation-Solver.git
 # automark                   https://github.com/adamzev/AutoMark.git
+# ai-math-grader             https://github.com/bluehawana/AI-Math-Grader-OpenAI.git
 git branch -M main
 git push -u origin main`}
                   </pre>

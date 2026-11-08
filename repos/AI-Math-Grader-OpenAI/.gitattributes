@@ -1,0 +1,19 @@
+# GitHub Linguist configuration
+# This tells GitHub how to categorize files for language statistics
+
+# Mark handbook files as documentation (not code)
+handbok/** linguist-documentation
+handbok/html/** linguist-documentation
+handbok/latex/** linguist-documentation
+handbok/markdown/** linguist-documentation
+handbok/pdf/** linguist-documentation
+
+# Mark exam PDFs as not language files
+exams/** linguist-documentation
+
+# The actual code is in the ai-math-grader-openai folder
+ai-math-grader-openai/** linguist-detectable
+
+# Mark generated files
+ai-math-grader-openai/package-lock.json linguist-generated
+ai-math-grader-openai/.next/** linguist-generated

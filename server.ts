@@ -121,7 +121,18 @@ app.get('/api/repos', (_req: Request, res: Response) => {
             'CNN Character Classification (97.57% Accuracy)',
           ];
 
-          if (item.toLowerCase().includes('automark')) {
+          if (item.toLowerCase().includes('ai-math-grader') || item.toLowerCase().includes('grader-openai')) {
+            remoteUrl = 'https://github.com/bluehawana/AI-Math-Grader-OpenAI.git';
+            role = 'Multi-Provider Vision-AI Math Exam Grader (Gemini, GPT-4o, Claude)';
+            category = 'Multimodal AI Exam Grader';
+            branch = 'main';
+            features = [
+              'Multimodal Vision-AI: Intelligent OCR & reasoning for student handwriting',
+              'Multi-Provider Architecture: Google Gemini, OpenAI GPT-4o, Anthropic Claude',
+              'Multi-Page Context (up to 10 pages) for long-form mathematics solutions',
+              'Ink-Efficient Black & White Assessment Reports for printing',
+            ];
+          } else if (item.toLowerCase().includes('automark')) {
             remoteUrl = 'https://github.com/adamzev/AutoMark.git';
             role = 'Computer Vision math worksheet scanner, perspective warper, QR code detector & cell grader';
             category = 'Worksheet Scanner & Auto-Grader';
@@ -139,7 +150,11 @@ app.get('/api/repos', (_req: Request, res: Response) => {
           reposList.push({
             id: item.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
             name: item,
-            fullName: item.toLowerCase().includes('automark') ? 'adamzev/AutoMark' : `ahamdy200/${item}`,
+            fullName: item.toLowerCase().includes('automark')
+              ? 'adamzev/AutoMark'
+              : item.toLowerCase().includes('grader')
+              ? 'bluehawana/AI-Math-Grader-OpenAI'
+              : `ahamdy200/${item}`,
             description: role,
             remoteUrl,
             branch,
@@ -199,6 +214,41 @@ app.get('/api/automark/form-codes', (_req: Request, res: Response) => {
         answerKeySummary: '40-problem arithmetic worksheet from adamzev/AutoMark',
       },
     ],
+  });
+});
+
+// Multi-Provider AI Engine Status (inspired by AI-Math-Grader-OpenAI)
+app.get('/api/providers', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    activeProvider: 'gemini',
+    providers: [
+      {
+        id: 'gemini',
+        name: 'Google Gemini',
+        model: 'gemini-3.8-flash',
+        status: process.env.GEMINI_API_KEY ? 'Active & Configured' : 'No API Key',
+        features: ['Multimodal Vision', '1M Token Context', 'Sub-second Latency'],
+        isDefault: true,
+      },
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        model: 'gpt-4o',
+        status: process.env.OPENAI_API_KEY ? 'Active & Configured' : 'Standby / Optional',
+        features: ['Vision-AI Grading', 'Structured Outputs', 'Function Calling'],
+        isDefault: false,
+      },
+      {
+        id: 'anthropic',
+        name: 'Anthropic Claude',
+        model: 'claude-3-5-sonnet',
+        status: process.env.ANTHROPIC_API_KEY ? 'Active & Configured' : 'Standby / Optional',
+        features: ['Long-form Reasoning', 'Pedagogical Math Explanations'],
+        isDefault: false,
+      },
+    ],
+    sourceRepo: 'AI-Math-Grader-OpenAI (bluehawana/AI-Math-Grader-OpenAI)',
   });
 });
 
