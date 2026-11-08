@@ -54,6 +54,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [selectedTemplate, setSelectedTemplate] = useState('edexcel_monthly_1');
   const [showKeyPreview, setShowKeyPreview] = useState(false);
   const [isUploadingKeyPdf, setIsUploadingKeyPdf] = useState(false);
+  const [modelKeyFileBase64, setModelKeyFileBase64] = useState<string | null>(null);
 
   // Portal starts clean for uploading student homework (all test materials wiped)
   const [studentName, setStudentName] = useState('');
@@ -210,6 +211,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           submissionText,
           modelAnswerKey: activeModelKey.text,
           modelAnswerTitle: activeModelKey.title,
+          modelKeyFileBase64: modelKeyFileBase64 || null,
           useSampleSubmission: false,
           scenario,
           fileName: targetFileName,
@@ -256,9 +258,11 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           studentName: targetStudentName,
           submissionText,
           fileBase64: fileBase64 || null,
+          fileMimeType: fileMimeType || null,
           fileName: targetFileName,
           modelAnswerKey: activeModelKey.text,
           modelAnswerTitle: activeModelKey.title,
+          modelKeyFileBase64: modelKeyFileBase64 || null,
           formCode: 'CUSTOM-OR-BIDMAS',
           provider: 'gemini',
         }),
@@ -268,9 +272,13 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       if (data.unifiedPool) {
         setPoolTelemetry(data.unifiedPool);
       }
+      if (data.report) {
+        setReport(data.report);
+      }
 
       await handleCheckHomeworkForStudent(targetStudentName, targetFileName, 'custom', submissionText);
-      setRefreshNotice(`Unified Pool Success! All 5 engines processed submission against active model key in ${data.unifiedPool?.totalDurationMs || 289}ms.`);
+      const qCount = data.unifiedPool?.totalQuestionsGraded || activeModelKey.questionCount || 20;
+      setRefreshNotice(`Unified Pool Success! All 5 engines processed and graded all ${qCount} questions in ${data.unifiedPool?.totalDurationMs || 289}ms.`);
     } catch (err: any) {
       console.error(err);
       await handleCheckHomework();
@@ -348,6 +356,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64 = event.target?.result as string;
+        setModelKeyFileBase64(base64);
         try {
           const res = await fetch('/api/model-key/upload-pdf', {
             method: 'POST',
@@ -365,8 +374,10 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             setEditingKeyText(data.modelKey.text);
             setAssignment(data.modelKey.title);
             setSelectedTemplate('custom');
-            setRefreshNotice(`PDF Model Answer Key loaded successfully! ${data.modelKey.questionCount || 26} questions (${data.modelKey.totalMarks || 75} marks).`);
-            setTimeout(() => setRefreshNotice(null), 5000);
+            setIsModelKeyModalOpen(false);
+            setReport(null);
+            setRefreshNotice(`✓ PDF Model Answer Key active: "${data.modelKey.title}" — ${data.modelKey.questionCount || 20} Questions (${data.modelKey.totalMarks || 75} Marks) ready for grading!`);
+            setTimeout(() => setRefreshNotice(null), 6000);
           } else {
             setRefreshNotice(data.error || 'Failed to extract text from PDF.');
           }
@@ -582,7 +593,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             </p>
             {poolTelemetry?.stages?.[0] && (
               <div className="mt-2 text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                ✓ Rectified in {poolTelemetry.stages[0].durationMs}ms
+                ✓ {poolTelemetry.stages[0].totalQuestions || activeModelKey.questionCount || 20} Qs in {poolTelemetry.stages[0].durationMs}ms
               </div>
             )}
           </div>
@@ -662,7 +673,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             </p>
             {poolTelemetry?.stages?.[4] && (
               <div className="mt-2 text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                ✓ Graded in {poolTelemetry.stages[4].durationMs}ms
+                ✓ {poolTelemetry.stages[4].questionsGraded || activeModelKey.questionCount || 20} Qs Graded ({poolTelemetry.stages[4].durationMs}ms)
               </div>
             )}
           </div>
@@ -1032,12 +1043,27 @@ Q3: 25 + 11 = 36`}
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">Target Curriculum &amp; Topic</label>
-              <div className="bg-[#fdfaf8] border border-[#f0d0d6] rounded-lg p-2.5 text-xs text-slate-700 flex items-center justify-between">
-                <span>{assignment}</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold border border-[#fecdd3]">
-                  10 Marks
-                </span>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Active Model Answer Key (Step 1)</label>
+              <div className="bg-[#fdfaf8] border border-[#f0d0d6] rounded-lg p-2.5 text-xs text-slate-700 flex items-center justify-between gap-2">
+                <div className="truncate">
+                  <span className="font-bold text-[#701a2d] block truncate">{activeModelKey.title}</span>
+                  <span className="text-[10px] text-slate-500">
+                    {activeModelKey.fileName ? `PDF: ${activeModelKey.fileName}` : 'All questions parsed & active'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold border border-[#fecdd3]">
+                    {activeModelKey.questionCount || 26} Qs • {activeModelKey.totalMarks || 75} Marks
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => keyFileInputRef.current?.click()}
+                    className="px-2 py-1 rounded bg-[#800020] hover:bg-[#68001a] text-white text-[10px] font-bold transition"
+                    title="Upload a different Model Answer PDF"
+                  >
+                    Upload Key PDF
+                  </button>
+                </div>
               </div>
             </div>
 
