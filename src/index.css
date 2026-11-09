@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@500;600;700&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #fbfaf8;
+    color: #1e293b;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  }
+}
+
+/* White Mathematical Classroom & Burgundy Grid Patterns */
+.math-paper {
+  background-color: #ffffff;
+  background-image: 
+    linear-gradient(rgba(128, 0, 32, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(128, 0, 32, 0.035) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.math-paper-dense {
+  background-color: #faf8f5;
+  background-image: 
+    linear-gradient(rgba(136, 19, 55, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(136, 19, 55, 0.04) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Academic Regal Burgundy Textures */
+.burgundy-banner {
+  background: linear-gradient(135deg, #701a2d 0%, #881337 50%, #4c0519 100%);
+  color: #ffffff;
+}
+
+.burgundy-card-light {
+  background-color: #ffffff;
+  border: 1px solid #fecdd3;
+  box-shadow: 0 4px 15px -3px rgba(128, 0, 32, 0.05);
+}
+
+.chalkboard-burgundy {
+  background: radial-gradient(circle at 50% 15%, #631124 0%, #3d0512 100%);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.4);
+}
+
+.chalkboard-slate {
+  background: radial-gradient(circle at 50% 15%, #631124 0%, #3d0512 100%);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+}
+
+.chalkboard-green {
+  background: radial-gradient(circle at 50% 20%, #132b21 0%, #0a1813 100%);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+/* Authentic Teacher Marginalia and Handwritten notes */
+.teacher-handwriting {
+  font-family: 'Caveat', cursive, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Classical mathematical serif headers and notation */
+.math-serif {
+  font-family: 'Crimson Pro', Georgia, serif;
+}
+
+/* Ink-friendly paper preview mode for students & teachers */
+.ink-friendly-paper {
+  background-color: #ffffff;
+  color: #1a202c;
+  box-shadow: 0 10px 25px -5px rgba(128, 0, 32, 0.08);
+}
+
+/* Colab-style Prism Syntax Highlighting */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: #9ca3af;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #f59e0b;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #34d399;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: #60a5fa;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #fb923c;
+  font-weight: 500;
+}
+
+.token.function,
+.token.class-name {
+  color: #38bdf8;
+  font-weight: 500;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #f472b6;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f242d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
