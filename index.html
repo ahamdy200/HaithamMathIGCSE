@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Haitham Math IGCSE · Revision, Formulas & Practice</title>
+  <meta name="description" content="IGCSE Mathematics revision hub: topic notes, a formula sheet and unlimited practice questions with instant feedback.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="logo" href="#top"><span class="logo-mark">∑</span> Haitham Math <em>IGCSE</em></a>
+    <nav>
+      <a href="#topics">Topics</a>
+      <a href="#formulas">Formulas</a>
+      <a href="#practice">Practice</a>
+      <a href="#tips">Exam tips</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-text">
+        <p class="eyebrow">IGCSE Mathematics · Core & Extended</p>
+        <h1>Revise smarter.<br>Score <span class="hl">higher.</span></h1>
+        <p class="lede">Clear topic notes, every formula you need in one place, and unlimited practice questions that check your answers instantly.</p>
+        <div class="cta">
+          <a class="btn" href="#practice">Start practising</a>
+          <a class="btn ghost" href="#topics">Browse topics</a>
+        </div>
+      </div>
+      <div class="hero-board" aria-hidden="true">
+        <div class="eq e1">a² + b² = c²</div>
+        <div class="eq e2">x = (−b ± √(b²−4ac)) / 2a</div>
+        <div class="eq e3">sin θ = opp / hyp</div>
+        <div class="eq e4">A = πr²</div>
+        <div class="eq e5">y = mx + c</div>
+      </div>
+    </section>
+
+    <section id="topics" class="section">
+      <div class="section-head">
+        <p class="eyebrow">Syllabus</p>
+        <h2>Topics</h2>
+        <p>Tap a topic to see the key ideas you need to know.</p>
+      </div>
+      <div class="topics" id="topic-grid"></div>
+    </section>
+
+    <section id="formulas" class="section alt">
+      <div class="section-head">
+        <p class="eyebrow">Quick reference</p>
+        <h2>Formula sheet</h2>
+        <p>The essentials, grouped by topic. Learn the ones marked <span class="tag">learn</span>, because they aren't given in the exam.</p>
+      </div>
+      <div class="formula-grid" id="formula-grid"></div>
+    </section>
+
+    <section id="practice" class="section">
+      <div class="section-head">
+        <p class="eyebrow">Unlimited questions</p>
+        <h2>Practice</h2>
+        <p>Choose a topic, answer, and check. New numbers every time.</p>
+      </div>
+      <div class="practice">
+        <div class="chips" id="chips" role="tablist"></div>
+        <div class="card q-card">
+          <div class="q-meta"><span id="q-topic"></span><span id="score">Score: 0 / 0</span></div>
+          <p class="q-text" id="q-text"></p>
+          <form id="q-form" autocomplete="off">
+            <input id="q-input" inputmode="decimal" placeholder="Your answer" aria-label="Your answer">
+            <button class="btn" type="submit">Check</button>
+          </form>
+          <p class="feedback" id="feedback" aria-live="polite"></p>
+          <div class="q-actions">
+            <button class="btn ghost small" id="hint-btn" type="button">Show hint</button>
+            <button class="btn ghost small" id="next-btn" type="button">Next question →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tips" class="section alt">
+      <div class="section-head">
+        <p class="eyebrow">Exam technique</p>
+        <h2>Pick up easy marks</h2>
+      </div>
+      <ol class="tips">
+        <li><strong>Show your working.</strong> Method marks are given even if the final answer is wrong.</li>
+        <li><strong>Read the accuracy.</strong> Give answers to 3 significant figures unless told otherwise (angles to 1 d.p.).</li>
+        <li><strong>Keep full values.</strong> Don't round in the middle of a calculation, only at the end.</li>
+        <li><strong>Check units.</strong> cm vs m, cm² vs cm³. Convert before you calculate.</li>
+        <li><strong>Calculator mode.</strong> Make sure it's in degrees, not radians.</li>
+        <li><strong>Use the marks as a guide.</strong> A 4-mark question needs about four steps.</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> Haitham Math IGCSE · Made for IGCSE Mathematics students</p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
