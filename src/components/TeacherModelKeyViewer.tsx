@@ -20,9 +20,13 @@ export const TeacherModelKeyViewer: React.FC = () => {
 
   useEffect(() => {
     fetch('/api/model-key/active')
-      .then((res) => res.json())
+      .then((res) => {
+        const ct = res.headers.get('content-type') || '';
+        if (res.ok && ct.includes('application/json')) return res.json();
+        return null;
+      })
       .then((data) => {
-        if (data.success && data.modelKey) {
+        if (data && data.success && data.modelKey) {
           setActiveKey(data.modelKey);
         }
       })
@@ -32,12 +36,15 @@ export const TeacherModelKeyViewer: React.FC = () => {
   const handleResetToDefault = async () => {
     try {
       const res = await fetch('/api/model-key/reset', { method: 'POST' });
-      const data = await res.json();
-      if (data.success && data.modelKey) {
-        setActiveKey(data.modelKey);
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.success && data.modelKey) {
+          setActiveKey(data.modelKey);
+        }
       }
     } catch (e) {
-      console.error(e);
+      console.warn('Reset model key local fallback', e);
     }
   };
 

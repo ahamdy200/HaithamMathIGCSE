@@ -174,9 +174,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const fetchRepos = async () => {
     try {
       const res = await fetch('/api/repos');
-      const data = await res.json();
-      if (data && data.repositories && data.repositories.length > 0) {
-        setReposList(data.repositories);
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.repositories && data.repositories.length > 0) {
+          setReposList(data.repositories);
+        }
       }
     } catch {
       // Keep initial repos
@@ -186,9 +189,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const fetchGitStatus = async () => {
     try {
       const res = await fetch('/api/github/status');
-      const data = await res.json();
-      if (data && data.remoteUrl) {
-        setGitStatus(data);
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.remoteUrl) {
+          setGitStatus(data);
+        }
       }
     } catch {
       // Keep default status if offline
