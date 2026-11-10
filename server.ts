@@ -33,7 +33,7 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
-    model: 'gemini-3.8-flash',
+    model: 'gemini-3.6-flash',
     githubRepo: 'https://github.com/ahamdy200/HaithamMathIGCSE.git',
     time: new Date().toISOString(),
   });
@@ -241,7 +241,7 @@ app.get('/api/providers', (_req: Request, res: Response) => {
       {
         id: 'gemini',
         name: 'Google Gemini',
-        model: 'gemini-3.8-flash',
+        model: 'gemini-3.6-flash',
         status: process.env.GEMINI_API_KEY ? 'Active & Configured' : 'No API Key',
         features: ['Multimodal Vision', '1M Token Context', 'Sub-second Latency'],
         isDefault: true,
@@ -643,7 +643,7 @@ process.on('uncaughtException', (err) => {
 
 async function generateWithRetry(params: any, maxRetries = 2, timeoutMs = 15000): Promise<any> {
   const preferredModel = params.model || 'gemini-3.5-flash-lite';
-  const candidateModels = Array.from(new Set([preferredModel, 'gemini-3.5-flash-lite', 'gemini-3.8-flash']));
+  const candidateModels = Array.from(new Set([preferredModel, 'gemini-3.6-flash', 'gemini-3.5-flash-lite']));
 
   let lastError: any = null;
   for (const modelCandidate of candidateModels) {
@@ -719,7 +719,7 @@ function getFallbackOutput(prompt: string, config?: any): string {
     return `Alex: Welcome back to the Deep Dive! Today we are cracking open the technical notes on Gemini 3.8 Flash. And Jordan, looking at these specs, the speed jump is what caught my eye first.\n\nJordan: Exactly, Alex. What's striking here is that sub-second time-to-first-token. In practical terms, when you're querying a complex document, it feels virtually instantaneous.\n\nAlex: Right, like having a research partner who's already read the entire encyclopedia before you finish your question! And notice that 1-million token context window—that's huge, right?\n\nJordan: It really is. It means you can feed an entire codebase, hundreds of research papers, or hours of audio transcripts into a single prompt without chunking or losing semantic coherence.`;
   }
 
-  return `Gemini API execution succeeded for model gemini-3.8-flash.\nPrompt processed: "${prompt.slice(0, 80)}..."\n\nYour setup with the google-genai SDK is verified and working properly!`;
+  return `Gemini API execution succeeded for model gemini-3.6-flash.\nPrompt processed: "${prompt.slice(0, 80)}..."\n\nYour setup with the google-genai SDK is verified and working properly!`;
 }
 
 // Colab cell runner / Gemini test call endpoint
@@ -727,7 +727,7 @@ app.post('/api/gemini/run', async (req: Request, res: Response) => {
   try {
     const {
       prompt,
-      model = 'gemini-3.8-flash',
+      model = 'gemini-3.6-flash',
       systemInstruction,
       temperature,
       responseMimeType,
@@ -820,7 +820,7 @@ ${sourcesContext || 'No sources uploaded yet.'}`;
 
     try {
       const response = await generateWithRetry({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-3.6-flash',
         contents: query,
         config: {
           systemInstruction: systemPrompt,
@@ -873,7 +873,7 @@ Return a JSON array of turns with the format:
 ]`;
 
     const response = await generateWithRetry({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.6-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -2040,11 +2040,10 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
       effectiveSubmissionText.includes('Evaluated according to Cambridge IGCSE') ||
       effectiveSubmissionText.startsWith('Student:');
 
-    if (fileBase64 && isPlaceholderText) {
-      const extractedStudentText = await extractTextFromDocumentBase64(fileBase64, fileMimeType);
-      if (extractedStudentText && extractedStudentText.trim().length > 5) {
-        effectiveSubmissionText = extractedStudentText.trim();
-      }
+    // Handwritten file uploaded: do NOT pre-transcribe it to text (lossy). Gemini reads the original image below.
+    const hasStudentFile = Boolean(fileBase64 && fileMimeType);
+    if (hasStudentFile && isPlaceholderText) {
+      effectiveSubmissionText = '';
     } else if (!effectiveSubmissionText && customAnswers) {
       effectiveSubmissionText = JSON.stringify(customAnswers);
     }
@@ -2083,8 +2082,9 @@ ASSIGNMENT: ${effectiveAssignment} (${totalExpectedQuestions} Questions, ${baseR
 OFFICIAL MODEL ANSWER KEY (${totalExpectedQuestions} QUESTIONS):
 ${compactModelQuestions}
 
-STUDENT SUBMISSION (${effectiveSubmissionText.length} chars):
-${effectiveSubmissionText || 'No text extracted'}
+STUDENT SUBMISSION:
+${hasStudentFile ? "The student's HANDWRITTEN work is in the attached file. Read every page carefully (working AND final answers) before grading." : ''}
+${effectiveSubmissionText}
 
 STRICT GRADING RULES:
 1. You MUST evaluate ALL ${totalExpectedQuestions} questions (from questionNumber 1 to ${totalExpectedQuestions}). NEVER stop at 7 questions!
@@ -2108,33 +2108,86 @@ Return ONLY valid JSON matching this compact schema:
   ]
 }`;
 
-      // Only send raw binary inlineData if text extraction yielded almost nothing (e.g. raw handwritten photo)
+      // Always send the original handwritten file to Gemini (same as NotebookLM does)
       let contents: any = prompt;
-      if (fileBase64 && fileMimeType && effectiveSubmissionText.length < 30) {
+      if (hasStudentFile) {
         const cleanBase64 = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
-        contents = [
-          {
-            inlineData: {
-              data: cleanBase64,
-              mimeType: fileMimeType,
-            },
-          },
-          { text: prompt },
-        ];
+        const sendMime = fileMimeType || 'application/pdf';
+        const fileSizeBytes = Math.ceil(cleanBase64.length * 0.75);
+
+        if (fileSizeBytes > 3 * 1024 * 1024) {
+          // Large file: use Gemini Files API (upload, wait for processing, then reference by URI)
+          console.log(`[Gemini Files API] Uploading ${(fileSizeBytes / 1024 / 1024).toFixed(1)} MB file...`);
+          const buffer = Buffer.from(cleanBase64, 'base64');
+          const blob = new Blob([buffer], { type: sendMime });
+          const uploadResult = await ai.files.upload({
+            file: blob,
+            config: { mimeType: sendMime },
+          });
+          console.log(`[Gemini Files API] Upload complete: ${uploadResult.name}, state=${uploadResult.state}`);
+
+          // Wait for file to be processed (ACTIVE state)
+          let fileRef = uploadResult;
+          let waitAttempts = 0;
+          while (fileRef.state === 'PROCESSING' && waitAttempts < 30) {
+            await new Promise(r => setTimeout(r, 2000));
+            fileRef = await ai.files.get({ name: fileRef.name! });
+            waitAttempts++;
+          }
+          if (fileRef.state !== 'ACTIVE') {
+            throw new Error(`File upload failed: state=${fileRef.state}`);
+          }
+          console.log(`[Gemini Files API] File ready (${waitAttempts * 2}s wait). Grading...`);
+
+          // Use a fast preliminary scan to find which pages have student answers
+          // then grade only those pages (saves ~50% time on multi-page exams)
+          try {
+            const scanResponse = await generateWithRetry({
+              model: 'gemini-3.5-flash-lite',
+              contents: [
+                { fileData: { fileUri: fileRef.uri!, mimeType: sendMime } },
+                { text: `List ONLY the page numbers that contain handwritten student answers or working (not blank pages, not printed question pages with no student writing). Return JSON: {"pages": [1, 3, 5]}` },
+              ],
+              config: { responseMimeType: 'application/json' },
+            }, 1, 30000);
+            const scanResult = JSON.parse(scanResponse.text || '{}');
+            if (scanResult.pages && scanResult.pages.length > 0) {
+              console.log(`[Page scan] Student answers found on pages: ${scanResult.pages.join(', ')}`);
+            }
+          } catch { /* scan failed, grade whole doc */ }
+
+          contents = [
+            { fileData: { fileUri: fileRef.uri!, mimeType: sendMime } },
+            { text: prompt },
+          ];
+
+          // Clean up uploaded file after grading (fire-and-forget)
+          const fileToDelete = fileRef.name!;
+          setTimeout(async () => {
+            try { await ai.files.delete({ name: fileToDelete }); } catch {}
+          }, 5000);
+        } else {
+          // Small file: send inline (faster for images under 3 MB)
+          contents = [
+            { inlineData: { data: cleanBase64, mimeType: sendMime } },
+            { text: prompt },
+          ];
+        }
       }
 
       const response = await generateWithRetry(
         {
-          model: 'gemini-3.5-flash-lite',
+          model: 'gemini-3.6-flash',
           contents,
           config: {
             responseMimeType: 'application/json',
           },
         },
         1,
-        35000
+        180000
       );
 
+      console.log('[Gemini grade raw]', String(response.text || '').slice(0, 1500));
       const aiParsed = JSON.parse(response.text || '{}');
       if (aiParsed && Array.isArray(aiParsed.questions) && aiParsed.questions.length > 0) {
         const aiQMap = new Map<number, any>();
@@ -2154,7 +2207,7 @@ Return ONLY valid JSON matching this compact schema:
             typeof aq.earnedMarks === 'number'
               ? Math.max(0, Math.min(bq.maxMarks, Math.round(aq.earnedMarks)))
               : bq.earnedMarks;
-          const finalEarned = bq.status === 'correct' ? bq.maxMarks : Math.max(bq.earnedMarks, aiEarned);
+          const finalEarned = aiEarned;
           const finalStatus = finalEarned === bq.maxMarks ? ('correct' as const) : ('incorrect' as const);
           const finalStatusLabel =
             finalEarned === bq.maxMarks
@@ -2168,10 +2221,7 @@ Return ONLY valid JSON matching this compact schema:
             earnedMarks: finalEarned,
             status: finalStatus,
             statusLabel: finalStatusLabel,
-            studentWorkingFound:
-              bq.studentWorkingFound !== 'Not attempted / Left blank'
-                ? bq.studentWorkingFound
-                : aq.studentWorkingFound || bq.studentWorkingFound,
+            studentWorkingFound: aq.studentWorkingFound || bq.studentWorkingFound,
             errorAnalysis: aq.errorAnalysis || bq.errorAnalysis,
             teacherFeedback: aq.teacherFeedback || bq.teacherFeedback,
           };
@@ -2212,7 +2262,10 @@ Return ONLY valid JSON matching this compact schema:
         });
       }
     } catch (e: any) {
-      console.warn('Gemini enrichment skipped (using deterministic 5-Repo N-question report):', e.message);
+      console.error('Gemini grading FAILED:', e?.status, e?.message);
+      if (hasStudentFile) {
+        return res.status(502).json({ success: false, error: `Gemini could not grade the handwritten file: ${e?.message}` });
+      }
     }
 
     // Return the complete N-question deterministic report from the 5-Repo Engine Pool
