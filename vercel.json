@@ -1,0 +1,69 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "vite",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "ai-math-grader-openai",
+          "format": "url",
+          "env": "AI_MATH_GRADER_OPENAI_URL"
+        },
+        {
+          "type": "service",
+          "service": "automark",
+          "format": "url",
+          "env": "AUTOMARK_URL"
+        },
+        {
+          "type": "service",
+          "service": "hand-written-equation-solver",
+          "format": "url",
+          "env": "HAND_WRITTEN_EQUATION_SOLVER_URL"
+        },
+        {
+          "type": "service",
+          "service": "pix2text",
+          "format": "url",
+          "env": "PIX2TEXT_URL"
+        }
+      ]
+    },
+    "ai-math-grader-openai": {
+      "root": "repos/AI-Math-Grader-OpenAI/ai-math-grader-openai",
+      "framework": "nextjs"
+    },
+    "automark": {
+      "root": "repos/AutoMark",
+      "framework": "django"
+    },
+    "hand-written-equation-solver": {
+      "root": "repos/Hand-Written-Equation-Solver",
+      "runtime": "python"
+    },
+    "pix2text": {
+      "root": "repos/Pix2Text",
+      "runtime": "python"
+    },
+    "docs": {
+      "root": "repos/Pix2Text/docs",
+      "runtime": "python"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/docs/(.*)",
+      "destination": {
+        "service": "docs"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "app"
+      }
+    }
+  ]
+}

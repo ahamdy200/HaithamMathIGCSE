@@ -315,9 +315,28 @@ app.get('/api/unified-pool/status', (_req: Request, res: Response) => {
 });
 
 // Pix2Text Mathematical Formula Detection & LaTeX Recognition Endpoint
-app.post('/api/pix2text/ocr', (req: Request, res: Response) => {
+app.post('/api/pix2text/ocr', async (req: Request, res: Response) => {
   try {
     const { imageBase64 = null, text = '' } = req.body || {};
+
+    // Call bound Pix2Text internal service if available via Vercel Services binding
+    if (process.env.PIX2TEXT_URL) {
+      try {
+        const p2tUrl = new URL('pix2text', process.env.PIX2TEXT_URL);
+        const upstream = await fetch(p2tUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, image: imageBase64 }),
+        });
+        if (upstream.ok) {
+          const upData = await upstream.json();
+          return res.json({ success: true, ...upData, source: 'Pix2Text Internal Service (breezedeus/Pix2Text)' });
+        }
+      } catch (e) {
+        console.warn('Pix2Text internal service call failed, using built-in engine:', e);
+      }
+    }
+
     const inputContent = String(text || '').trim() || '8 + 12 ÷ 4 = 11';
     const latex = inputContent
       .replace(/÷/g, '\\div ')
@@ -387,11 +406,29 @@ app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
 
     // Stage 1: AutoMark (adamzev/AutoMark)
     const stage1Start = Date.now();
+    let stage1LiveResult: any = null;
+    if (process.env.AUTOMARK_URL) {
+      try {
+        const automarkUrl = new URL('api/scan', process.env.AUTOMARK_URL);
+        const automarkRes = await fetch(automarkUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64, formCode }),
+        });
+        if (automarkRes.ok) {
+          stage1LiveResult = await automarkRes.json();
+        }
+      } catch (err) {
+        console.warn('AutoMark internal service call fallback:', err);
+      }
+    }
+
     const stage1 = {
       stage: 1,
       engine: 'AutoMark',
       repo: 'adamzev/AutoMark',
       status: 'COMPLETED',
+      serviceStatus: process.env.AUTOMARK_URL ? 'Connected (AUTOMARK_URL)' : 'Embedded Engine',
       formCodeMatched: formCode,
       formTitle: activeTitle,
       totalQuestions: totalQCount,
@@ -399,11 +436,29 @@ app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
       documentCropped: true,
       detectedGridCells: totalQCount,
       attemptedCells,
+      liveResult: stage1LiveResult,
       durationMs: Date.now() - stage1Start + 35,
     };
 
     // Stage 2: Hand-Written-Equation-Solver (Sgvkamalakar/Hand-Written-Equation-Solver)
     const stage2Start = Date.now();
+    let stage2LiveResult: any = null;
+    if (process.env.HAND_WRITTEN_EQUATION_SOLVER_URL) {
+      try {
+        const solverUrl = new URL('predict', process.env.HAND_WRITTEN_EQUATION_SOLVER_URL);
+        const solverRes = await fetch(solverUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: effectiveStudentText, fileBase64 }),
+        });
+        if (solverRes.ok) {
+          stage2LiveResult = await solverRes.json();
+        }
+      } catch (err) {
+        console.warn('Handwritten equation solver internal service call fallback:', err);
+      }
+    }
+
     const expressionsFound: Array<{ line: string; symbols: string[]; evaluated?: number | null }> = [];
     const lines = String(effectiveStudentText || '').split(/\r?\n/).filter(Boolean);
     for (const rawLine of lines.slice(0, 60)) {
@@ -417,14 +472,33 @@ app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
       engine: 'Hand-Written-Equation-Solver',
       repo: 'Sgvkamalakar/Hand-Written-Equation-Solver',
       status: 'COMPLETED',
+      serviceStatus: process.env.HAND_WRITTEN_EQUATION_SOLVER_URL ? 'Connected (HAND_WRITTEN_EQUATION_SOLVER_URL)' : 'Embedded Engine',
       contourModel: '3-Layer CNN Symbol Classifier (97.57% accuracy)',
       roisExtracted: Math.max(expressionsFound.length, totalQCount),
       segmentedExpressions: expressionsFound.slice(0, 30),
+      liveResult: stage2LiveResult,
       durationMs: Date.now() - stage2Start + 58,
     };
 
     // Stage 3: Pix2Text (breezedeus/Pix2Text)
     const stage3Start = Date.now();
+    let stage3LiveResult: any = null;
+    if (process.env.PIX2TEXT_URL) {
+      try {
+        const p2tUrl = new URL('pix2text', process.env.PIX2TEXT_URL);
+        const p2tRes = await fetch(p2tUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: effectiveStudentText, fileBase64 }),
+        });
+        if (p2tRes.ok) {
+          stage3LiveResult = await p2tRes.json();
+        }
+      } catch (err) {
+        console.warn('Pix2Text internal service call fallback:', err);
+      }
+    }
+
     const latexExpressions: Array<{ raw: string; latex: string; hasDivision: boolean; hasExponent: boolean }> = [];
     for (const mq of parsedModelQuestions) {
       const sAns = studentMap[mq.questionNumber] || mq.finalAnswer;
@@ -446,27 +520,53 @@ app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
       engine: 'Pix2Text',
       repo: 'breezedeus/Pix2Text',
       status: 'COMPLETED',
+      serviceStatus: process.env.PIX2TEXT_URL ? 'Connected (PIX2TEXT_URL)' : 'Embedded Engine',
       mfdModel: 'MFD-1.5 (YOLO Mathematical Formula Detector)',
       mfrModel: 'MFR-1.5 (LaTeX Mathematical Formula Recognizer)',
       layoutEngine: 'DocLayout-YOLO',
       formulasDetected: Math.max(latexExpressions.length, totalQCount),
       extractedLatex: latexExpressions,
+      liveResult: stage3LiveResult,
       durationMs: Date.now() - stage3Start + 45,
     };
 
     // Stage 4: AI-Math-Grader-OpenAI (bluehawana/AI-Math-Grader-OpenAI)
     const stage4Start = Date.now();
+    let stage4LiveResult: any = null;
+    if (process.env.AI_MATH_GRADER_OPENAI_URL) {
+      try {
+        const graderUrl = new URL('api/grade', process.env.AI_MATH_GRADER_OPENAI_URL);
+        const graderRes = await fetch(graderUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentName,
+            submissionText: effectiveStudentText,
+            modelAnswerKey: activeKey,
+            provider,
+          }),
+        });
+        if (graderRes.ok) {
+          stage4LiveResult = await graderRes.json();
+        }
+      } catch (err) {
+        console.warn('AI Math Grader internal service call fallback:', err);
+      }
+    }
+
     const stage4 = {
       stage: 4,
       engine: 'AI-Math-Grader-OpenAI',
       repo: 'bluehawana/AI-Math-Grader-OpenAI',
       status: 'COMPLETED',
+      serviceStatus: process.env.AI_MATH_GRADER_OPENAI_URL ? 'Connected (AI_MATH_GRADER_OPENAI_URL)' : 'Embedded Engine',
       activeProvider: provider,
       model: provider === 'openai' ? 'gpt-4o' : provider === 'anthropic' ? 'claude-3-5-sonnet' : 'gemini-3.5-flash-lite',
       multiPageContext: true,
       questionsAnalyzed: totalQCount,
       inkEfficientBwReport: true,
       reasoningDepth: 'Pedagogical step-by-step',
+      liveResult: stage4LiveResult,
       durationMs: Date.now() - stage4Start + 92,
     };
 
@@ -514,12 +614,30 @@ app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
 });
 
 // Equation & Expression Solver Endpoint powered by Handwritten Equation Solver logic & BIDMAS
-app.post('/api/solver/evaluate', (req: Request, res: Response) => {
+app.post('/api/solver/evaluate', async (req: Request, res: Response) => {
   try {
     const { expression = '' } = req.body || {};
     const expr = String(expression).trim();
     if (!expr) {
       return res.status(400).json({ success: false, error: 'Expression is required' });
+    }
+
+    // Call bound Handwritten Equation Solver service if available via Vercel Services binding
+    if (process.env.HAND_WRITTEN_EQUATION_SOLVER_URL) {
+      try {
+        const solverUrl = new URL('predict', process.env.HAND_WRITTEN_EQUATION_SOLVER_URL);
+        const solverUpstream = await fetch(solverUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expression: expr }),
+        });
+        if (solverUpstream.ok) {
+          const sData = await solverUpstream.json();
+          return res.json({ success: true, ...sData, sourceRepo: 'Hand-Written-Equation-Solver (Live Service)' });
+        }
+      } catch (err) {
+        console.warn('Equation solver service call fallback:', err);
+      }
     }
 
     // Mathematical evaluation supporting ^, *, /, +, -, (, ), sqrt
@@ -2331,7 +2449,13 @@ async function startServer() {
   listenWithFallback(PORT);
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+// Export app instance for Vercel Serverless Functions and programmatic testing
+export { app };
+export default app;
+
+if (!process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
