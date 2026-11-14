@@ -10,8 +10,8 @@ import { PEARSON_EDEXCEL_EXAM_1_KEY, DEFAULT_CAMBRIDGE_BIDMAS_KEY } from './src/
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname =
+  import.meta?.url ? path.dirname(fileURLToPath(import.meta.url)) : process.cwd();
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -319,7 +319,7 @@ app.post('/api/pix2text/ocr', async (req: Request, res: Response) => {
   try {
     const { imageBase64 = null, text = '' } = req.body || {};
 
-    // Call bound Pix2Text internal service if available via Vercel Services binding
+    // Call optional external Pix2Text microservice if PIX2TEXT_URL is configured
     if (process.env.PIX2TEXT_URL) {
       try {
         const p2tUrl = new URL('pix2text', process.env.PIX2TEXT_URL);
@@ -622,7 +622,7 @@ app.post('/api/solver/evaluate', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Expression is required' });
     }
 
-    // Call bound Handwritten Equation Solver service if available via Vercel Services binding
+    // Call optional external Handwritten Equation Solver microservice if configured
     if (process.env.HAND_WRITTEN_EQUATION_SOLVER_URL) {
       try {
         const solverUrl = new URL('predict', process.env.HAND_WRITTEN_EQUATION_SOLVER_URL);
@@ -2404,7 +2404,8 @@ Return ONLY valid JSON matching this compact schema:
 // Serve frontend in dev or prod
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
+    const vitePkg = 'vite';
+    const { createServer: createViteServer } = await import(/* @vite-ignore */ vitePkg);
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -2449,11 +2450,11 @@ async function startServer() {
   listenWithFallback(PORT);
 }
 
-// Export app instance for Vercel Serverless Functions and programmatic testing
+// Export app instance for Netlify Functions and programmatic testing
 export { app };
 export default app;
 
-if (!process.env.VERCEL) {
+if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.NETLIFY_LOCAL) {
   startServer().catch((err) => {
     console.error('Failed to start server:', err);
     process.exit(1);
