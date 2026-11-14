@@ -21,18 +21,24 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.4.21",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "pdf-parse": "^2.4.5",
     "prismjs": "^1.30.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "react-router-dom": "^7.18.5",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10"
+  }
 }
