@@ -18,6 +18,9 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '50mb' }));
 
+// Homework grading always uses Gemini Flash (override with GEMINI_GRADING_MODEL if needed)
+const GRADING_MODEL = process.env.GEMINI_GRADING_MODEL || 'gemini-3.6-flash';
+
 // Initialize GoogleGenAI SDK server-side
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -33,7 +36,7 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
-    model: 'gemini-3.6-flash',
+    model: GRADING_MODEL,
     githubRepo: 'https://github.com/ahamdy200/HaithamMathIGCSE.git',
     time: new Date().toISOString(),
   });
@@ -759,9 +762,14 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception observed (process kept alive):', err);
 });
 
-async function generateWithRetry(params: any, maxRetries = 2, timeoutMs = 15000): Promise<any> {
+async function generateWithRetry(
+  params: any,
+  maxRetries = 2,
+  timeoutMs = 15000,
+  fallbackModels: string[] = ['gemini-3.6-flash', 'gemini-3.5-flash-lite']
+): Promise<any> {
   const preferredModel = params.model || 'gemini-3.5-flash-lite';
-  const candidateModels = Array.from(new Set([preferredModel, 'gemini-3.6-flash', 'gemini-3.5-flash-lite']));
+  const candidateModels = Array.from(new Set([preferredModel, ...fallbackModels]));
 
   let lastError: any = null;
   for (const modelCandidate of candidateModels) {
@@ -2257,23 +2265,6 @@ Return ONLY valid JSON matching this compact schema:
           }
           console.log(`[Gemini Files API] File ready (${waitAttempts * 2}s wait). Grading...`);
 
-          // Use a fast preliminary scan to find which pages have student answers
-          // then grade only those pages (saves ~50% time on multi-page exams)
-          try {
-            const scanResponse = await generateWithRetry({
-              model: 'gemini-3.5-flash-lite',
-              contents: [
-                { fileData: { fileUri: fileRef.uri!, mimeType: sendMime } },
-                { text: `List ONLY the page numbers that contain handwritten student answers or working (not blank pages, not printed question pages with no student writing). Return JSON: {"pages": [1, 3, 5]}` },
-              ],
-              config: { responseMimeType: 'application/json' },
-            }, 1, 30000);
-            const scanResult = JSON.parse(scanResponse.text || '{}');
-            if (scanResult.pages && scanResult.pages.length > 0) {
-              console.log(`[Page scan] Student answers found on pages: ${scanResult.pages.join(', ')}`);
-            }
-          } catch { /* scan failed, grade whole doc */ }
-
           contents = [
             { fileData: { fileUri: fileRef.uri!, mimeType: sendMime } },
             { text: prompt },
@@ -2293,16 +2284,22 @@ Return ONLY valid JSON matching this compact schema:
         }
       }
 
+      // Grade with Gemini Flash only (no flash-lite fallback, no regex engine marks).
+      // Netlify kills functions after 60s, so keep one attempt under that budget there.
+      const onServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+      const elapsedMs = Date.now() - startTime;
+      const gradeTimeoutMs = onServerless ? Math.max(15000, 55000 - elapsedMs) : 180000;
       const response = await generateWithRetry(
         {
-          model: 'gemini-3.6-flash',
+          model: GRADING_MODEL,
           contents,
           config: {
             responseMimeType: 'application/json',
           },
         },
-        1,
-        180000
+        onServerless ? 0 : 1,
+        gradeTimeoutMs,
+        []
       );
 
       console.log('[Gemini grade raw]', String(response.text || '').slice(0, 1500));
@@ -2381,20 +2378,17 @@ Return ONLY valid JSON matching this compact schema:
       }
     } catch (e: any) {
       console.error('Gemini grading FAILED:', e?.status, e?.message);
-      if (hasStudentFile) {
-        return res.status(502).json({ success: false, error: `Gemini could not grade the handwritten file: ${e?.message}` });
-      }
+      const noKey = !process.env.GEMINI_API_KEY;
+      return res.status(502).json({
+        success: false,
+        error: noKey
+          ? 'GEMINI_API_KEY is not set on the server, so Gemini Flash cannot grade.'
+          : `Gemini Flash could not grade this submission: ${e?.message}`,
+      });
     }
 
-    // Return the complete N-question deterministic report from the 5-Repo Engine Pool
-    return res.json({
-      success: true,
-      report: {
-        ...baseReport,
-        executionTimeMs: Date.now() - startTime,
-      },
-      executionTimeMs: Date.now() - startTime,
-    });
+    // Gemini returned no per-question marks: do not show regex engine marks as if they were real
+    return res.status(502).json({ success: false, error: 'Gemini Flash returned no question marks. Please try again.' });
   } catch (error: any) {
     console.error('Error grading homework:', error);
     return res.status(500).json({ error: error.message || 'Failed to grade homework' });

@@ -30,7 +30,6 @@ import {
 } from 'lucide-react';
 import { HomeworkGradingReport } from '../types';
 import { HandwrittenEquationCanvas } from './HandwrittenEquationCanvas';
-import { gradeWithFiveRepoEnginePoolClient } from '../utils/clientGradingEngine';
 import {
   PEARSON_EDEXCEL_EXAM_1_KEY,
   DEFAULT_CAMBRIDGE_BIDMAS_KEY,
@@ -249,56 +248,49 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
       const scenario = overrideScenario || 'custom';
 
-      let serverSuccess = false;
-      try {
-        const res = await fetch('/api/homework/grade', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentName: targetStudentName,
-            assignment: activeModelKey.title,
-            submissionText,
-            modelAnswerKey: activeModelKey.text,
-            modelAnswerTitle: activeModelKey.title,
-            modelKeyFileBase64: modelKeyFileBase64 || null,
-            useSampleSubmission: false,
-            scenario,
-            fileName: targetFileName,
-            fileBase64: fileBase64 || null,
-            fileMimeType: fileMimeType || null,
-          }),
-        });
-
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data.report && !data.error) {
-            setReport(data.report);
-            if (data.report.pdfUrl) {
-              setPdfModalUrl(data.report.pdfUrl);
-              setPdfModalType('model');
-            }
-            serverSuccess = true;
-          }
-        }
-      } catch (networkErr) {
-        console.warn('Backend server unreachable, engaging client-side 5-repo grading engine:', networkErr);
-      }
-
-      // If backend was not reached or returned non-JSON (e.g. static Netlify), run in-browser 5-repo evaluation
-      if (!serverSuccess) {
-        const clientReport = gradeWithFiveRepoEnginePoolClient(
-          targetStudentName,
-          activeModelKey.title,
-          activeModelKey.text,
+      // Grading is done by Gemini Flash on the server. Never fall back to the
+      // in-browser regex "5-repo" engine: it cannot read handwriting and shows fake marks.
+      const res = await fetch('/api/homework/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: targetStudentName,
+          assignment: activeModelKey.title,
           submissionText,
-          targetFileName
-        );
-        setReport(clientReport);
-        setRefreshNotice(`Assessment completed successfully (${clientReport.questions.length} questions evaluated)`);
+          modelAnswerKey: activeModelKey.text,
+          modelAnswerTitle: activeModelKey.title,
+          // The key PDF was already extracted into activeModelKey.text on upload; only resend it if that failed.
+          modelKeyFileBase64: activeModelKey.text?.trim() ? null : modelKeyFileBase64 || null,
+          useSampleSubmission: false,
+          scenario,
+          fileName: targetFileName,
+          fileBase64: fileBase64 || null,
+          fileMimeType: fileMimeType || null,
+        }),
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await res.json() : null;
+      if (!res.ok || !data || data.error || !data.report) {
+        setReport(null);
+        let reason = data?.error || `server returned ${res.status}`;
+        if (res.status === 413) reason = 'the uploaded file is too large (max ~4 MB). Please upload a smaller photo or PDF.';
+        if (res.status === 502 || res.status === 504) reason = data?.error || 'Gemini took too long to respond. Please try again.';
+        setRefreshNotice(`❌ Grading failed: ${reason}`);
+        return false;
       }
-    } catch (e) {
+
+      setReport(data.report);
+      if (data.report.pdfUrl) {
+        setPdfModalUrl(data.report.pdfUrl);
+        setPdfModalType('model');
+      }
+      return true;
+    } catch (e: any) {
       console.error('Grading execution error:', e);
+      setReport(null);
+      setRefreshNotice(`❌ Grading failed: could not reach the grading server (${e?.message || e}).`);
+      return false;
     } finally {
       setIsGrading(false);
     }
@@ -349,8 +341,10 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
         console.warn('Unified pool endpoint unreachable, continuing to grading evaluation:', poolErr);
       }
 
-      await handleCheckHomeworkForStudent(targetStudentName, targetFileName, 'custom', submissionText);
-      setRefreshNotice(`Unified Pool Success! All 5 engines processed and graded assessment questions.`);
+      const graded = await handleCheckHomeworkForStudent(targetStudentName, targetFileName, 'custom', submissionText);
+      if (graded) {
+        setRefreshNotice(`Graded by Gemini Flash.`);
+      }
     } catch (err: any) {
       console.error(err);
       await handleCheckHomework();
@@ -442,6 +436,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           const data = await res.json();
           if (data.success && data.modelKey) {
             setActiveModelKey(data.modelKey);
+            setModelKeyFileBase64(null); // extracted text is now the key; don't resend the PDF on every grade
             setEditingKeyTitle(data.modelKey.title);
             setEditingKeyText(data.modelKey.text);
             setAssignment(data.modelKey.title);
