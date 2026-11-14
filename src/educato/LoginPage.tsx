@@ -27,11 +27,11 @@ export function LoginPage() {
       <div className="relative w-full max-w-md mx-4">
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-4 shadow-lg">
-              <span className="text-3xl">🎓</span>
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#800020] to-[#590e1f] rounded-2xl mb-4 shadow-lg text-white font-serif text-3xl font-black">
+              H
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Educato</h1>
-            <p className="text-gray-500 mt-1 text-sm">IGCSE Learning Platform</p>
+            <h1 className="text-2xl font-bold text-gray-900">Mr. Haitham Math Studio</h1>
+            <p className="text-gray-500 mt-1 text-sm">Educato Portal &amp; IGCSE AI Homework Checker</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">

@@ -68,7 +68,12 @@ export function ProgressPage() {
           return (
             <div key={course.id} className="bg-white rounded-xl border border-gray-100 p-5">
               <div className="flex items-center gap-3 mb-4">
-                <span className="text-xl">{course.icon}</span>
+                <span
+                  className="w-9 h-9 rounded-lg flex items-center justify-center text-base font-serif font-extrabold shrink-0"
+                  style={{ backgroundColor: `${course.color}18`, color: course.color }}
+                >
+                  {course.icon}
+                </span>
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900 text-sm">{course.name}</h3>
                   <p className="text-xs text-gray-400">{course.code} &middot; {course.teacher}</p>

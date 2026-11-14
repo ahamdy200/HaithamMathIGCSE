@@ -69,11 +69,19 @@ function compressImage(file: File, maxWidth: number, quality: number): Promise<s
 interface StudentHomeworkPortalProps {
   onSwitchToNotebook?: () => void;
   onSwitchToModelKey?: () => void;
+  onSwitchToNotebookLM?: () => void;
+  courseTitle?: string;
+  courseCode?: string;
+  defaultStudentName?: string;
 }
 
 export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   onSwitchToNotebook,
   onSwitchToModelKey,
+  onSwitchToNotebookLM,
+  courseTitle,
+  courseCode,
+  defaultStudentName,
 }) => {
   // Model Answer Key Management State (allows adding ANY model answer, PDF or text)
   const [activeModelKey, setActiveModelKey] = useState<ModelAnswerKeyData>(PEARSON_EDEXCEL_EXAM_1_KEY);
@@ -86,9 +94,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [modelKeyFileBase64, setModelKeyFileBase64] = useState<string | null>(null);
 
   // Portal starts clean for uploading student homework (all test materials wiped)
-  const [studentName, setStudentName] = useState('');
+  const [studentName, setStudentName] = useState(defaultStudentName || '');
   const [studentId, setStudentId] = useState(`IGCSE-2026-${Math.floor(100 + Math.random() * 900)}`);
-  const [assignment, setAssignment] = useState(DEFAULT_CAMBRIDGE_BIDMAS_KEY.title);
+  const [assignment, setAssignment] = useState(courseTitle ? `${courseTitle} — Homework` : DEFAULT_CAMBRIDGE_BIDMAS_KEY.title);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [fileMimeType, setFileMimeType] = useState<string | null>(null);
@@ -143,7 +151,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     setFileBase64(null);
     setFileMimeType(null);
     setCustomTextWorking('');
-    setStudentName('');
+    setStudentName(defaultStudentName || '');
     setStudentId(`IGCSE-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
     setStudentQuery('');
     setTutorReply(null);
@@ -512,7 +520,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-rose-100 font-semibold uppercase tracking-wider border border-white/20">
-                  Cambridge IGCSE (0580 / 0980)
+                  {courseTitle ? `${courseTitle}${courseCode ? ` (${courseCode})` : ''}` : 'Cambridge IGCSE (0580 / 0980)'}
                 </span>
                 <span className="text-xs text-amber-200 font-medium flex items-center gap-1">
                   • Instructor: Mr. Haitham Hussien
@@ -525,7 +533,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1 math-serif tracking-tight">
-                Cambridge IGCSE Mathematics — Homework &amp; Diagnostic Studio
+                {courseTitle ? `${courseTitle} — AI Homework Checker & Diagnostic Studio` : 'Cambridge IGCSE Mathematics — Homework & Diagnostic Studio'}
               </h1>
               <p className="text-xs text-rose-100 mt-1 max-w-2xl leading-relaxed italic teacher-handwriting text-base text-amber-200">
                 &ldquo;Mathematics is not about memorizing numbers, equations, or algorithms: it is about understanding patterns and learning from every step.&rdquo; — Mr. Haitham Hussien
@@ -565,6 +573,17 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               >
                 <BookOpen className="w-3.5 h-3.5 text-amber-300" />
                 <span>Rubric Viewer</span>
+              </button>
+            )}
+
+            {onSwitchToNotebookLM && (
+              <button
+                onClick={onSwitchToNotebookLM}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
+                title="Open NotebookLM Studio"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>NotebookLM Studio</span>
               </button>
             )}
           </div>
