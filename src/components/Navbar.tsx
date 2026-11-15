@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../utils/apiBase';
 import {
   Sparkles,
   Download,
@@ -173,7 +174,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const fetchRepos = async () => {
     try {
-      const res = await fetch('/api/repos');
+      const res = await fetch(apiUrl('/api/repos'));
       const ct = res.headers.get('content-type') || '';
       if (res.ok && ct.includes('application/json')) {
         const data = await res.json();
@@ -188,7 +189,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const fetchGitStatus = async () => {
     try {
-      const res = await fetch('/api/github/status');
+      const res = await fetch(apiUrl('/api/github/status'));
       const ct = res.headers.get('content-type') || '';
       if (res.ok && ct.includes('application/json')) {
         const data = await res.json();
@@ -210,7 +211,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     setIsSyncingGit(true);
     setSyncMessage(null);
     try {
-      const res = await fetch('/api/github/sync', {
+      const res = await fetch(apiUrl('/api/github/sync'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -334,7 +335,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Download Code (ZIP) in Burgundy */}
             <a
-              href="/api/download/project-zip"
+              href={apiUrl('/api/download/project-zip')}
               download="HaithamMathIGCSE-source-code.zip"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#800020] hover:bg-[#66001a] text-white text-xs font-semibold shadow transition"
               title="Download full project codebase as a .zip file"
@@ -750,7 +751,7 @@ git push -u origin main`}
             {/* Bottom Actions */}
             <div className="flex items-center justify-end gap-2.5 pt-2 flex-wrap border-t border-[#262c3b]">
               <a
-                href="/api/download/project-zip"
+                href={apiUrl('/api/download/project-zip')}
                 download="HaithamMathIGCSE-source-code.zip"
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow"
               >

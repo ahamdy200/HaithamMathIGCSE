@@ -7,6 +7,7 @@ import { INITIAL_CELLS } from '../data/defaultNotebook';
 import { HANDWRITTEN_EQUATION_SOLVER_CELLS } from '../data/handwrittenSolverNotebook';
 import { NotebookCell } from '../types';
 import { downloadIpynb } from '../utils/colabExport';
+import { apiUrl } from '../utils/apiBase';
 import { Code2, Download, Play, RotateCcw, Key, Layers } from 'lucide-react';
 
 type StudioSubTab = 'notebook' | 'integration' | 'guide';
@@ -132,7 +133,7 @@ export function ColabStudioPage() {
         responseMimeType = 'application/json';
       }
 
-      const res = await fetch('/api/gemini/run', {
+      const res = await fetch(apiUrl('/api/gemini/run'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

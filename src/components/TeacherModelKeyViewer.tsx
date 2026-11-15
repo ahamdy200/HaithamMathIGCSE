@@ -13,13 +13,14 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { ModelAnswerKeyData } from '../data/modelAnswerKey';
+import { apiUrl } from '../utils/apiBase';
 
 export const TeacherModelKeyViewer: React.FC = () => {
   const [copiedKey, setCopiedKey] = useState(false);
   const [activeKey, setActiveKey] = useState<ModelAnswerKeyData | null>(null);
 
   useEffect(() => {
-    fetch('/api/model-key/active')
+    fetch(apiUrl('/api/model-key/active'))
       .then((res) => {
         const ct = res.headers.get('content-type') || '';
         if (res.ok && ct.includes('application/json')) return res.json();
@@ -35,7 +36,7 @@ export const TeacherModelKeyViewer: React.FC = () => {
 
   const handleResetToDefault = async () => {
     try {
-      const res = await fetch('/api/model-key/reset', { method: 'POST' });
+      const res = await fetch(apiUrl('/api/model-key/reset'), { method: 'POST' });
       const ct = res.headers.get('content-type') || '';
       if (res.ok && ct.includes('application/json')) {
         const data = await res.json();

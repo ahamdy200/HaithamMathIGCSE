@@ -13,6 +13,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { SourceDocument, AudioOverviewData, DialogueTurn } from '../types';
+import { apiUrl } from '../utils/apiBase';
 
 interface AudioOverviewViewProps {
   sources: SourceDocument[];
@@ -144,7 +145,7 @@ export const AudioOverviewView: React.FC<AudioOverviewViewProps> = ({ sources })
   const handleGenerateScript = async () => {
     setIsGenerating(true);
     try {
-      const res = await fetch('/api/gemini/audio-overview', {
+      const res = await fetch(apiUrl('/api/gemini/audio-overview'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

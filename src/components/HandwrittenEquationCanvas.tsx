@@ -7,6 +7,8 @@ import {
   PlusCircle,
 } from 'lucide-react';
 
+import { apiUrl } from '../utils/apiBase';
+
 interface HandwrittenEquationCanvasProps {
   onInsertAnswer?: (text: string) => void;
 }
@@ -141,7 +143,7 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
     setIsSolving(true);
     setSolveResult(null);
     try {
-      const res = await fetch('/api/solver/evaluate', {
+      const res = await fetch(apiUrl('/api/solver/evaluate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expression: recognizedEquation }),

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { HomeworkGradingReport } from '../types';
 import { HandwrittenEquationCanvas } from './HandwrittenEquationCanvas';
+import { apiUrl, getApiBaseUrl } from '../utils/apiBase';
 import {
   PEARSON_EDEXCEL_EXAM_1_KEY,
   DEFAULT_CAMBRIDGE_BIDMAS_KEY,
@@ -121,7 +122,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
   // Fetch active model key from server on initial mount
   useEffect(() => {
-    fetch('/api/model-key/active')
+    fetch(apiUrl('/api/model-key/active'))
       .then((res) => {
         const ct = res.headers.get('content-type') || '';
         if (res.ok && ct.includes('application/json')) return res.json();
@@ -250,7 +251,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
       // Grading is done by Gemini Flash on the server. Never fall back to the
       // in-browser regex "5-repo" engine: it cannot read handwriting and shows fake marks.
-      const res = await fetch('/api/homework/grade', {
+      const res = await fetch(apiUrl('/api/homework/grade'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -274,6 +275,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       if (!res.ok || !data || data.error || !data.report) {
         setReport(null);
         let reason = data?.error || `server returned ${res.status}`;
+        if ((res.status === 404 || res.status === 405) && !getApiBaseUrl()) {
+          reason = 'no grading backend URL is configured for this static site (set VITE_API_BASE_URL to your Railway/Render server).';
+        }
         if (res.status === 413) reason = 'the uploaded file is too large (max ~4 MB). Please upload a smaller photo or PDF.';
         if (res.status === 502 || res.status === 504) reason = data?.error || 'Gemini took too long to respond. Please try again.';
         setRefreshNotice(`❌ Grading failed: ${reason}`);
@@ -313,7 +317,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       const submissionText = customTextWorking || `Student: ${targetStudentName}\nUploaded Homework Worksheet: ${targetFileName}\nAssignment: ${activeModelKey.title}`;
 
       try {
-        const res = await fetch('/api/unified-pool/process', {
+        const res = await fetch(apiUrl('/api/unified-pool/process'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -357,7 +361,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const handleSaveModelKey = async (title: string, text: string) => {
     if (!text.trim()) return;
     try {
-      const res = await fetch('/api/model-key/active', {
+      const res = await fetch(apiUrl('/api/model-key/active'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, text }),
@@ -377,7 +381,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
   const handleResetModelKey = async () => {
     try {
-      const res = await fetch('/api/model-key/reset', { method: 'POST' });
+      const res = await fetch(apiUrl('/api/model-key/reset'), { method: 'POST' });
       const data = await res.json();
       if (data.success && data.modelKey) {
         setActiveModelKey(data.modelKey);
@@ -424,7 +428,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
         const base64 = event.target?.result as string;
         setModelKeyFileBase64(base64);
         try {
-          const res = await fetch('/api/model-key/upload-pdf', {
+          const res = await fetch(apiUrl('/api/model-key/upload-pdf'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -475,7 +479,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
     setIsAskingTutor(true);
     try {
-      const res = await fetch('/api/gemini/grounded-chat', {
+      const res = await fetch(apiUrl('/api/gemini/grounded-chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

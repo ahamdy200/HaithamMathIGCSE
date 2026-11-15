@@ -22,6 +22,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { SourceDocument, AudioOverviewData, DialogueTurn } from '../types';
+import { apiUrl } from '../utils/apiBase';
 
 interface NotebookLMViewProps {
   sources: SourceDocument[];
@@ -180,7 +181,7 @@ Try asking:
     setIsAsking(true);
 
     try {
-      const res = await fetch('/api/gemini/grounded-chat', {
+      const res = await fetch(apiUrl('/api/gemini/grounded-chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -225,7 +226,7 @@ Try asking:
   const handleGenerateAudioOverview = async () => {
     setIsGeneratingAudio(true);
     try {
-      const res = await fetch('/api/gemini/audio-overview', {
+      const res = await fetch(apiUrl('/api/gemini/audio-overview'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

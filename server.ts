@@ -18,6 +18,18 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '50mb' }));
 
+// Allow GitHub Pages / external frontends (e.g. ahamdy200.github.io) to call this API cleanly
+app.use((req: Request, res: Response, next) => {
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
+  res.header('Access-Control-Allow-Origin', allowedOrigin);
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 // Homework grading always uses Gemini Flash (override with GEMINI_GRADING_MODEL if needed)
 const GRADING_MODEL = process.env.GEMINI_GRADING_MODEL || 'gemini-3.6-flash';
 
@@ -2397,7 +2409,11 @@ Return ONLY valid JSON matching this compact schema:
 
 // Serve frontend in dev or prod
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+  const isProdRuntime =
+    process.env.NODE_ENV === 'production' ||
+    Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID || process.env.RENDER);
+
+  if (!isProdRuntime) {
     const vitePkg = 'vite';
     const { createServer: createViteServer } = await import(/* @vite-ignore */ vitePkg);
     const vite = await createViteServer({
@@ -2413,6 +2429,13 @@ async function startServer() {
   }
 
   async function listenWithFallback(portToTry: number, retriesLeft = 10) {
+    if (isProdRuntime || process.env.PORT) {
+      app.listen(portToTry, '0.0.0.0', () => {
+        console.log(`Server listening on 0.0.0.0:${portToTry}`);
+      });
+      return;
+    }
+
     const isAvailable = await new Promise<boolean>((resolve) => {
       const tester = net
         .createServer()
