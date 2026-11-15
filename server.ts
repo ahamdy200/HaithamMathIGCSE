@@ -5,7 +5,13 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
-import { GoogleGenAI } from '@google/genai';
+import {
+  GoogleGenAI,
+  createPartFromBase64,
+  createPartFromUri,
+  PartMediaResolutionLevel,
+  ThinkingLevel,
+} from '@google/genai';
 import { PEARSON_EDEXCEL_EXAM_1_KEY, DEFAULT_CAMBRIDGE_BIDMAS_KEY } from './src/data/modelAnswerKey';
 
 dotenv.config();
@@ -30,8 +36,9 @@ app.use((req: Request, res: Response, next) => {
   next();
 });
 
-// Homework grading always uses Gemini Flash (override with GEMINI_GRADING_MODEL if needed)
+// Homework grading always uses Gemini Flash by default (override with GEMINI_GRADING_MODEL if needed)
 const GRADING_MODEL = process.env.GEMINI_GRADING_MODEL || 'gemini-3.6-flash';
+const DEEP_REASONING_MODEL = process.env.GEMINI_DEEP_GRADING_MODEL || 'gemini-4-hydrogen';
 
 // Initialize GoogleGenAI SDK server-side
 const ai = new GoogleGenAI({
@@ -49,6 +56,10 @@ app.get('/api/health', (req: Request, res: Response) => {
     status: 'ok',
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
     model: GRADING_MODEL,
+    deepModel: DEEP_REASONING_MODEL,
+    visionPipeline: '2-pass-transcribe-then-grade',
+    mediaResolution: 'MEDIA_RESOLUTION_ULTRA_HIGH (page images) / MEDIA_RESOLUTION_HIGH (PDF)',
+    thinkingLevel: 'HIGH',
     githubRepo: 'https://github.com/ahamdy200/HaithamMathIGCSE.git',
     time: new Date().toISOString(),
   });
@@ -798,16 +809,28 @@ async function generateWithRetry(
       } catch (error: any) {
         lastError = error;
         attempt++;
+        const msg = String(error?.message || '').toLowerCase();
+        const causeMsg = String(error?.cause?.message || error?.cause?.code || '').toLowerCase();
         const isTransient =
           error?.status === 503 ||
           error?.status === 429 ||
-          error?.message?.includes('503') ||
-          error?.message?.includes('high demand') ||
-          error?.message?.includes('overloaded') ||
-          error?.message?.includes('timed out');
+          msg.includes('503') ||
+          msg.includes('high demand') ||
+          msg.includes('overloaded') ||
+          msg.includes('timed out') ||
+          msg.includes('fetch failed') ||
+          msg.includes('econnreset') ||
+          msg.includes('etimedout') ||
+          causeMsg.includes('econnreset') ||
+          causeMsg.includes('etimedout') ||
+          causeMsg.includes('und_err');
+
+        console.warn(
+          `[generateWithRetry] ${modelCandidate} attempt ${attempt}/${maxRetries + 1} error: ${error?.status || ''} ${error?.message} ${error?.cause?.code || ''}`
+        );
 
         if (isTransient && attempt <= maxRetries) {
-          const delay = 300 * Math.pow(2, attempt);
+          const delay = 500 * Math.pow(2, attempt);
           await new Promise((r) => setTimeout(r, delay));
           continue;
         }
@@ -1148,23 +1171,26 @@ async function extractTextFromDocumentBase64(fileBase64: string, fileMimeType?: 
 
   // Fallback for scanned image-only PDFs or handwritten image uploads (PNG/JPG)
   try {
+    const mime = fileMimeType || 'application/pdf';
+    const ocrResolution = mime.includes('pdf')
+      ? PartMediaResolutionLevel.MEDIA_RESOLUTION_HIGH
+      : PartMediaResolutionLevel.MEDIA_RESOLUTION_ULTRA_HIGH;
     const ocrResponse = await generateWithRetry(
       {
-        model: 'gemini-3.5-flash-lite',
+        model: GRADING_MODEL,
         contents: [
+          createPartFromBase64(cleanBase64, mime, ocrResolution),
           {
-            inlineData: {
-              data: cleanBase64,
-              mimeType: fileMimeType || 'application/pdf',
-            },
-          },
-          {
-            text: 'Transcribe all questions, numbers, mathematical working steps, and final answers from this document verbatim in sequential order (Question 1, Question 2, etc.). Output plain text only.',
+            text: 'Transcribe all questions, numbers, mark scheme rules ([M1]/[A1]), mathematical working steps, and final answers from this document verbatim in sequential order (Question 1, Question 2, etc.). Output plain text only.',
           },
         ],
+        config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+        },
       },
       1,
-      35000
+      45000,
+      []
     );
     if (ocrResponse?.text && ocrResponse.text.trim().length > 10) {
       return ocrResponse.text.trim();
@@ -2140,8 +2166,109 @@ app.post('/api/model-key/reset', (req: Request, res: Response) => {
   });
 });
 
+interface StudentPageImageInput {
+  pageNumber?: number;
+  dataUrl: string;
+  mimeType?: string;
+}
+
+/**
+ * Convert student uploads (pre-rendered high-DPI page images or raw PDF/image base64)
+ * into Gemini Part objects with explicit high/ultra-high media resolution.
+ */
+async function buildStudentMediaParts(params: {
+  pageImages?: StudentPageImageInput[] | null;
+  fileBase64?: string | null;
+  fileMimeType?: string | null;
+}): Promise<{
+  mediaParts: any[];
+  cleanupFileNames: string[];
+  resolutionLabel: string;
+  pageCount: number;
+}> {
+  const { pageImages, fileBase64, fileMimeType } = params;
+  const mediaParts: any[] = [];
+  const cleanupFileNames: string[] = [];
+
+  const validPages = Array.isArray(pageImages)
+    ? pageImages.filter((p) => p && typeof p.dataUrl === 'string' && p.dataUrl.trim().length > 20)
+    : [];
+
+  if (validPages.length > 0) {
+    // Gemini image parts support ULTRA_HIGH (2240 tokens/page) for dense handwriting
+    const useUltraHigh = validPages.length <= 6;
+    const partResolution = useUltraHigh
+      ? PartMediaResolutionLevel.MEDIA_RESOLUTION_ULTRA_HIGH
+      : PartMediaResolutionLevel.MEDIA_RESOLUTION_HIGH;
+
+    validPages.forEach((page, idx) => {
+      const pageNum = page.pageNumber || idx + 1;
+      const cleanData = page.dataUrl.includes(',') ? page.dataUrl.split(',')[1] : page.dataUrl;
+      const mime = page.mimeType || 'image/jpeg';
+      mediaParts.push({ text: `--- STUDENT HOMEWORK PAGE ${pageNum} ---` });
+      mediaParts.push(createPartFromBase64(cleanData, mime, partResolution));
+    });
+
+    return {
+      mediaParts,
+      cleanupFileNames,
+      resolutionLabel: useUltraHigh ? 'MEDIA_RESOLUTION_ULTRA_HIGH' : 'MEDIA_RESOLUTION_HIGH',
+      pageCount: validPages.length,
+    };
+  }
+
+  if (fileBase64 && fileMimeType) {
+    const cleanBase64 = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
+    const sendMime = fileMimeType || 'application/pdf';
+    const isPdf = sendMime.includes('pdf');
+    const partResolution = isPdf
+      ? PartMediaResolutionLevel.MEDIA_RESOLUTION_HIGH
+      : PartMediaResolutionLevel.MEDIA_RESOLUTION_ULTRA_HIGH;
+    const fileSizeBytes = Math.ceil(cleanBase64.length * 0.75);
+
+    if (fileSizeBytes > 3 * 1024 * 1024) {
+      console.log(`[Gemini Files API] Uploading ${(fileSizeBytes / 1024 / 1024).toFixed(1)} MB file...`);
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      const blob = new Blob([buffer], { type: sendMime });
+      const uploadResult = await ai.files.upload({
+        file: blob,
+        config: { mimeType: sendMime },
+      });
+      let fileRef = uploadResult;
+      let waitAttempts = 0;
+      while (fileRef.state === 'PROCESSING' && waitAttempts < 30) {
+        await new Promise((r) => setTimeout(r, 2000));
+        fileRef = await ai.files.get({ name: fileRef.name! });
+        waitAttempts++;
+      }
+      if (fileRef.state !== 'ACTIVE') {
+        throw new Error(`File upload failed: state=${fileRef.state}`);
+      }
+      mediaParts.push(createPartFromUri(fileRef.uri!, sendMime, partResolution));
+      cleanupFileNames.push(fileRef.name!);
+    } else {
+      mediaParts.push(createPartFromBase64(cleanBase64, sendMime, partResolution));
+    }
+
+    return {
+      mediaParts,
+      cleanupFileNames,
+      resolutionLabel: partResolution,
+      pageCount: 1,
+    };
+  }
+
+  return {
+    mediaParts: [],
+    cleanupFileNames: [],
+    resolutionLabel: 'TEXT_ONLY',
+    pageCount: 0,
+  };
+}
+
 // AI Notebook & 5-Repo Pool Homework Checking Endpoint (Always grades ALL N questions in the Model Answer Key)
 app.post('/api/homework/grade', async (req: Request, res: Response) => {
+  const cleanupFileNames: string[] = [];
   try {
     const {
       studentName = 'Student Submission',
@@ -2154,6 +2281,8 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
       fileName = null,
       fileBase64 = null,
       fileMimeType = null,
+      pageImages = null,
+      precisionMode = 'deep',
     } = req.body || {};
 
     const startTime = Date.now();
@@ -2178,16 +2307,15 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
       effectiveSubmissionText.includes('Evaluated according to Cambridge IGCSE') ||
       effectiveSubmissionText.startsWith('Student:');
 
-    // Handwritten file uploaded: do NOT pre-transcribe it to text (lossy). Gemini reads the original image below.
-    const hasStudentFile = Boolean(fileBase64 && fileMimeType);
+    const hasPageImages = Array.isArray(pageImages) && pageImages.length > 0;
+    const hasStudentFile = hasPageImages || Boolean(fileBase64 && fileMimeType);
     if (hasStudentFile && isPlaceholderText) {
       effectiveSubmissionText = '';
     } else if (!effectiveSubmissionText && customAnswers) {
       effectiveSubmissionText = JSON.stringify(customAnswers);
     }
 
-    // 3. Run the 5-Repo Deterministic Multi-Question Grading Engine FIRST
-    // This guarantees all N questions (e.g. all 20 questions or all 26 questions) are parsed and graded accurately in <50ms!
+    // 3. Run the 5-Repo Deterministic Multi-Question Structure Parser FIRST
     const baseReport = gradeWithFiveRepoEnginePool(
       safeStudentName,
       effectiveAssignment,
@@ -2198,138 +2326,176 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
     );
 
     const totalExpectedQuestions = baseReport.questions.length;
+    const activeGradingModel = precisionMode === 'max' ? DEEP_REASONING_MODEL : GRADING_MODEL;
+    // Never fall back to flash-lite; if Gemini 4 is chosen ('max') and hits transient quota/load, fall back to Flash
+    const siblingFallbackModels = precisionMode === 'max' ? [GRADING_MODEL] : [];
+
     console.log(
-      `[Homework Grader] Grading "${safeStudentName}" against "${effectiveAssignment}" (${totalExpectedQuestions} questions in Model Key, student text: ${effectiveSubmissionText.length} chars)`
+      `[Homework Grader] Grading "${safeStudentName}" (${totalExpectedQuestions} Qs, model=${activeGradingModel}, pageImages=${hasPageImages ? pageImages.length : 0}, rawFile=${Boolean(fileBase64)})`
     );
 
-    // 4. Enhance with Gemini AI (using fast gemini-3.5-flash-lite on extracted text) while strictly locking all N questions
+    // 4. High-Resolution Vision + 2-Pass Transcribe-Then-Grade with Gemini Thinking
     try {
+      const mediaResult = await buildStudentMediaParts({ pageImages, fileBase64, fileMimeType });
+      cleanupFileNames.push(...mediaResult.cleanupFileNames);
+      const { mediaParts, resolutionLabel, pageCount } = mediaResult;
+      const hasVisualMedia = mediaParts.length > 0;
+
+      const onServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+      const getRemainingBudgetMs = () => {
+        const elapsed = Date.now() - startTime;
+        return onServerless ? Math.max(12000, 55000 - elapsed) : 180000;
+      };
+
+      // Pass 1 (Visual OCR & Diagram Transcription Only) when visual pages are present and time permits
+      let pass1TranscriptionSummary = '';
+      let twoPassOcrUsed = false;
+      const expectedRefs = baseReport.questions
+        .map((q) => `Q${q.questionNumber} (${q.displayLabel}): ${q.prompt.slice(0, 120)}`)
+        .join('\n');
+
+      if (hasVisualMedia && (!onServerless || getRemainingBudgetMs() > 32000)) {
+        try {
+          const ocrPrompt = `You are a specialist IGCSE Mathematics handwriting & diagram transcription reader.
+DO NOT grade or evaluate correctness yet. Your ONLY task is to inspect every attached student page/photo pixel-by-pixel and transcribe ALL visible handwritten work accurately.
+
+EXPECTED QUESTIONS INDEX (to help map handwritten labels like "1", "Q2(a)", etc., though the student may write out of order or leave questions blank):
+${expectedRefs}
+
+TRANSCRIPTION RULES:
+1. Scan EVERY attached page top-to-bottom. Watch carefully for small exponents (e.g. x^2 vs x*2), negative signs (- vs +), division/fraction bars, brackets, radicals, decimals vs commas, and crossed-out rough work (note crossed-out vs kept answer).
+2. Read geometric diagrams, number lines, tables, coordinate graphs, and circled multiple-choice answers if present.
+3. Transcribe the student's EXACT math line by line (even if their arithmetic is wrong — never "fix" their mistake!).
+
+Return ONLY valid JSON:
+{
+  "pageSummaries": [
+    { "pageNumber": 1, "orientationOk": true, "legibility": "clear", "questionsSpotted": ["Q1", "Q2"] }
+  ],
+  "transcriptions": [
+    {
+      "questionNumber": 1,
+      "questionRef": "Q1",
+      "pageNumber": 1,
+      "confidence": "high",
+      "visualNotes": "Any diagram, crossed-out work, or tiny symbol note",
+      "verbatimWorking": "Line-by-line transcription of exactly what the student wrote",
+      "finalAnswerWritten": "Exact final value/expression written"
+    }
+  ]
+}`;
+
+          const pass1TimeoutMs = onServerless ? Math.min(22000, Math.floor(getRemainingBudgetMs() * 0.45)) : 75000;
+          const ocrResponse = await generateWithRetry(
+            {
+              model: GRADING_MODEL,
+              contents: [...mediaParts, { text: ocrPrompt }],
+              config: {
+                responseMimeType: 'application/json',
+                thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+              },
+            },
+            onServerless ? 0 : 1,
+            pass1TimeoutMs,
+            []
+          );
+          const ocrText = String(ocrResponse?.text || '').trim();
+          if (ocrText.length > 20) {
+            pass1TranscriptionSummary = ocrText;
+            twoPassOcrUsed = true;
+            console.log(`[Pass 1 OCR complete] ${ocrText.length} chars across ${pageCount} visual page(s)`);
+          }
+        } catch (ocrPassErr: any) {
+          console.warn('[Pass 1 OCR skipped, continuing directly to Pass 2 Vision]:', ocrPassErr?.message);
+        }
+      }
+
+      // Pass 2: Mathematical Grading using BOTH the high-res visual pages + Pass-1 OCR + FULL Mark Scheme
       const compactModelQuestions = baseReport.questions
         .map(
           (q) =>
-            `Q${q.questionNumber} [${q.maxMarks} Marks]: ${q.prompt}\n  Official Final Answer: ${q.modelSolution}`
+            `Q${q.questionNumber} (${q.displayLabel}) [${q.maxMarks} Marks]: ${q.prompt}\n  Reference Solution: ${q.modelSolution}`
         )
         .join('\n');
 
-      const prompt = `You are Mr. Haitham Hussien's Cambridge & Pearson Edexcel IGCSE Mathematics grading engine.
+      const fullMarkSchemeExcerpt = effectiveModelKey.trim().slice(0, 18000);
+
+      const gradePrompt = `You are Mr. Haitham Hussien's Cambridge & Pearson Edexcel IGCSE Mathematics examiner.
 Grade the student's submission against ALL ${totalExpectedQuestions} questions in the Official Model Answer Key.
 
 STUDENT NAME: ${safeStudentName}
 ASSIGNMENT: ${effectiveAssignment} (${totalExpectedQuestions} Questions, ${baseReport.totalMarks} Total Marks)
 
-OFFICIAL MODEL ANSWER KEY (${totalExpectedQuestions} QUESTIONS):
+FULL OFFICIAL MODEL ANSWER KEY & MARK SCHEME RULES ([M1] method / [A1] accuracy):
+${fullMarkSchemeExcerpt}
+
+STRUCTURED QUESTION INDEX (${totalExpectedQuestions} QUESTIONS — you MUST return one entry per questionNumber 1..${totalExpectedQuestions}):
 ${compactModelQuestions}
 
-STUDENT SUBMISSION:
-${hasStudentFile ? "The student's HANDWRITTEN work is in the attached file. Read every page carefully (working AND final answers) before grading." : ''}
-${effectiveSubmissionText}
+${pass1TranscriptionSummary ? `PASS-1 VERBATIM HANDWRITING TRANSCRIPTION (cross-check directly against the attached images, especially any "medium" or "low" confidence items):\n${pass1TranscriptionSummary}\n` : ''}
+${effectiveSubmissionText ? `ADDITIONAL SUBMITTED TEXT:\n${effectiveSubmissionText}\n` : ''}
+${hasVisualMedia ? "INSTRUCTIONS FOR ATTACHED IMAGES/PAGES: Re-inspect the original attached student pages directly before assigning each mark. Never invent working you cannot actually see on a page." : ''}
 
-STRICT GRADING RULES:
-1. You MUST evaluate ALL ${totalExpectedQuestions} questions (from questionNumber 1 to ${totalExpectedQuestions}). NEVER stop at 7 questions!
-2. Award full marks if the student's final answer is mathematically equivalent to the Official Final Answer.
-3. Award partial method marks [M1] (from 1 to maxMarks-1) if intermediate steps are correct but the final answer has a minor slip.
-4. Award 0 marks if unattempted or completely wrong.
+STRICT EXAMINER RULES:
+1. Evaluate ALL ${totalExpectedQuestions} questions (questionNumber 1 to ${totalExpectedQuestions}). NEVER skip or stop early.
+2. For each question, FIRST locate the page and transcribe what the student wrote in "studentWorkingFound" BEFORE deciding "earnedMarks".
+3. Award full marks if mathematically equivalent (e.g. 0.5 == 1/2, unsimplified vs simplified unless the mark scheme requires simplest form, valid alternative algebraic methods).
+4. Award partial method marks [M1] (1 to maxMarks-1) when correct method/intermediate steps are visible even if the final answer has a slip or follow-through error.
+5. Award 0 marks and set studentWorkingFound to "Not attempted / Left blank" if no working or answer for that question appears on any page.
 
-Return ONLY valid JSON matching this compact schema:
+Return ONLY valid JSON matching this transcribe-first schema:
 {
   "generalFeedback": "2-sentence summary of student performance across all ${totalExpectedQuestions} questions",
-  "diagnosticReview": "Detailed paragraph analyzing strengths and specific misconceptions",
+  "diagnosticReview": "Detailed paragraph analyzing mathematical strengths, OCR-verified working, and specific misconceptions",
   "questions": [
     {
       "questionNumber": 1,
+      "displayLabel": "Q1",
+      "observedPage": 1,
+      "studentWorkingFound": "Exact step-by-step handwritten working and final answer read from the page",
       "earnedMarks": 2,
       "status": "correct",
-      "studentWorkingFound": "Exact working/answer student wrote",
-      "errorAnalysis": "Concise step verification or error diagnosis",
-      "teacherFeedback": "Constructive feedback for this question"
+      "errorAnalysis": "Step-by-step [M1]/[A1] verification or specific arithmetic/algebraic error found",
+      "teacherFeedback": "Constructive teacher feedback referencing the student's actual steps"
     }
   ]
 }`;
 
-      // Always send the original handwritten file to Gemini (same as NotebookLM does)
-      let contents: any = prompt;
-      if (hasStudentFile) {
-        const cleanBase64 = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
-        const sendMime = fileMimeType || 'application/pdf';
-        const fileSizeBytes = Math.ceil(cleanBase64.length * 0.75);
+      const contents: any = hasVisualMedia ? [...mediaParts, { text: gradePrompt }] : gradePrompt;
+      const gradeTimeoutMs = getRemainingBudgetMs();
 
-        if (fileSizeBytes > 3 * 1024 * 1024) {
-          // Large file: use Gemini Files API (upload, wait for processing, then reference by URI)
-          console.log(`[Gemini Files API] Uploading ${(fileSizeBytes / 1024 / 1024).toFixed(1)} MB file...`);
-          const buffer = Buffer.from(cleanBase64, 'base64');
-          const blob = new Blob([buffer], { type: sendMime });
-          const uploadResult = await ai.files.upload({
-            file: blob,
-            config: { mimeType: sendMime },
-          });
-          console.log(`[Gemini Files API] Upload complete: ${uploadResult.name}, state=${uploadResult.state}`);
-
-          // Wait for file to be processed (ACTIVE state)
-          let fileRef = uploadResult;
-          let waitAttempts = 0;
-          while (fileRef.state === 'PROCESSING' && waitAttempts < 30) {
-            await new Promise(r => setTimeout(r, 2000));
-            fileRef = await ai.files.get({ name: fileRef.name! });
-            waitAttempts++;
-          }
-          if (fileRef.state !== 'ACTIVE') {
-            throw new Error(`File upload failed: state=${fileRef.state}`);
-          }
-          console.log(`[Gemini Files API] File ready (${waitAttempts * 2}s wait). Grading...`);
-
-          contents = [
-            { fileData: { fileUri: fileRef.uri!, mimeType: sendMime } },
-            { text: prompt },
-          ];
-
-          // Clean up uploaded file after grading (fire-and-forget)
-          const fileToDelete = fileRef.name!;
-          setTimeout(async () => {
-            try { await ai.files.delete({ name: fileToDelete }); } catch {}
-          }, 5000);
-        } else {
-          // Small file: send inline (faster for images under 3 MB)
-          contents = [
-            { inlineData: { data: cleanBase64, mimeType: sendMime } },
-            { text: prompt },
-          ];
-        }
-      }
-
-      // Grade with Gemini Flash only (no flash-lite fallback, no regex engine marks).
-      // Netlify kills functions after 60s, so keep one attempt under that budget there.
-      const onServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
-      const elapsedMs = Date.now() - startTime;
-      const gradeTimeoutMs = onServerless ? Math.max(15000, 55000 - elapsedMs) : 180000;
       const response = await generateWithRetry(
         {
-          model: GRADING_MODEL,
+          model: activeGradingModel,
           contents,
           config: {
             responseMimeType: 'application/json',
+            thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
           },
         },
         onServerless ? 0 : 1,
         gradeTimeoutMs,
-        []
+        siblingFallbackModels
       );
 
       console.log('[Gemini grade raw]', String(response.text || '').slice(0, 1500));
       const aiParsed = JSON.parse(response.text || '{}');
       if (aiParsed && Array.isArray(aiParsed.questions) && aiParsed.questions.length > 0) {
-        const aiQMap = new Map<number, any>();
+        const aiByNum = new Map<number, any>();
+        const aiByLabel = new Map<string, any>();
         for (const aq of aiParsed.questions) {
           const qn = Number(aq.questionNumber);
-          if (!isNaN(qn)) aiQMap.set(qn, aq);
+          if (!isNaN(qn)) aiByNum.set(qn, aq);
+          const lbl = String(aq.displayLabel || aq.questionRef || '').trim().toLowerCase();
+          if (lbl) aiByLabel.set(lbl, aq);
         }
 
-        // Merge Gemini insights into our N-question baseReport without EVER dropping any question 1..N!
         const mergedQuestions = baseReport.questions.map((bq) => {
-          const aq = aiQMap.get(bq.questionNumber);
+          const aq =
+            aiByNum.get(bq.questionNumber) ||
+            aiByLabel.get(String(bq.displayLabel || '').trim().toLowerCase());
           if (!aq) return bq;
 
-          // If our deterministic symbolic engine already proved the math is 100% equivalent, keep full marks;
-          // otherwise allow Gemini to recognize valid alternative algebraic forms or partial method steps.
           const aiEarned =
             typeof aq.earnedMarks === 'number'
               ? Math.max(0, Math.min(bq.maxMarks, Math.round(aq.earnedMarks)))
@@ -2343,12 +2509,19 @@ Return ONLY valid JSON matching this compact schema:
               ? (`PARTIAL (${finalEarned}/${bq.maxMarks})` as any)
               : ('INCORRECT' as const);
 
+          const pageTag =
+            aq.observedPage && Number(aq.observedPage) > 0 && hasVisualMedia
+              ? `[Page ${aq.observedPage}] `
+              : '';
+
           return {
             ...bq,
             earnedMarks: finalEarned,
             status: finalStatus,
             statusLabel: finalStatusLabel,
-            studentWorkingFound: aq.studentWorkingFound || bq.studentWorkingFound,
+            studentWorkingFound: aq.studentWorkingFound
+              ? `${pageTag}${aq.studentWorkingFound}`
+              : bq.studentWorkingFound,
             errorAnalysis: aq.errorAnalysis || bq.errorAnalysis,
             teacherFeedback: aq.teacherFeedback || bq.teacherFeedback,
           };
@@ -2370,6 +2543,15 @@ Return ONLY valid JSON matching this compact schema:
             ? 'D (Needs Improvement)'
             : 'U (Ungraded - Requires Retest)';
 
+        const gradingMeta = {
+          model: response?.modelVersion || activeGradingModel,
+          precisionMode,
+          twoPassOcrUsed,
+          pageCount,
+          mediaResolution: resolutionLabel,
+          thinkingLevel: 'HIGH',
+        };
+
         const finalReport = {
           ...baseReport,
           totalMarks,
@@ -2379,12 +2561,14 @@ Return ONLY valid JSON matching this compact schema:
           generalFeedback: aiParsed.generalFeedback || baseReport.generalFeedback,
           diagnosticReview: aiParsed.diagnosticReview || baseReport.diagnosticReview,
           questions: mergedQuestions,
+          gradingMeta,
           executionTimeMs: Date.now() - startTime,
         };
 
         return res.json({
           success: true,
           report: finalReport,
+          gradingMeta,
           executionTimeMs: Date.now() - startTime,
         });
       }
@@ -2394,16 +2578,22 @@ Return ONLY valid JSON matching this compact schema:
       return res.status(502).json({
         success: false,
         error: noKey
-          ? 'GEMINI_API_KEY is not set on the server, so Gemini Flash cannot grade.'
-          : `Gemini Flash could not grade this submission: ${e?.message}`,
+          ? 'GEMINI_API_KEY is not set on the server, so Gemini cannot grade.'
+          : `Gemini could not grade this submission: ${e?.message}`,
       });
     }
 
     // Gemini returned no per-question marks: do not show regex engine marks as if they were real
-    return res.status(502).json({ success: false, error: 'Gemini Flash returned no question marks. Please try again.' });
+    return res.status(502).json({ success: false, error: 'Gemini returned no question marks. Please try again.' });
   } catch (error: any) {
     console.error('Error grading homework:', error);
     return res.status(500).json({ error: error.message || 'Failed to grade homework' });
+  } finally {
+    if (cleanupFileNames.length > 0) {
+      for (const name of cleanupFileNames) {
+        ai.files.delete({ name }).catch(() => {});
+      }
+    }
   }
 });
 

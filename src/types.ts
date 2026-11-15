@@ -78,5 +78,13 @@ export interface HomeworkGradingReport {
   strengths: string[];
   recommendedNextSteps: string[];
   executionTimeMs?: number;
+  gradingMeta?: {
+    model: string;
+    precisionMode?: string;
+    twoPassOcrUsed?: boolean;
+    pageCount?: number;
+    mediaResolution?: string;
+    thinkingLevel?: string;
+  };
 }
 

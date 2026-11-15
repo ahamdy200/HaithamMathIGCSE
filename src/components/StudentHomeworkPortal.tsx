@@ -15,6 +15,7 @@ import {
   GraduationCap,
   Eye,
   RotateCcw,
+  RotateCw,
   BookOpen,
   ArrowRight,
   Loader2,
@@ -32,39 +33,17 @@ import { HomeworkGradingReport } from '../types';
 import { HandwrittenEquationCanvas } from './HandwrittenEquationCanvas';
 import { apiUrl, getApiBaseUrl } from '../utils/apiBase';
 import {
+  renderPdfPagesToImages,
+  loadImageForGrading,
+  rotateImageDataUrl,
+  RenderedPageImage,
+} from '../utils/pdfPageRenderer';
+import {
   PEARSON_EDEXCEL_EXAM_1_KEY,
   DEFAULT_CAMBRIDGE_BIDMAS_KEY,
   MODEL_KEY_TEMPLATES,
   ModelAnswerKeyData,
 } from '../data/modelAnswerKey';
-
-/** Compress an image file to a target max width and JPEG quality, returning a data URL. */
-function compressImage(file: File, maxWidth: number, quality: number): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const scale = img.width > maxWidth ? maxWidth / img.width : 1;
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => {
-      // Fall back to original file if canvas fails
-      URL.revokeObjectURL(url);
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string);
-      reader.readAsDataURL(file);
-    };
-    img.src = url;
-  });
-}
 
 interface StudentHomeworkPortalProps {
   onSwitchToNotebook?: () => void;
@@ -100,6 +79,11 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [fileMimeType, setFileMimeType] = useState<string | null>(null);
+  const [pageImages, setPageImages] = useState<RenderedPageImage[]>([]);
+  const [isRenderingPages, setIsRenderingPages] = useState(false);
+  const [pdfPageInfo, setPdfPageInfo] = useState<{ totalPages: number; truncated: boolean } | null>(null);
+  const [contrastBoost, setContrastBoost] = useState(false);
+  const [precisionMode, setPrecisionMode] = useState<'deep' | 'max'>('deep');
   const [customTextWorking, setCustomTextWorking] = useState<string>('');
   const [inputMode, setInputMode] = useState<'upload' | 'type' | 'draw'>('upload');
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
@@ -150,6 +134,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     setSelectedFile(null);
     setFileBase64(null);
     setFileMimeType(null);
+    setPageImages([]);
+    setPdfPageInfo(null);
+    setContrastBoost(false);
     setCustomTextWorking('');
     setStudentName(defaultStudentName || '');
     setStudentId(`IGCSE-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
@@ -164,6 +151,87 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     }, 4500);
   };
 
+  // Render an uploaded PDF or photo into crisp high-DPI upright JPEG pages for Ultra-High Vision grading
+  const processStudentFile = async (file: File, enhanceContrast: boolean) => {
+    const cleanBaseName = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_-]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+
+    if (file.type.startsWith('text/') || file.name.endsWith('.txt')) {
+      setPageImages([]);
+      setPdfPageInfo(null);
+      setFileBase64(null);
+      setFileMimeType(null);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        setCustomTextWorking(text || '');
+      };
+      reader.readAsText(file);
+      return;
+    }
+
+    if (file.type.startsWith('image/')) {
+      setIsRenderingPages(true);
+      setPdfPageInfo(null);
+      try {
+        const rendered = await loadImageForGrading(file, {
+          maxDimension: 2200,
+          quality: 0.92,
+          contrastBoost: enhanceContrast,
+        });
+        setPageImages([rendered]);
+        setFileBase64(rendered.dataUrl);
+        setFileMimeType('image/jpeg');
+        setRefreshNotice(`Loaded HD image (${rendered.width}×${rendered.height}px) for ${cleanBaseName || 'Student'}.`);
+      } catch {
+        setRefreshNotice(`Loaded "${file.name}" for ${cleanBaseName || 'Student'}.`);
+      } finally {
+        setIsRenderingPages(false);
+        setTimeout(() => setRefreshNotice(null), 4000);
+      }
+      return;
+    }
+
+    // PDF upload: render every page at high resolution so Gemini sees 2,240 tokens/page (ULTRA_HIGH) instead of 560 tokens/page
+    setIsRenderingPages(true);
+    setPageImages([]);
+    setPdfPageInfo(null);
+    setRefreshNotice(`Rendering HD page images from "${file.name}" for Ultra-High handwriting vision...`);
+    try {
+      const rendered = await renderPdfPagesToImages(file, {
+        maxPages: 16,
+        quality: 0.91,
+        contrastBoost: enhanceContrast,
+      });
+      setPageImages(rendered.pageImages);
+      setPdfPageInfo({ totalPages: rendered.totalPages, truncated: rendered.truncated });
+      setFileBase64(null);
+      setFileMimeType('application/pdf');
+      setRefreshNotice(
+        `Rendered ${rendered.pageImages.length}${rendered.truncated ? ` of ${rendered.totalPages}` : ''} HD page(s) from "${file.name}" — ready for 2-Pass AI Vision.`
+      );
+      setTimeout(() => setRefreshNotice(null), 5000);
+    } catch (pdfErr) {
+      console.warn('Client PDF page rendering failed, falling back to raw PDF upload:', pdfErr);
+      setPageImages([]);
+      setPdfPageInfo(null);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setFileBase64(base64);
+        setFileMimeType(file.type || 'application/pdf');
+      };
+      reader.readAsDataURL(file);
+      setRefreshNotice(`Loaded "${file.name}" (PDF high-res fallback). Ready for AI checking.`);
+      setTimeout(() => setRefreshNotice(null), 4000);
+    } finally {
+      setIsRenderingPages(false);
+    }
+  };
+
   // Handle file selection from disk (e.g. adam bardana.pdf)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -172,7 +240,6 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     setSelectedFile(file);
     setReport(null); // Clear previous report so fresh check is ready
 
-    // Auto-derive clean student name from filename (e.g. "adam bardana.pdf" -> "Adam Bardana")
     const cleanBaseName = file.name
       .replace(/\.[^/.]+$/, '')
       .replace(/[_-]/g, ' ')
@@ -180,32 +247,56 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       .trim();
 
     setStudentName(cleanBaseName || 'Student Submission');
+    processStudentFile(file, contrastBoost);
+  };
 
-    if (file.type.startsWith('text/') || file.name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        setCustomTextWorking(text || '');
-      };
-      reader.readAsText(file);
-    } else if (file.type.startsWith('image/')) {
-      // Compress images to ~1500px wide JPEG before sending to Gemini
-      compressImage(file, 1500, 0.85).then((compressed) => {
-        setFileBase64(compressed);
-        setFileMimeType('image/jpeg');
-      });
-    } else {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setFileBase64(base64);
-        setFileMimeType(file.type || 'application/pdf');
-      };
-      reader.readAsDataURL(file);
+  // Rotate one rendered page (or all pages) 90 deg clockwise so sideways scans are upright before Gemini reads them
+  const handleRotatePage = async (pageIndex: number) => {
+    const target = pageImages[pageIndex];
+    if (!target) return;
+    try {
+      const rotated = await rotateImageDataUrl(target.dataUrl, 90, 0.92);
+      setPageImages((prev) =>
+        prev.map((p, idx) =>
+          idx === pageIndex
+            ? {
+                ...p,
+                dataUrl: rotated.dataUrl,
+                width: rotated.width,
+                height: rotated.height,
+                rotation: (p.rotation + 90) % 360,
+              }
+            : p
+        )
+      );
+    } catch (err) {
+      console.error('Rotate page failed:', err);
     }
+  };
 
-    setRefreshNotice(`Loaded "${file.name}" for ${cleanBaseName || 'Student'}. Ready for AI Notebook checking.`);
-    setTimeout(() => setRefreshNotice(null), 4000);
+  const handleRotateAllPages = async () => {
+    if (pageImages.length === 0) return;
+    const updated = await Promise.all(
+      pageImages.map(async (p) => {
+        const rotated = await rotateImageDataUrl(p.dataUrl, 90, 0.92);
+        return {
+          ...p,
+          dataUrl: rotated.dataUrl,
+          width: rotated.width,
+          height: rotated.height,
+          rotation: (p.rotation + 90) % 360,
+        };
+      })
+    );
+    setPageImages(updated);
+  };
+
+  const handleToggleContrastBoost = () => {
+    const next = !contrastBoost;
+    setContrastBoost(next);
+    if (selectedFile && (selectedFile.type.startsWith('image/') || selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf'))) {
+      processStudentFile(selectedFile, next);
+    }
   };
 
   // Remove uploaded file
@@ -213,6 +304,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     setSelectedFile(null);
     setFileBase64(null);
     setFileMimeType(null);
+    setPageImages([]);
+    setPdfPageInfo(null);
     setCustomTextWorking('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -265,8 +358,17 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           useSampleSubmission: false,
           scenario,
           fileName: targetFileName,
-          fileBase64: fileBase64 || null,
+          fileBase64: pageImages.length > 0 ? null : fileBase64 || null,
           fileMimeType: fileMimeType || null,
+          pageImages:
+            pageImages.length > 0
+              ? pageImages.map((p) => ({
+                  pageNumber: p.pageNumber,
+                  dataUrl: p.dataUrl,
+                  mimeType: p.mimeType,
+                }))
+              : null,
+          precisionMode,
         }),
       });
 
@@ -1016,15 +1118,88 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="flex items-center justify-between pt-1 text-[11px] border-t border-[#f8e1e5]">
-                      <span className="text-slate-500">Status: Attached &amp; Validated</span>
-                      <label
-                        htmlFor="homework-file-upload"
-                        className="text-[#800020] hover:text-[#5c0017] cursor-pointer font-bold"
-                      >
-                        Change File
-                      </label>
+                    <div className="flex items-center justify-between pt-1 text-[11px] border-t border-[#f8e1e5] gap-2 flex-wrap">
+                      <span className="text-slate-600 font-medium">
+                        {isRenderingPages ? (
+                          <span className="inline-flex items-center gap-1 text-[#800020] font-semibold">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Rendering HD pages...
+                          </span>
+                        ) : pageImages.length > 0 ? (
+                          `${pageImages.length}${pdfPageInfo?.truncated ? ` / ${pdfPageInfo.totalPages}` : ''} HD page(s) • Ultra-High Vision`
+                        ) : (
+                          'Status: Attached & Validated'
+                        )}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {pageImages.length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleToggleContrastBoost}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                                contrastBoost
+                                  ? 'bg-[#800020] text-white border-[#800020]'
+                                  : 'bg-white text-slate-600 border-[#fecdd3] hover:text-[#800020]'
+                              }`}
+                              title="Boost contrast for faint pencil scans"
+                            >
+                              {contrastBoost ? '✓ Contrast Boost' : 'Enhance Pencil'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleRotateAllPages}
+                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-white text-[#800020] border border-[#fecdd3] hover:bg-[#fff1f2] inline-flex items-center gap-1 transition"
+                              title="Rotate all pages 90 degrees clockwise"
+                            >
+                              <RotateCw className="w-2.5 h-2.5" />
+                              Rotate All
+                            </button>
+                          </>
+                        )}
+                        <label
+                          htmlFor="homework-file-upload"
+                          className="text-[#800020] hover:text-[#5c0017] cursor-pointer font-bold"
+                        >
+                          Change File
+                        </label>
+                      </div>
                     </div>
+
+                    {pageImages.length > 0 && (
+                      <div className="pt-2 border-t border-[#f8e1e5]">
+                        <p className="text-[10px] text-slate-500 mb-1.5">
+                          Preview &amp; orientation check (rotate sideways pages before grading):
+                        </p>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
+                          {pageImages.map((page, idx) => (
+                            <div
+                              key={`${page.pageNumber}-${idx}`}
+                              className="relative bg-white border border-[#fecdd3] rounded-lg p-1 shadow-2xs group"
+                            >
+                              <img
+                                src={page.dataUrl}
+                                alt={`Page ${page.pageNumber}`}
+                                className="w-full h-20 object-contain rounded bg-slate-50"
+                              />
+                              <div className="flex items-center justify-between mt-1 px-0.5">
+                                <span className="text-[9px] font-bold text-[#701a2d]">
+                                  Pg {page.pageNumber}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRotatePage(idx)}
+                                  className="p-0.5 rounded bg-[#fff1f2] hover:bg-[#800020] text-[#800020] hover:text-white transition"
+                                  title={`Rotate Page ${page.pageNumber} 90°`}
+                                >
+                                  <RotateCw className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1149,10 +1324,42 @@ Q3: 25 + 11 = 36`}
               </div>
             </div>
 
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                AI Vision &amp; Reasoning Precision
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPrecisionMode('deep')}
+                  className={`px-2.5 py-2 rounded-lg border text-left transition ${
+                    precisionMode === 'deep'
+                      ? 'bg-[#fff1f2] border-[#800020] text-[#701a2d] shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-[#fecdd3]'
+                  }`}
+                >
+                  <span className="text-[11px] font-bold block">2-Pass Deep Vision</span>
+                  <span className="text-[9px] text-slate-500 block">Ultra-High OCR + Thinking</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrecisionMode('max')}
+                  className={`px-2.5 py-2 rounded-lg border text-left transition ${
+                    precisionMode === 'max'
+                      ? 'bg-[#fff1f2] border-[#800020] text-[#701a2d] shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-[#fecdd3]'
+                  }`}
+                >
+                  <span className="text-[11px] font-bold block">Gemini 4 Max Reason</span>
+                  <span className="text-[9px] text-slate-500 block">Toughest Handwriting</span>
+                </button>
+              </div>
+            </div>
+
             {/* Run Button in Burgundy */}
             <button
               onClick={handleCheckHomework}
-              disabled={isGrading}
+              disabled={isGrading || isRenderingPages}
               className="w-full py-3.5 bg-gradient-to-r from-[#800020] via-[#9f1239] to-[#800020] hover:from-[#66001a] hover:to-[#800020] text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-rose-950/20 flex items-center justify-center gap-2 transition disabled:opacity-50"
             >
               {isGrading ? (
@@ -1256,6 +1463,11 @@ Q3: 25 + 11 = 36`}
                     </h2>
                     <p className="text-xs text-rose-200 mt-0.5">
                       Cambridge IGCSE Curriculum Evaluation • {report.submissionDate}
+                      {report.gradingMeta?.model ? (
+                        <span className="ml-2 inline-block px-2 py-0.5 rounded bg-white/15 text-[10px] font-mono text-amber-200 border border-white/20">
+                          {report.gradingMeta.model} • {report.gradingMeta.twoPassOcrUsed ? '2-Pass OCR' : 'Direct Vision'} • {report.gradingMeta.mediaResolution || 'HIGH'} • Thinking {report.gradingMeta.thinkingLevel || 'HIGH'}
+                        </span>
+                      ) : null}
                     </p>
                   </div>
 
@@ -1766,10 +1978,8 @@ Q3: 25 + 11 = 36`}
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-[#800020]" />
                 <span className="font-bold text-slate-900 text-sm font-serif">
-                  {pdfModalType === 'student' || pdfModalType === 'adam'
+                  {pdfModalType === 'student'
                     ? `${report?.studentName || 'Student'} — Homework Evaluation Report`
-                    : pdfModalType === 'joury'
-                    ? 'Joury — Official Evaluation Report'
                     : activeModelKey.title || 'Official Model Answer Key & Mark Scheme'}
                 </span>
               </div>
