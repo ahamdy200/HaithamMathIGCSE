@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'haitham_api_base_url';
+const DEFAULT_GITHUB_PAGES_API_BASE = 'https://haitham-math-api-production.up.railway.app';
 
 function normalizeBaseUrl(raw?: string | null): string {
   if (!raw) return '';
@@ -16,7 +17,19 @@ export function getApiBaseUrl(): string {
   }
 
   const envUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  return normalizeBaseUrl(envUrl);
+  if (envUrl && envUrl.trim()) {
+    return normalizeBaseUrl(envUrl);
+  }
+
+  try {
+    if (window.location.hostname.endsWith('github.io')) {
+      return DEFAULT_GITHUB_PAGES_API_BASE;
+    }
+  } catch {
+    // Ignore window access failures
+  }
+
+  return '';
 }
 
 export function setApiBaseUrl(url: string): void {
