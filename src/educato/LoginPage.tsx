@@ -23,20 +23,15 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-200 rounded-full opacity-20 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-200 rounded-full opacity-20 blur-3xl" />
-      </div>
-
+    <div className="min-h-screen flex items-center justify-center bg-[#f7f9fc] math-paper">
       <div className="relative w-full max-w-md mx-4">
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+        <div className="bg-white rounded-2xl shadow-xl border border-[#d3dfec] p-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#800020] to-[#590e1f] rounded-2xl mb-4 shadow-lg text-white font-serif text-3xl font-black">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-[#163252] rounded-2xl mb-4 shadow-lg text-white font-serif text-3xl font-black">
               H
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Mr. Haitham Math Studio</h1>
-            <p className="text-gray-500 mt-1 text-sm">Cambridge &amp; Edexcel IGCSE — Student, Parent &amp; Teacher Portal</p>
+            <h1 className="text-2xl font-bold text-[#163252] math-serif">Math made easy</h1>
+            <p className="text-[#5b7797] mt-1 text-sm">The Blue Notebook &bull; Cambridge &amp; Edexcel IGCSE Portal</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -121,7 +116,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-indigo-700 transition shadow-md hover:shadow-lg active:scale-[0.98] disabled:opacity-60"
+              className="w-full py-2.5 bg-[#163252] text-white font-semibold rounded-xl hover:bg-[#214266] transition shadow-md hover:shadow-lg active:scale-[0.98] disabled:opacity-60"
             >
               {isSubmitting ? 'Signing In...' : 'Sign In'}
             </button>
@@ -129,7 +124,7 @@ export function LoginPage() {
 
           <div className="mt-6 pt-6 border-t border-gray-100 space-y-1.5">
             <p className="text-xs text-center text-gray-500">
-              Student: <code className="bg-gray-100 px-1 rounded">student01</code> • Parent: <code className="bg-gray-100 px-1 rounded">parent01</code> • Educator: <code className="bg-gray-100 px-1 rounded">teacher</code>
+              Student: <code className="bg-gray-100 px-1 rounded">student01</code> • Parent: <code className="bg-gray-100 px-1 rounded">parent01</code> • Educator: <code className="bg-gray-100 px-1 rounded">teacher</code> • Assistant: <code className="bg-gray-100 px-1 rounded">assistant</code>
             </p>
             <p className="text-xs text-center text-gray-400">
               Contact Mr. Haitham if you forgot your credentials

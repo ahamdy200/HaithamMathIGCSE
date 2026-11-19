@@ -27,6 +27,7 @@ import {
   Eye,
   Edit3,
   Bell,
+  PenLine,
 } from 'lucide-react';
 import {
   HomeworkGradingReport,
@@ -154,9 +155,9 @@ function downloadReportCsv(report: HomeworkGradingReport) {
     'Earned Marks',
     'Max Marks',
     'Status',
-    'What Was Written (Phase 1)',
-    'Exact Mistake & Why Wrong (Phase 2)',
-    'Correct Working & Solution (Phase 3)',
+    "Student's Working",
+    "Mr. Haitham's Notes",
+    'Full Worked Solution',
   ];
 
   const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -295,7 +296,7 @@ function buildStandaloneParentReportHtml(
   }
   .report-shell { max-width: 780px; margin: 0 auto; }
   .letterhead {
-    background: #800020;
+    background: #163252;
     color: #ffffff;
     border-radius: 12px;
     padding: 20px 24px;
@@ -339,10 +340,10 @@ function buildStandaloneParentReportHtml(
     padding: 12px 16px;
     background: #ffffff;
   }
-  .kpi-card.mark { background: #fdf2f4; border-color: #fecdd3; }
+  .kpi-card.mark { background: #eef4fa; border-color: #c5d6e8; }
   .kpi-lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; color: #64748b; }
-  .kpi-card.mark .kpi-lbl { color: #9f1239; }
-  .kpi-big { font-size: 24px; font-weight: 800; color: #800020; margin-top: 3px; }
+  .kpi-card.mark .kpi-lbl { color: #2b517c; }
+  .kpi-big { font-size: 24px; font-weight: 800; color: #163252; margin-top: 3px; }
   .kpi-big span { font-size: 13px; font-weight: 600; color: #64748b; }
   .kpi-grade { font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 6px; }
   .kpi-breakdown { font-size: 11px; color: #334155; line-height: 1.55; margin-top: 4px; }
@@ -360,13 +361,13 @@ function buildStandaloneParentReportHtml(
     background: #fffdfa;
   }
   .sum-box.note { background: #fffbeb; border-color: #fde68a; color: #78350f; }
-  .sum-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: #800020; margin-bottom: 5px; }
+  .sum-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: #163252; margin-bottom: 5px; }
   .section-hdr {
     font-size: 12px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    color: #800020;
+    color: #163252;
     border-bottom: 1.5px solid #f1d4db;
     padding-bottom: 5px;
     margin: 0 0 12px;
@@ -392,16 +393,16 @@ function buildStandaloneParentReportHtml(
   .badge { font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
   .badge-ok { background: #dcfce7; color: #166534; }
   .badge-part { background: #fef3c7; color: #92400e; }
-  .badge-miss { background: #ffe4e6; color: #9f1239; }
+  .badge-miss { background: #ffe4e6; color: #2b517c; }
   .q-score { font-weight: 800; font-size: 12px; color: #0f172a; }
   .q-body { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
   .sec-label { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
   .lbl-written { color: #475569; }
-  .lbl-mistake { color: #9f1239; }
+  .lbl-mistake { color: #2b517c; }
   .lbl-sol { color: #065f46; }
   .sec-box { font-size: 11.5px; line-height: 1.5; border-radius: 7px; padding: 8px 10px; }
   .math-box { background: #f8fafc; border: 1px solid #e2e8f0; font-family: "JetBrains Mono", Consolas, monospace; color: #0f172a; }
-  .mistake-box { background: #fff1f2; border: 1px solid #fecdd3; color: #881337; }
+  .mistake-box { background: #dce6f0; border: 1px solid #c5d6e8; color: #881337; }
   .feedback-sub { margin-top: 4px; font-style: italic; color: #4c0519; }
   .sol-box { background: #ecfdf5; border: 1px solid #a7f3d0; font-family: "JetBrains Mono", Consolas, monospace; color: #064e3b; }
   .doc-foot {
@@ -548,6 +549,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [assignGradingSystem, setAssignGradingSystem] = useState<GradingSystem>('edexcel');
   const [assignNotifyEmails, setAssignNotifyEmails] = useState<string>('');
   const [assignSendNotifications, setAssignSendNotifications] = useState<boolean>(true);
+  const [assignModelKeyBase64, setAssignModelKeyBase64] = useState<string | null>(null);
+  const [assignModelKeyName, setAssignModelKeyName] = useState<string>('');
   const [isSavingAssignment, setIsSavingAssignment] = useState<boolean>(false);
   const [inboxCourseFilter, setInboxCourseFilter] = useState<string>('all');
   const [isModelKeyModalOpen, setIsModelKeyModalOpen] = useState(false);
@@ -748,6 +751,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           gradingSystem: assignGradingSystem,
           sendNotification: assignSendNotifications,
           notifyEmails: assignNotifyEmails.trim(),
+          modelKeyFileBase64: assignModelKeyBase64,
+          modelAnswerKeyTitle: assignModelKeyName || assignTitle.trim(),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -768,6 +773,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       setAssignDueDate('');
       setAssignInstructions('');
       setAssignNotifyEmails('');
+      setAssignModelKeyBase64(null);
+      setAssignModelKeyName('');
       await loadAssignments();
     } catch (err: any) {
       showToast('error', err?.message || 'Failed to save assignment.');
@@ -956,8 +963,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     try {
       if (isPdf) {
         const rendered = await renderPdfPagesToImages(file, {
-          maxPages: 12,
-          quality: 0.9,
+          maxPages: 25,
+          quality: 0.88,
           contrastBoost: enhanceContrast,
           a3SplitMode,
         });
@@ -967,6 +974,12 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           rendered: rendered.pageImages.length,
           a3Spreads: rendered.a3SpreadCount || 0,
         });
+        if (rendered.truncated) {
+          showToast(
+            'info',
+            `PDF has ${rendered.totalPages} pages — the first 25 pages were prepared (25-page maximum per homework).`
+          );
+        }
         setFileBase64(null);
       } else if (isImage) {
         const page = await loadImageForGrading(file, {
@@ -1389,21 +1402,21 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     });
 
     return (
-      <div className="bg-white border border-[#f0d0d6] rounded-2xl shadow-sm overflow-hidden space-y-5 pb-4">
+      <div className="bg-white border border-[#d3dfec] rounded-2xl shadow-sm overflow-hidden space-y-5 pb-4">
         {/* Report Header */}
-        <div className="bg-gradient-to-r from-[#6b1226] via-[#800020] to-[#590e1f] text-white p-5">
+        <div className="bg-gradient-to-r from-[#214266] via-[#163252] to-[#122943] text-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-white/15 border border-white/25 font-semibold">
                   Corrected by Mr. Haitham Hussien ✓
                 </span>
-                <span className="text-[11px] text-rose-100">{report.submissionDate}</span>
+                <span className="text-[11px] text-sky-100">{report.submissionDate}</span>
               </div>
               <h2 className="text-xl font-bold mt-2 font-serif">
                 {report.assignmentTitle || report.topic || 'Homework Evaluation Report'}
               </h2>
-              <p className="text-xs text-rose-100 mt-0.5">
+              <p className="text-xs text-sky-100 mt-0.5">
                 Student: <strong>{report.studentName}</strong> &middot; {courseTitle || report.subject || 'IGCSE Mathematics'}
               </p>
             </div>
@@ -1411,7 +1424,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             <div className="bg-white text-slate-900 rounded-xl px-4 py-2.5 shadow-md min-w-[200px] grid grid-cols-2 gap-3 divide-x divide-slate-200">
               <div className="text-center pr-2">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mark</div>
-                <div className="text-2xl font-black text-[#800020] leading-tight">
+                <div className="text-2xl font-black text-[#163252] leading-tight">
                   {report.earnedMarks}{' '}
                   <span className="text-xs font-semibold text-slate-400">/ {report.totalMarks}</span>
                 </div>
@@ -1432,7 +1445,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 type="button"
                 onClick={() => setViewStyle('cards')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
-                  viewStyle === 'cards' ? 'bg-white text-[#800020]' : 'bg-white/15 text-white hover:bg-white/25'
+                  viewStyle === 'cards' ? 'bg-white text-[#163252]' : 'bg-white/15 text-white hover:bg-white/25'
                 }`}
               >
                 <ListIcon className="w-3.5 h-3.5" /> Report Cards
@@ -1441,7 +1454,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 type="button"
                 onClick={() => setViewStyle('table')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
-                  viewStyle === 'table' ? 'bg-white text-[#800020]' : 'bg-white/15 text-white hover:bg-white/25'
+                  viewStyle === 'table' ? 'bg-white text-[#163252]' : 'bg-white/15 text-white hover:bg-white/25'
                 }`}
               >
                 <TableIcon className="w-3.5 h-3.5" /> Table
@@ -1479,7 +1492,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 type="button"
                 onClick={() => setQuestionFilter(f)}
                 className={`px-2.5 py-1 rounded-md font-semibold capitalize transition ${
-                  questionFilter === f ? 'bg-white text-[#800020] shadow-2xs' : 'text-slate-600'
+                  questionFilter === f ? 'bg-white text-[#163252] shadow-2xs' : 'text-slate-600'
                 }`}
               >
                 {f === 'all' ? 'All' : f === 'incorrect' ? 'Needs Review' : 'Full Marks'}
@@ -1503,24 +1516,24 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
         {/* Question Table / Cards (3-Phase Pipeline: Phase 1 Extracted, Phase 2 Error, Phase 3 Correct Solution) */}
         <div className="px-5">
           {viewStyle === 'table' ? (
-            <div className="overflow-x-auto border border-[#f5e1e5] rounded-xl">
+            <div className="overflow-x-auto border border-[#dce6f0] rounded-xl">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#fdf2f4] text-[#701a2d] uppercase text-[10px] font-bold">
+                <thead className="bg-[#eef4fa] text-[#163252] uppercase text-[10px] font-bold">
                   <tr>
                     <th className="p-3">Q</th>
-                    <th className="p-3">Phase 1 · What Was Written</th>
-                    <th className="p-3">Phase 2 · Error &amp; Feedback</th>
-                    <th className="p-3">Phase 3 · Correct Solution</th>
+                    <th className="p-3">Student&apos;s Working</th>
+                    <th className="p-3">Mr. Haitham&apos;s Notes</th>
+                    <th className="p-3">Full Worked Solution</th>
                     <th className="p-3 text-right">Marks</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#f5e1e5]">
+                <tbody className="divide-y divide-[#dce6f0]">
                   {filteredQuestions.map((q) => {
                     const p1 = q.phase1Extraction || q.studentWorkingFound || '—';
                     const p2 = q.phase2ErrorAnalysis || q.teacherFeedback || q.errorAnalysis || '—';
                     const p3 = q.phase3Solution || q.modelSolution || '—';
                     return (
-                      <tr key={q.questionNumber} className="hover:bg-[#fffafb] align-top">
+                      <tr key={q.questionNumber} className="hover:bg-[#FAF9F5] align-top">
                         <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
                           {q.displayLabel || `Q${q.questionNumber}`}
                         </td>
@@ -1540,9 +1553,10 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : q.earnedMarks > 0
                                 ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-rose-50 text-rose-700 border border-[#c5d6e8]'
                             }`}
                           >
+                            {q.earnedMarks > 0 && <span className="teacher-handwriting text-sm mr-0.5">✓</span>}
                             {q.earnedMarks}/{q.maxMarks}
                           </span>
                         </td>
@@ -1560,7 +1574,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 const p2 = q.phase2ErrorAnalysis || q.errorAnalysis || q.teacherFeedback || '—';
                 const p3 = q.phase3Solution || q.modelSolution || '—';
                 return (
-                  <div key={q.questionNumber} className="border border-[#f5e1e5] rounded-xl overflow-hidden shadow-2xs">
+                  <div key={q.questionNumber} className="border border-[#dce6f0] rounded-xl overflow-hidden shadow-2xs">
                     <button
                       type="button"
                       onClick={() =>
@@ -1569,7 +1583,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           [q.questionNumber]: !prev[q.questionNumber],
                         }))
                       }
-                      className="w-full flex items-center justify-between p-3.5 bg-[#fffcfd] hover:bg-[#fff5f7] text-left transition"
+                      className="w-full flex items-center justify-between p-3.5 bg-[#FAF9F5] hover:bg-[#f4f8fc] text-left transition"
                     >
                       <div className="flex items-center gap-2.5">
                         <span className="font-bold text-xs text-slate-900">
@@ -1581,25 +1595,26 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : q.earnedMarks > 0
                               ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-rose-50 text-rose-700 border border-[#c5d6e8]'
                           }`}
                         >
+                          {q.earnedMarks > 0 && <span className="teacher-handwriting text-sm mr-0.5">✓</span>}
                           {q.earnedMarks}/{q.maxMarks} marks &middot; {q.statusLabel || q.status.toUpperCase()}
                         </span>
                       </div>
                       {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                     </button>
                     {isOpen && (
-                      <div className="p-3.5 border-t border-[#f5e1e5] space-y-2.5 text-xs bg-white">
+                      <div className="p-3.5 border-t border-[#dce6f0] space-y-2.5 text-xs bg-white">
                         <div className="bg-slate-50 border border-slate-200/80 p-2.5 rounded-lg">
                           <span className="text-[10px] font-bold uppercase text-slate-600 block">
-                            1. What Was Written:
+                            1. Student&apos;s Working
                           </span>
                           <p className="font-mono text-slate-800 mt-1 whitespace-pre-wrap">{p1}</p>
                         </div>
-                        <div className="bg-[#fff1f2] border border-[#fecdd3] p-2.5 rounded-lg text-[#701a2d]">
+                        <div className="bg-[#EEF3F9] border border-[#c5d6e8] p-2.5 rounded-lg text-[#163252]">
                           <span className="text-[10px] font-bold uppercase block">
-                            2. Exact Mistake Identified &amp; Why It Is Wrong:
+                            2. Mr. Haitham&apos;s Notes
                           </span>
                           <p className="mt-1 whitespace-pre-wrap">{p2}</p>
                           {q.teacherFeedback && q.teacherFeedback !== p2 && (
@@ -1608,7 +1623,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                         </div>
                         <div className="bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-lg text-emerald-950">
                           <span className="text-[10px] font-bold uppercase text-emerald-800 block">
-                            3. Correct Working &amp; Solution:
+                            3. Full Worked Solution
                           </span>
                           <p className="font-mono mt-1 whitespace-pre-wrap">{p3}</p>
                         </div>
@@ -1623,24 +1638,27 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
         {/* Summary & Feedback */}
         <div className="px-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-[#fffcfd] border border-[#f5e1e5] rounded-xl p-4 space-y-1.5">
-            <h3 className="font-bold text-[#701a2d] text-xs uppercase tracking-wider">Overall Feedback</h3>
+          <div className="bg-[#FAF9F5] border border-[#dce6f0] rounded-xl p-4 space-y-1.5">
+            <h3 className="font-bold text-[#163252] text-xs uppercase tracking-wider">Overall Feedback</h3>
             <p className="text-xs text-slate-700 leading-relaxed">{report.generalFeedback}</p>
           </div>
-          <div className="bg-[#fffcfd] border border-[#f5e1e5] rounded-xl p-4 space-y-1.5">
-            <h3 className="font-bold text-[#701a2d] text-xs uppercase tracking-wider">Detailed Review</h3>
+          <div className="bg-[#FAF9F5] border border-[#dce6f0] rounded-xl p-4 space-y-1.5">
+            <h3 className="font-bold text-[#163252] text-xs uppercase tracking-wider">Comments from Mr. Haitham</h3>
             <p className="text-xs text-slate-700 leading-relaxed">{report.diagnosticReview}</p>
           </div>
         </div>
 
         {/* Mr. Haitham Personal Note */}
         <div className="px-5">
-          <div className="bg-gradient-to-br from-[#fffdfa] via-[#fffbf2] to-[#fffdfa] border border-[#eedac5] rounded-xl p-4 space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-bold text-[#701a2d]">
-              <span>✍️ Mr. Haitham&apos;s Note to {report.studentName}</span>
-              <span className="text-[10px] text-[#800020] font-normal">IGCSE Mathematics</span>
+          <div className="bg-gradient-to-br from-[#FAF8F2] via-[#FFFDF7] to-[#FAF8F2] border border-[#E5DEC9] rounded-xl p-4 space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-[#1B365D]">
+              <span className="inline-flex items-center gap-1.5">
+                <PenLine className="w-3.5 h-3.5 text-[#1B365D]" />
+                <span>Mr. Haitham&apos;s Note to {report.studentName}</span>
+              </span>
+              <span className="text-[10px] text-slate-500 font-normal">IGCSE Mathematics</span>
             </div>
-            <p className="text-sm text-[#701a2d] italic leading-relaxed">
+            <p className="teacher-handwriting text-lg text-[#13294B] leading-snug">
               &ldquo;
               {teacherNote?.trim()
                 ? teacherNote
@@ -1663,7 +1681,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6 text-slate-800">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-[#6b1226] via-[#800020] to-[#590e1f] text-white rounded-2xl p-6 shadow-xl relative overflow-hidden border border-[#9f1239]">
+      <div className="bg-gradient-to-r from-[#214266] via-[#163252] to-[#122943] text-white rounded-2xl p-6 shadow-xl relative overflow-hidden border border-[#2b517c]">
         <div className="absolute right-4 top-2 text-white/10 text-6xl md:text-8xl font-serif select-none pointer-events-none font-bold tracking-widest">
           ∑ ∫ π √x ±
         </div>
@@ -1675,7 +1693,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-rose-100 font-semibold uppercase tracking-wider border border-white/20">
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-sky-100 font-semibold uppercase tracking-wider border border-white/20">
                   {courseTitle ? `${courseTitle}${courseCode ? ` (${courseCode})` : ''}` : 'IGCSE Mathematics'}
                 </span>
                 <span className="text-xs text-amber-200 font-medium">
@@ -1687,7 +1705,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   ? 'Educator Homework Review & Marking Studio'
                   : `${courseTitle ? `${courseTitle} — ` : ''}Homework & Teacher Reports`}
               </h1>
-              <p className="text-xs text-rose-100 mt-1 max-w-2xl">
+              <p className="text-xs text-sky-100 mt-1 max-w-2xl">
                 {isTeacher
                   ? 'Review student homework submissions, verify steps against your Model Answer Key, and send corrected reports.'
                   : 'Upload your completed homework for Mr. Haitham Hussien to mark, then open your corrected reports below.'}
@@ -1704,7 +1722,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   setEditingKeyText(activeModelKey.text);
                   setIsModelKeyModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#163252] hover:bg-[#eef4fa] text-xs font-bold transition shadow-sm"
               >
                 <FileCheck className="w-4 h-4" />
                 <span>Model Answer Key ({activeModelKey.isCustom ? 'Custom' : 'Active'})</span>
@@ -1771,7 +1789,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               <div
                 className={`rounded-2xl border p-4 shadow-xs transition ${
                   unreadNotifications.length > 0
-                    ? 'bg-gradient-to-r from-[#fff5f7] via-white to-amber-50/50 border-[#e9b3be]'
+                    ? 'bg-gradient-to-r from-[#f4f8fc] via-white to-amber-50/50 border-[#9ec2ea]'
                     : 'bg-white border-slate-200'
                 }`}
               >
@@ -1780,7 +1798,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
                         unreadNotifications.length > 0
-                          ? 'bg-[#800020] text-white border-[#800020]'
+                          ? 'bg-[#163252] text-white border-[#163252]'
                           : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}
                     >
@@ -1788,11 +1806,11 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-xs sm:text-sm font-bold text-[#701a2d]">
+                        <h3 className="text-xs sm:text-sm font-bold text-[#163252]">
                           Homework &amp; Teacher Notifications
                         </h3>
                         {unreadNotifications.length > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full bg-[#800020] text-white text-[10px] font-bold">
+                          <span className="px-2 py-0.5 rounded-full bg-[#163252] text-white text-[10px] font-bold">
                             {unreadNotifications.length} New
                           </span>
                         ) : (
@@ -1814,7 +1832,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                       <button
                         type="button"
                         onClick={handleMarkAllPortalNotificationsRead}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#e5c1c9] hover:bg-[#fff1f2] text-[11px] font-semibold text-[#800020] transition"
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#b8cde0] hover:bg-[#dce6f0] text-[11px] font-semibold text-[#163252] transition"
                       >
                         Mark All Read
                       </button>
@@ -1842,14 +1860,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           key={notif.id}
                           className={`rounded-xl border p-3 text-xs space-y-1.5 transition ${
                             isUnread
-                              ? 'bg-white border-[#800020]/35 shadow-2xs'
+                              ? 'bg-white border-[#163252]/35 shadow-2xs'
                               : 'bg-slate-50/70 border-slate-200 opacity-85'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {isUnread && (
-                                <span className="px-1.5 py-0.5 rounded bg-[#800020] text-white text-[9px] font-extrabold uppercase tracking-wider">
+                                <span className="px-1.5 py-0.5 rounded bg-[#163252] text-white text-[9px] font-extrabold uppercase tracking-wider">
                                   New
                                 </span>
                               )}
@@ -1875,7 +1893,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleSelectHomeworkFromNotification(notif)}
-                                  className="px-2.5 py-1 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-[11px] font-bold transition"
+                                  className="px-2.5 py-1 rounded-lg bg-[#163252] hover:bg-[#0f243d] text-white text-[11px] font-bold transition"
                                 >
                                   Select Homework &rarr;
                                 </button>
@@ -1903,14 +1921,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Submit Homework (Students only; Parents see Approved Reports full width) */}
           {!isParent && (
-            <div className="lg:col-span-5 bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-[#f5e1e5] pb-3">
+            <div className="lg:col-span-5 bg-white border border-[#d3dfec] rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-[#dce6f0] pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#fff1f2] text-[#800020] flex items-center justify-center border border-[#fecdd3]">
+                <div className="w-8 h-8 rounded-lg bg-[#dce6f0] text-[#163252] flex items-center justify-center border border-[#c5d6e8]">
                   <UserCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-[#701a2d]">Submit Homework to Mr. Haitham</h2>
+                  <h2 className="text-sm font-bold text-[#163252]">Submit Homework to Mr. Haitham</h2>
                   <p className="text-[11px] text-slate-500">Upload photos or PDF pages of your working</p>
                 </div>
               </div>
@@ -1931,7 +1949,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     type="text"
                     value={studentName}
                     onChange={(e) => setStudentName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-[#e5d0d4] text-xs outline-none focus:border-[#800020]"
+                    className="w-full px-3 py-2 rounded-lg border border-[#c5d6e8] text-xs outline-none focus:border-[#163252]"
                     placeholder="Your full name"
                   />
                 </div>
@@ -1951,7 +1969,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                         setAssignment(courseTitle ? `${courseTitle} — Homework Assignment` : 'IGCSE Mathematics Homework');
                       }
                     }}
-                    className="w-full px-3 py-2 rounded-lg border border-[#e5d0d4] bg-white text-xs font-semibold outline-none focus:border-[#800020]"
+                    className="w-full px-3 py-2 rounded-lg border border-[#c5d6e8] bg-white text-xs font-semibold outline-none focus:border-[#163252]"
                   >
                     {groupAssignments.length === 0 ? (
                       <option value="">General Homework Submission</option>
@@ -1973,9 +1991,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 const activeHw = groupAssignments.find((a) => a.id === selectedAssignmentId);
                 if (activeHw) {
                   return (
-                    <div className="rounded-xl border border-rose-200 bg-[#fff5f7] p-3 text-xs space-y-1">
+                    <div className="rounded-xl border border-[#c5d6e8] bg-[#f4f8fc] p-3 text-xs space-y-1">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-bold text-[#800020]">{activeHw.title}</span>
+                        <span className="font-bold text-[#163252]">{activeHw.title}</span>
                         {activeHw.dueDate && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
                             Due Date: {new Date(activeHw.dueDate).toLocaleString('en-GB')}
@@ -1997,7 +2015,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                       type="text"
                       value={assignment}
                       onChange={(e) => setAssignment(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-[#e5d0d4] text-xs outline-none focus:border-[#800020]"
+                      className="w-full px-3 py-2 rounded-lg border border-[#c5d6e8] text-xs outline-none focus:border-[#163252]"
                       placeholder="e.g. Week 3 Algebra Sheet"
                     />
                   </div>
@@ -2006,12 +2024,12 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             </div>
 
             {/* Input Tabs */}
-            <div className="grid grid-cols-3 bg-[#fdf5f7] p-1 rounded-xl border border-[#f5e1e5] gap-1">
+            <div className="grid grid-cols-3 bg-[#fdf5f7] p-1 rounded-xl border border-[#dce6f0] gap-1">
               <button
                 type="button"
                 onClick={() => setInputMode('upload')}
                 className={`py-2 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition ${
-                  inputMode === 'upload' ? 'bg-[#800020] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
+                  inputMode === 'upload' ? 'bg-[#163252] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 <UploadCloud className="w-3.5 h-3.5" /> PDF / Photo
@@ -2020,7 +2038,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 type="button"
                 onClick={() => setInputMode('type')}
                 className={`py-2 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition ${
-                  inputMode === 'type' ? 'bg-[#800020] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
+                  inputMode === 'type' ? 'bg-[#163252] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 <Edit3 className="w-3.5 h-3.5" /> Type Answers
@@ -2029,7 +2047,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 type="button"
                 onClick={() => setInputMode('canvas')}
                 className={`py-2 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition ${
-                  inputMode === 'canvas' ? 'bg-[#800020] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
+                  inputMode === 'canvas' ? 'bg-[#163252] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 <PenTool className="w-3.5 h-3.5" /> Scratchpad
@@ -2048,16 +2066,16 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 />
                 <label
                   htmlFor="student-hw-file"
-                  className="flex flex-col items-center justify-center border-2 border-dashed border-[#e5c1c9] hover:border-[#800020] rounded-xl p-5 cursor-pointer bg-[#fffcfd] hover:bg-[#fff5f7] transition text-center"
+                  className="flex flex-col items-center justify-center border-2 border-dashed border-[#b8cde0] hover:border-[#163252] rounded-xl p-5 cursor-pointer bg-[#fffcfd] hover:bg-[#f4f8fc] transition text-center"
                 >
                   {isRenderingPages ? (
                     <>
-                      <Loader2 className="w-7 h-7 animate-spin text-[#800020] mb-2" />
-                      <p className="text-xs font-semibold text-[#800020]">Preparing your pages...</p>
+                      <Loader2 className="w-7 h-7 animate-spin text-[#163252] mb-2" />
+                      <p className="text-xs font-semibold text-[#163252]">Preparing your pages...</p>
                     </>
                   ) : selectedFile ? (
                     <>
-                      <FileText className="w-7 h-7 text-[#800020] mb-2" />
+                      <FileText className="w-7 h-7 text-[#163252] mb-2" />
                       <p className="text-xs font-bold text-slate-900">{selectedFile.name}</p>
                       <p className="text-[11px] text-emerald-700 mt-1 font-medium">
                         {pdfPageInfo
@@ -2067,9 +2085,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     </>
                   ) : (
                     <>
-                      <UploadCloud className="w-7 h-7 text-[#800020] mb-2" />
+                      <UploadCloud className="w-7 h-7 text-[#163252] mb-2" />
                       <p className="text-xs font-bold text-slate-800">Click to select your Homework PDF or Photo</p>
-                      <p className="text-[11px] text-slate-500 mt-1">PDF, JPG, or PNG accepted</p>
+                      <p className="text-[11px] text-slate-500 mt-1">PDF, JPG, or PNG accepted (up to 25 pages per homework)</p>
                     </>
                   )}
                 </label>
@@ -2088,8 +2106,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                             setA3SplitMode(nextMode);
                             if (selectedFile && (selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf'))) {
                               const rendered = await renderPdfPagesToImages(selectedFile, {
-                                maxPages: 12,
-                                quality: 0.9,
+                                maxPages: 25,
+                                quality: 0.88,
                                 contrastBoost,
                                 a3SplitMode: nextMode,
                               });
@@ -2114,7 +2132,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           onClick={handleToggleContrastBoost}
                           className={`px-2 py-0.5 rounded border text-[10px] font-semibold transition ${
                             contrastBoost
-                              ? 'bg-[#800020] text-white border-[#800020]'
+                              ? 'bg-[#163252] text-white border-[#163252]'
                               : 'bg-white text-slate-600 border-slate-300'
                           }`}
                         >
@@ -2140,7 +2158,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                               type="button"
                               onClick={() => handleRotatePage(idx)}
                               title="Rotate 90°"
-                              className="p-0.5 text-slate-500 hover:text-[#800020]"
+                              className="p-0.5 text-slate-500 hover:text-[#163252]"
                             >
                               <RotateCw className="w-3 h-3" />
                             </button>
@@ -2162,7 +2180,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   value={customTextWorking}
                   onChange={(e) => setCustomTextWorking(e.target.value)}
                   rows={6}
-                  className="w-full p-3 rounded-xl border border-[#e5d0d4] text-xs font-mono outline-none focus:border-[#800020]"
+                  className="w-full p-3 rounded-xl border border-[#c5d6e8] text-xs font-mono outline-none focus:border-[#163252]"
                   placeholder={'Q1: 8 + 12 / 4 = 8 + 3 = 11\nQ2: 5 * (16 + 2 - 12) = 30'}
                 />
               </div>
@@ -2177,11 +2195,26 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               />
             )}
 
+            {inputMode === 'upload' && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                  Note or question for Mr. Haitham (optional)
+                </label>
+                <textarea
+                  value={customTextWorking}
+                  onChange={(e) => setCustomTextWorking(e.target.value)}
+                  rows={2}
+                  className="w-full p-2.5 rounded-xl border border-[#E5E7EB] text-xs outline-none focus:border-[#1B365D] bg-[#FAF9F5]"
+                  placeholder="E.g., Q4 was tricky — please check my substitution step."
+                />
+              </div>
+            )}
+
             <button
               type="button"
               onClick={handleStudentSubmitHomework}
               disabled={isSubmittingHomework || isRenderingPages}
-              className="w-full py-3.5 bg-gradient-to-r from-[#800020] via-[#9f1239] to-[#800020] hover:from-[#66001a] hover:to-[#800020] text-white rounded-xl text-xs sm:text-sm font-bold shadow-md flex items-center justify-center gap-2 transition disabled:opacity-50"
+              className="w-full py-3.5 bg-gradient-to-r from-[#13294B] via-[#1B365D] to-[#13294B] hover:from-[#0f223d] hover:to-[#13294B] text-white rounded-xl text-xs sm:text-sm font-bold shadow-md flex items-center justify-center gap-2 transition disabled:opacity-50"
             >
               {isSubmittingHomework ? (
                 <>
@@ -2200,18 +2233,18 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
           {/* Right Column: Student / Parent Submissions & Corrected Reports */}
           <div className={`${isParent ? 'lg:col-span-12' : 'lg:col-span-7'} space-y-4`}>
-            <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-[#f5e1e5] pb-3">
+            <div className="bg-white border border-[#d3dfec] rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-[#dce6f0] pb-3">
                 <div>
-                  <h2 className="text-sm font-bold text-[#701a2d]">
+                  <h2 className="text-sm font-bold text-[#163252]">
                     {isParent
-                      ? `Approved 3-Phase Reports for ${defaultStudentName || 'Student'}`
+                      ? `Approved Reports for ${defaultStudentName || 'Student'}`
                       : 'My Submissions & Corrected Reports'}
                   </h2>
                   <p className="text-[11px] text-slate-500">
                     {isParent
                       ? 'Parent Portal — Only reports finalized and released by Mr. Haitham Hussien appear here'
-                      : 'Track submitted work and view 3-Phase reports once Mr. Haitham approves marking'}
+                      : 'Track submitted work and view marked reports once Mr. Haitham releases them'}
                   </p>
                 </div>
                 <button
@@ -2227,7 +2260,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 <div className="py-8 text-center text-xs text-slate-500">Loading your submissions...</div>
               ) : submissions.length === 0 ? (
                 <div className="py-10 text-center space-y-2">
-                  <div className="w-12 h-12 mx-auto rounded-full bg-[#fff1f2] text-[#800020] flex items-center justify-center">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-[#dce6f0] text-[#163252] flex items-center justify-center">
                     <Inbox className="w-6 h-6" />
                   </div>
                   <p className="text-sm font-semibold text-slate-800">No homework submitted yet</p>
@@ -2246,8 +2279,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                         onClick={() => setSelectedSubmissionId(sub.id)}
                         className={`w-full text-left p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
                           active
-                            ? 'bg-[#fdf2f4] border-[#800020] shadow-2xs'
-                            : 'bg-white border-slate-200 hover:border-[#fecdd3]'
+                            ? 'bg-[#eef4fa] border-[#163252] shadow-2xs'
+                            : 'bg-white border-slate-200 hover:border-[#c5d6e8]'
                         }`}
                       >
                         <div className="min-w-0">
@@ -2274,7 +2307,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             </div>
 
             {loadingDetail && (
-              <div className="bg-white border border-[#f0d0d6] rounded-2xl p-8 text-center text-xs text-slate-500">
+              <div className="bg-white border border-[#d3dfec] rounded-2xl p-8 text-center text-xs text-slate-500">
                 Loading submission details...
               </div>
             )}
@@ -2343,14 +2376,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       {isTeacher && (
         <div className="space-y-5">
           {/* Active Answer Key Bar */}
-          <div className="bg-white border-2 border-[#800020]/25 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-xs">
+          <div className="bg-white border-2 border-[#163252]/25 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-xs">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[#dce6f0] text-[#163252] border border-[#c5d6e8] flex items-center justify-center shrink-0">
                 <FileCheck className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#800020]">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#163252]">
                     Educator-Only Active Model Answer Key
                   </span>
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
@@ -2372,7 +2405,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               />
               <label
                 htmlFor="educator-key-pdf"
-                className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold transition shadow-xs"
+                className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#163252] hover:bg-[#0f243d] text-white text-xs font-bold transition shadow-xs"
               >
                 {isUploadingKeyPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
                 <span>Upload Key PDF</span>
@@ -2407,7 +2440,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               <div
                 className={`rounded-2xl border p-4 shadow-xs transition ${
                   unreadTeacherNotifs.length > 0
-                    ? 'bg-gradient-to-r from-[#fff5f7] via-white to-amber-50/50 border-[#e9b3be]'
+                    ? 'bg-gradient-to-r from-[#f4f8fc] via-white to-amber-50/50 border-[#9ec2ea]'
                     : 'bg-white border-slate-200'
                 }`}
               >
@@ -2416,7 +2449,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
                         unreadTeacherNotifs.length > 0
-                          ? 'bg-[#800020] text-white border-[#800020]'
+                          ? 'bg-[#163252] text-white border-[#163252]'
                           : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}
                     >
@@ -2424,11 +2457,11 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-xs sm:text-sm font-bold text-[#701a2d]">
+                        <h3 className="text-xs sm:text-sm font-bold text-[#163252]">
                           Student Submission Notifications
                         </h3>
                         {unreadTeacherNotifs.length > 0 ? (
-                          <span className="px-2 py-0.5 rounded-full bg-[#800020] text-white text-[10px] font-bold">
+                          <span className="px-2 py-0.5 rounded-full bg-[#163252] text-white text-[10px] font-bold">
                             {unreadTeacherNotifs.length} New
                           </span>
                         ) : (
@@ -2450,7 +2483,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                       <button
                         type="button"
                         onClick={handleMarkAllPortalNotificationsRead}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#e5c1c9] hover:bg-[#fff1f2] text-[11px] font-semibold text-[#800020] transition"
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#b8cde0] hover:bg-[#dce6f0] text-[11px] font-semibold text-[#163252] transition"
                       >
                         Mark All Read
                       </button>
@@ -2478,14 +2511,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           key={notif.id}
                           className={`rounded-xl border p-3 text-xs space-y-1.5 transition ${
                             isUnread
-                              ? 'bg-white border-[#800020]/35 shadow-2xs'
+                              ? 'bg-white border-[#163252]/35 shadow-2xs'
                               : 'bg-slate-50/70 border-slate-200 opacity-85'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {isUnread && (
-                                <span className="px-1.5 py-0.5 rounded bg-[#800020] text-white text-[9px] font-extrabold uppercase tracking-wider">
+                                <span className="px-1.5 py-0.5 rounded bg-[#163252] text-white text-[9px] font-extrabold uppercase tracking-wider">
                                   New
                                 </span>
                               )}
@@ -2501,7 +2534,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleOpenSubmissionFromNotification(notif)}
-                                className="px-2.5 py-1 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-[11px] font-bold transition"
+                                className="px-2.5 py-1 rounded-lg bg-[#163252] hover:bg-[#0f243d] text-white text-[11px] font-bold transition"
                               >
                                 Review Submission &rarr;
                               </button>
@@ -2531,7 +2564,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               type="button"
               onClick={() => setTeacherMode('inbox')}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                teacherMode === 'inbox' ? 'bg-[#800020] text-white' : 'text-slate-600 hover:bg-slate-50'
+                teacherMode === 'inbox' ? 'bg-[#163252] text-white' : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
               <Inbox className="w-3.5 h-3.5" />
@@ -2541,7 +2574,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               type="button"
               onClick={() => setTeacherMode('assign')}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                teacherMode === 'assign' ? 'bg-[#800020] text-white' : 'text-slate-600 hover:bg-slate-50'
+                teacherMode === 'assign' ? 'bg-[#163252] text-white' : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
               <Send className="w-3.5 h-3.5" />
@@ -2551,7 +2584,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               type="button"
               onClick={() => setTeacherMode('direct')}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                teacherMode === 'direct' ? 'bg-[#800020] text-white' : 'text-slate-600 hover:bg-slate-50'
+                teacherMode === 'direct' ? 'bg-[#163252] text-white' : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
@@ -2564,10 +2597,10 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               <form
                 onSubmit={handleCreateGroupAssignment}
-                className="lg:col-span-5 bg-white border border-[#f0d0d6] rounded-2xl p-5 space-y-4 shadow-xs"
+                className="lg:col-span-5 bg-white border border-[#d3dfec] rounded-2xl p-5 space-y-4 shadow-xs"
               >
                 <div className="border-b border-slate-100 pb-3">
-                  <h2 className="text-sm font-bold text-[#701a2d]">Assign Homework to a Specific Group</h2>
+                  <h2 className="text-sm font-bold text-[#163252]">Assign Homework to a Specific Group</h2>
                   <p className="text-[11px] text-slate-500">
                     Students see only assignments created for their approved group, with website alerts &amp; Resend email notifications.
                   </p>
@@ -2638,6 +2671,47 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   />
                 </div>
 
+                <div className="bg-[#eef4fa]/70 rounded-xl border border-[#c5d6e8]/70 p-3 space-y-1.5">
+                  <label className="text-[11px] font-bold text-[#163252] block">
+                    Dedicated Model Answer Key PDF for this Assignment (Educator Only · Optional)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="px-3 py-1.5 rounded-lg bg-white border border-[#c5d6e8] hover:bg-[#eef4fa] text-[11px] font-semibold text-[#163252] cursor-pointer transition">
+                      {assignModelKeyName ? `Attached: ${assignModelKeyName}` : 'Attach Model Key PDF'}
+                      <input
+                        type="file"
+                        accept=".pdf,.txt,.md"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setAssignModelKeyName(file.name);
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (typeof reader.result === 'string') setAssignModelKeyBase64(reader.result);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                    {assignModelKeyName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAssignModelKeyBase64(null);
+                          setAssignModelKeyName('');
+                        }}
+                        className="text-[11px] text-slate-500 hover:text-rose-700 underline"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    If attached, submissions for this homework automatically mark against this key and your uploaded course notes (otherwise uses the Active Model Key).
+                  </p>
+                </div>
+
                 <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 space-y-2">
                   <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer">
                     <input
@@ -2661,16 +2735,16 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 <button
                   type="submit"
                   disabled={isSavingAssignment}
-                  className="w-full py-2.5 rounded-xl bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold shadow-sm transition disabled:opacity-50"
+                  className="w-full py-2.5 rounded-xl bg-[#163252] hover:bg-[#0f243d] text-white text-xs font-bold shadow-sm transition disabled:opacity-50"
                 >
                   {isSavingAssignment ? 'Assigning & Sending Notifications...' : 'Assign Homework & Notify Group'}
                 </button>
               </form>
 
-              <div className="lg:col-span-7 bg-white border border-[#f0d0d6] rounded-2xl p-5 space-y-4 shadow-xs">
+              <div className="lg:col-span-7 bg-white border border-[#d3dfec] rounded-2xl p-5 space-y-4 shadow-xs">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <h3 className="text-sm font-bold text-[#701a2d]">Active Homework by Group</h3>
+                    <h3 className="text-sm font-bold text-[#163252]">Active Homework by Group</h3>
                     <p className="text-[11px] text-slate-500">
                       Each group receives its own homework dropdown menu, due dates, and instructions.
                     </p>
@@ -2678,7 +2752,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   <button
                     type="button"
                     onClick={loadAssignments}
-                    className="text-xs font-semibold text-[#800020] hover:underline"
+                    className="text-xs font-semibold text-[#163252] hover:underline"
                   >
                     Refresh
                   </button>
@@ -2694,7 +2768,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                       <div key={hw.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <span className="inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] border border-[#fecdd3] mr-2">
+                            <span className="inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#dce6f0] text-[#163252] border border-[#c5d6e8] mr-2">
                               {hw.courseTitle}
                             </span>
                             <span className="inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-700">
@@ -2733,16 +2807,16 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           {teacherMode === 'inbox' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Inbox List */}
-              <div className="lg:col-span-4 bg-white border border-[#f0d0d6] rounded-2xl p-4 space-y-3 shadow-xs">
+              <div className="lg:col-span-4 bg-white border border-[#d3dfec] rounded-2xl p-4 space-y-3 shadow-xs">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-bold text-[#701a2d]">Inbox Queue</h2>
+                  <h2 className="text-sm font-bold text-[#163252]">Inbox Queue</h2>
                   <button
                     type="button"
                     onClick={() => {
                       loadSubmissions(selectedSubmissionId || undefined);
                       if (selectedSubmissionId) loadSubmissionDetail(selectedSubmissionId);
                     }}
-                    className="text-xs text-[#800020] hover:underline font-semibold"
+                    className="text-xs text-[#163252] hover:underline font-semibold"
                   >
                     Refresh
                   </button>
@@ -2768,7 +2842,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                       type="button"
                       onClick={() => setInboxFilter(f)}
                       className={`py-1 rounded font-semibold capitalize transition ${
-                        inboxFilter === f ? 'bg-white text-[#800020] shadow-2xs' : 'text-slate-600'
+                        inboxFilter === f ? 'bg-white text-[#163252] shadow-2xs' : 'text-slate-600'
                       }`}
                     >
                       {f}
@@ -2789,8 +2863,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           key={sub.id}
                           className={`p-3 rounded-xl border transition cursor-pointer ${
                             active
-                              ? 'bg-[#fdf2f4] border-[#800020]'
-                              : 'bg-white border-slate-200 hover:border-[#fecdd3]'
+                              ? 'bg-[#eef4fa] border-[#163252]'
+                              : 'bg-white border-slate-200 hover:border-[#c5d6e8]'
                           }`}
                           onClick={() => setSelectedSubmissionId(sub.id)}
                         >
@@ -2831,7 +2905,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                                 : sub.draftReport
                                 ? `Draft Ready (${sub.draftReport.earnedMarks}/${sub.draftReport.totalMarks}) · Approve`
                                 : sub.draftStatus === 'queued' || sub.draftStatus === 'generating'
-                                ? 'Auto-Correcting...'
+                                ? 'Preparing Review...'
                                 : 'Pending Marking'}
                             </span>
                             {sub.pageCount > 0 && (
@@ -2848,17 +2922,17 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               {/* Inbox Detail + Correction Workbench */}
               <div className="lg:col-span-8 space-y-4">
                 {!selectedSubmissionDetail ? (
-                  <div className="bg-white border border-[#f0d0d6] rounded-2xl p-10 text-center text-xs text-slate-500">
+                  <div className="bg-white border border-[#d3dfec] rounded-2xl p-10 text-center text-xs text-slate-500">
                     Select a student submission on the left to inspect uploaded pages and prepare a report.
                   </div>
                 ) : loadingDetail ? (
-                  <div className="bg-white border border-[#f0d0d6] rounded-2xl p-10 text-center text-xs text-slate-500">
+                  <div className="bg-white border border-[#d3dfec] rounded-2xl p-10 text-center text-xs text-slate-500">
                     Loading student pages...
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {/* Student Pages Preview + Draft Button */}
-                    <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 space-y-4 shadow-xs">
+                    <div className="bg-white border border-[#d3dfec] rounded-2xl p-5 space-y-4 shadow-xs">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
                         <div>
                           <h3 className="text-base font-bold text-slate-900">
@@ -2889,14 +2963,14 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                             onChange={(e) => setPrecisionMode(e.target.value as 'deep' | 'max')}
                             className="px-2.5 py-2 rounded-lg border border-slate-200 text-xs text-slate-700 bg-white"
                           >
-                            <option value="deep">Standard Marking Pass</option>
-                            <option value="max">Detailed Handwriting Pass</option>
+                            <option value="deep">Standard Review</option>
+                            <option value="max">Detailed Handwriting Review</option>
                           </select>
                           <button
                             type="button"
                             onClick={handleGenerateSubmissionDraft}
                             disabled={isGeneratingDraft}
-                            className="px-4 py-2 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold flex items-center gap-1.5 transition disabled:opacity-50"
+                            className="px-4 py-2 rounded-lg bg-[#163252] hover:bg-[#0f243d] text-white text-xs font-bold flex items-center gap-1.5 transition disabled:opacity-50"
                           >
                             {isGeneratingDraft ? (
                               <>
@@ -2927,13 +3001,13 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 text-amber-900 px-3.5 py-2.5 rounded-xl text-xs font-medium">
                             <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                             <span>
-                              Automatic 3-Phase correction draft is preparing in the background — this panel updates automatically once ready.
+                              Mr. Haitham&apos;s draft marking sheet is being prepared — this panel updates automatically once ready.
                             </span>
                           </div>
                         )}
 
                       {selectedSubmissionDetail.draftStatus === 'failed' && !editableReport && (
-                        <div className="bg-rose-50 border border-rose-200 text-rose-800 px-3.5 py-3 rounded-xl text-xs break-words space-y-2.5">
+                        <div className="bg-rose-50 border border-[#c5d6e8] text-rose-800 px-3.5 py-3 rounded-xl text-xs break-words space-y-2.5">
                           <div>
                             <strong>Auto-correction paused:</strong>{' '}
                             {selectedSubmissionDetail.draftError || 'Please verify your Model Answer Key and click Prepare Correction Draft.'}
@@ -2943,7 +3017,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                               type="button"
                               onClick={handleCreateManualDraft}
                               disabled={isGeneratingDraft}
-                              className="px-3.5 py-1.5 rounded-lg bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold transition"
+                              className="px-3.5 py-1.5 rounded-lg bg-[#163252] hover:bg-[#214266] text-white text-xs font-bold transition"
                             >
                               Open Manual Correction Sheet (No Quota Needed)
                             </button>
@@ -2986,13 +3060,13 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
 
                     {/* Step 1: Spacious Teacher Review & Edit Box -> Linked Live to Step 2 Parent Report */}
                     {editableReport && (
-                      <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 space-y-5 shadow-xs">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f5e1e5] pb-3">
+                      <div className="bg-white border border-[#d3dfec] rounded-2xl p-5 space-y-5 shadow-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#dce6f0] pb-3">
                           <div>
-                            <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] mb-1">
+                            <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#dce6f0] text-[#163252] mb-1">
                               Step 1 · Teacher Verification &amp; Answer Editor
                             </span>
-                            <h4 className="text-sm font-bold text-[#701a2d]">
+                            <h4 className="text-sm font-bold text-[#163252]">
                               Review, Edit or Add Questions &amp; Worked Solutions
                             </h4>
                             <p className="text-[11px] text-slate-500">
@@ -3000,8 +3074,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <div className="px-3.5 py-2 rounded-xl bg-[#fff1f2] border border-[#fecdd3] text-right">
-                              <span className="text-base font-black text-[#800020]">
+                            <div className="px-3.5 py-2 rounded-xl bg-[#dce6f0] border border-[#c5d6e8] text-right">
+                              <span className="text-base font-black text-[#163252]">
                                 {editableReport.earnedMarks} / {editableReport.totalMarks}
                               </span>
                               <span className="text-xs font-bold text-slate-700 ml-2">
@@ -3033,7 +3107,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                         : q.earnedMarks > 0
                                         ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                        : 'bg-rose-50 text-rose-700 border border-[#c5d6e8]'
                                     }`}
                                   >
                                     {q.earnedMarks === q.maxMarks
@@ -3088,7 +3162,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                               <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                                 <div>
                                   <label className="text-[10px] font-bold uppercase text-slate-600 block mb-1">
-                                    1. What Was Written
+                                    1. Student&apos;s Working
                                   </label>
                                   <textarea
                                     rows={3}
@@ -3103,8 +3177,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                                   />
                                 </div>
                                 <div>
-                                  <label className="text-[10px] font-bold uppercase text-[#800020] block mb-1">
-                                    2. Exact Mistake &amp; Teacher Feedback
+                                  <label className="text-[10px] font-bold uppercase text-[#163252] block mb-1">
+                                    2. Mr. Haitham&apos;s Notes
                                   </label>
                                   <textarea
                                     rows={3}
@@ -3116,12 +3190,42 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                                         phase2ErrorAnalysis: e.target.value,
                                       })
                                     }
-                                    className="w-full p-2 border border-rose-200 rounded-lg bg-white text-xs"
+                                    className="w-full p-2 border border-[#c5d6e8] rounded-lg bg-white text-xs"
                                   />
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {[
+                                      'Great method',
+                                      'Watch minus sign',
+                                      'Show intermediate steps',
+                                      'Check units / rounding',
+                                    ].map((stamp) => (
+                                      <button
+                                        key={stamp}
+                                        type="button"
+                                        onClick={() => {
+                                          const current = (
+                                            q.phase2ErrorAnalysis ||
+                                            q.teacherFeedback ||
+                                            q.errorAnalysis ||
+                                            ''
+                                          ).trim();
+                                          const next = current ? `${current} — ${stamp}.` : `${stamp}.`;
+                                          handleUpdateEditableQuestion(idx, {
+                                            teacherFeedback: next,
+                                            errorAnalysis: next,
+                                            phase2ErrorAnalysis: next,
+                                          });
+                                        }}
+                                        className="px-1.5 py-0.5 rounded border border-slate-200 bg-[#FAF9F5] hover:bg-[#EEF3F9] hover:border-[#1B365D]/40 text-[10px] font-semibold text-[#1B365D] transition"
+                                      >
+                                        + {stamp}
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
                                 <div>
                                   <label className="text-[10px] font-bold uppercase text-emerald-800 block mb-1">
-                                    3. Complete Worked Solution
+                                    3. Full Worked Solution
                                   </label>
                                   <textarea
                                     rows={3}
@@ -3142,7 +3246,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           <button
                             type="button"
                             onClick={handleAddEditableQuestion}
-                            className="w-full py-2 rounded-xl border border-dashed border-[#800020]/40 text-[#800020] hover:bg-[#fff5f7] text-xs font-bold transition"
+                            className="w-full py-2 rounded-xl border border-dashed border-[#163252]/40 text-[#163252] hover:bg-[#f4f8fc] text-xs font-bold transition"
                           >
                             + Add Question to Report
                           </button>
@@ -3177,7 +3281,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
                           <div className="flex-1 min-w-[220px]">
                             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                              Parent Notification Email (Resend Gateway)
+                              Parent Contact Email
                             </label>
                             <input
                               type="email"
@@ -3267,13 +3371,13 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           {/* EDUCATOR TAB 2: DIRECT SHEET CHECK */}
           {teacherMode === 'direct' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              <div className="lg:col-span-5 bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm space-y-4">
-                <h2 className="text-sm font-bold text-[#701a2d]">Direct Sheet Evaluation</h2>
+              <div className="lg:col-span-5 bg-white border border-[#d3dfec] rounded-2xl p-5 shadow-sm space-y-4">
+                <h2 className="text-sm font-bold text-[#163252]">Direct Sheet Evaluation</h2>
                 <input
                   type="text"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-[#e5d0d4] text-xs"
+                  className="w-full px-3 py-2 rounded-lg border border-[#c5d6e8] text-xs"
                   placeholder="Student / Paper label"
                 />
 
@@ -3287,10 +3391,10 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 />
                 <label
                   htmlFor="educator-direct-file"
-                  className="flex flex-col items-center justify-center border-2 border-dashed border-[#e5c1c9] hover:border-[#800020] rounded-xl p-5 cursor-pointer bg-[#fffcfd] text-center"
+                  className="flex flex-col items-center justify-center border-2 border-dashed border-[#b8cde0] hover:border-[#163252] rounded-xl p-5 cursor-pointer bg-[#fffcfd] text-center"
                 >
                   {isRenderingPages ? (
-                    <Loader2 className="w-6 h-6 animate-spin text-[#800020]" />
+                    <Loader2 className="w-6 h-6 animate-spin text-[#163252]" />
                   ) : selectedFile ? (
                     <p className="text-xs font-bold text-slate-900">
                       {selectedFile.name} ({pageImages.length || 1} page(s))
@@ -3304,7 +3408,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   value={customTextWorking}
                   onChange={(e) => setCustomTextWorking(e.target.value)}
                   rows={4}
-                  className="w-full p-3 rounded-xl border border-[#e5d0d4] text-xs font-mono"
+                  className="w-full p-3 rounded-xl border border-[#c5d6e8] text-xs font-mono"
                   placeholder="Or paste typed answers..."
                 />
 
@@ -3312,7 +3416,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   type="button"
                   onClick={handleDirectCheck}
                   disabled={isDirectGrading || isRenderingPages}
-                  className="w-full py-3 bg-[#800020] hover:bg-[#66001a] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                  className="w-full py-3 bg-[#163252] hover:bg-[#0f243d] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition disabled:opacity-50"
                 >
                   {isDirectGrading ? (
                     <>
@@ -3329,7 +3433,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 {directReport ? (
                   renderReportCard(directReport)
                 ) : (
-                  <div className="bg-white border border-[#f0d0d6] rounded-2xl p-10 text-center text-xs text-slate-500">
+                  <div className="bg-white border border-[#d3dfec] rounded-2xl p-10 text-center text-xs text-slate-500">
                     Upload a sheet on the left to evaluate it directly against &ldquo;{activeModelKey.title}&rdquo;.
                   </div>
                 )}
@@ -3364,11 +3468,11 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           <div className="bg-white border border-[#e6ccd2] rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-800">
             <div className="flex items-center justify-between p-4 border-b border-[#f0d8dd] bg-[#fffdfa]">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#fff1f2] text-[#800020] flex items-center justify-center border border-[#fecdd3]">
+                <div className="w-8 h-8 rounded-lg bg-[#dce6f0] text-[#163252] flex items-center justify-center border border-[#c5d6e8]">
                   <FileCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[#701a2d]">Educator Model Answer Key Manager</h3>
+                  <h3 className="text-sm font-bold text-[#163252]">Educator Model Answer Key Manager</h3>
                   <p className="text-[11px] text-slate-500">
                     Private to Mr. Haitham Hussien &mdash; never visible to students.
                   </p>
@@ -3377,7 +3481,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsModelKeyModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-[#fdf2f4] text-slate-400 hover:text-slate-700"
+                className="p-1 rounded-lg hover:bg-[#eef4fa] text-slate-400 hover:text-slate-700"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3396,7 +3500,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                     }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
                       selectedTemplate === id
-                        ? 'bg-[#800020] text-white border-[#800020]'
+                        ? 'bg-[#163252] text-white border-[#163252]'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
@@ -3445,7 +3549,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSaveModelKey(editingKeyTitle, editingKeyText)}
-                  className="px-5 py-2 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold"
+                  className="px-5 py-2 rounded-lg bg-[#163252] hover:bg-[#0f243d] text-white text-xs font-bold"
                 >
                   Save Active Key
                 </button>
@@ -3478,7 +3582,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                       selectedSubmissionDetail.courseTitle || courseTitle
                     )
                   }
-                  className="px-3.5 py-2 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold flex items-center gap-1.5"
+                  className="px-3.5 py-2 rounded-lg bg-[#163252] hover:bg-[#0f243d] text-white text-xs font-bold flex items-center gap-1.5"
                 >
                   <Printer className="w-3.5 h-3.5" /> Download / Print Clean PDF
                 </button>

@@ -11,6 +11,7 @@ import {
   createPartFromUri,
   PartMediaResolutionLevel,
   ThinkingLevel,
+  Type,
 } from '@google/genai';
 import { PEARSON_EDEXCEL_EXAM_1_KEY, DEFAULT_CAMBRIDGE_BIDMAS_KEY } from './src/data/modelAnswerKey';
 
@@ -22,7 +23,7 @@ const __dirname =
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '80mb' }));
 
 // Allow GitHub Pages / external frontends (e.g. ahamdy200.github.io) to call this API cleanly
 app.use((req: Request, res: Response, next) => {
@@ -1788,11 +1789,19 @@ async function buildStudentMediaParts(params: {
     : [];
 
   if (validPages.length > 0) {
-    // Gemini image parts support ULTRA_HIGH (2240 tokens/page) for dense handwriting
-    const useUltraHigh = validPages.length <= 6;
-    const partResolution = useUltraHigh
-      ? PartMediaResolutionLevel.MEDIA_RESOLUTION_ULTRA_HIGH
-      : PartMediaResolutionLevel.MEDIA_RESOLUTION_HIGH;
+    // Adaptive resolution: <=6 pages ULTRA_HIGH (2240 tok), 7-14 pages HIGH (1120 tok), 15-25+ pages MEDIUM (560 tok)
+    const partResolution =
+      validPages.length <= 6
+        ? PartMediaResolutionLevel.MEDIA_RESOLUTION_ULTRA_HIGH
+        : validPages.length <= 14
+        ? PartMediaResolutionLevel.MEDIA_RESOLUTION_HIGH
+        : PartMediaResolutionLevel.MEDIA_RESOLUTION_MEDIUM;
+    const resolutionLabel =
+      validPages.length <= 6
+        ? 'MEDIA_RESOLUTION_ULTRA_HIGH'
+        : validPages.length <= 14
+        ? 'MEDIA_RESOLUTION_HIGH'
+        : 'MEDIA_RESOLUTION_MEDIUM';
 
     validPages.forEach((page, idx) => {
       const pageNum = page.pageNumber || idx + 1;
@@ -1805,7 +1814,7 @@ async function buildStudentMediaParts(params: {
     return {
       mediaParts,
       cleanupFileNames,
-      resolutionLabel: useUltraHigh ? 'MEDIA_RESOLUTION_ULTRA_HIGH' : 'MEDIA_RESOLUTION_HIGH',
+      resolutionLabel,
       pageCount: validPages.length,
     };
   }
@@ -1931,6 +1940,8 @@ async function runHomeworkCorrectionDraft(params: {
   precisionMode?: string;
   gradingSystem?: 'edexcel' | 'ib' | 'marks';
   assignmentKind?: 'homework' | 'quiz' | 'essay';
+  courseReferenceContext?: string | null;
+  rubricCalibrationNotes?: string | null;
 }): Promise<{ report: any; gradingMeta: any; executionTimeMs: number }> {
   const cleanupFileNames: string[] = [];
   try {
@@ -1949,6 +1960,8 @@ async function runHomeworkCorrectionDraft(params: {
       precisionMode = 'deep',
       gradingSystem = 'edexcel',
       assignmentKind = 'homework',
+      courseReferenceContext = null,
+      rubricCalibrationNotes = null,
     } = params || {};
 
     const startTime = Date.now();
@@ -2102,15 +2115,16 @@ Return ONLY valid JSON:
         }
       }
 
-      // Pass 2: Mathematical Grading using BOTH the high-res visual pages + Pass-1 OCR + FULL Mark Scheme
-      const compactModelQuestions = baseReport.questions
-        .map(
-          (q) =>
-            `Q${q.questionNumber} (${q.displayLabel}) [${q.maxMarks} Marks]: ${q.prompt}\n  Reference Solution: ${q.modelSolution}`
-        )
-        .join('\n');
-
+      // Pass 2: Mathematical Grading using High-Res Visual Pages + Grounded Course Sources + Chunked Strict JSON Schema
       const fullMarkSchemeExcerpt = effectiveModelKey.trim().slice(0, 18000);
+      const groundedSourcesBlock =
+        courseReferenceContext && String(courseReferenceContext).trim()
+          ? `\nMR. HAITHAM'S UPLOADED COURSE REFERENCE SOURCES (EXPLAIN NOTES & PRINTED WORKSHEET — match these exact methods, notation, and printed question wording):\n${String(courseReferenceContext).trim().slice(0, 10000)}\n`
+          : '';
+      const calibrationBlock =
+        rubricCalibrationNotes && String(rubricCalibrationNotes).trim()
+          ? `\nMR. HAITHAM'S MARKING CALIBRATION PREFERENCES (FOLLOW STRICTLY):\n${String(rubricCalibrationNotes).trim().slice(0, 2500)}\n`
+          : '';
 
       const gradingRubricLabel =
         gradingSystem === 'ib'
@@ -2119,77 +2133,144 @@ Return ONLY valid JSON:
           ? 'Direct Raw Marks & Percentage per step'
           : 'Pearson Edexcel / Cambridge IGCSE [M1] Method & [A1] Accuracy mark scheme';
 
-      const gradePrompt = `You are Mr. Haitham Hussien's Mathematics examiner (${gradingRubricLabel}).
-Grade the student's ${assignmentKind} submission against ALL ${totalExpectedQuestions} questions in the Official Model Answer Key.
-
-STUDENT NAME: ${safeStudentName}
-ASSIGNMENT: ${effectiveAssignment} (${totalExpectedQuestions} Questions, ${baseReport.totalMarks} Total Marks)
-GRADING SYSTEM: ${gradingSystem.toUpperCase()}
-
-FULL OFFICIAL MODEL ANSWER KEY & MARK SCHEME RULES:
-${fullMarkSchemeExcerpt}
-
-STRUCTURED QUESTION INDEX (${totalExpectedQuestions} QUESTIONS — you MUST return one entry per questionNumber 1..${totalExpectedQuestions}):
-${compactModelQuestions}
-
-${pass1TranscriptionSummary ? `PASS-1 VERBATIM HANDWRITING TRANSCRIPTION (cross-check directly against the attached images, especially any "medium" or "low" confidence items):\n${pass1TranscriptionSummary}\n` : ''}
-${effectiveSubmissionText ? `ADDITIONAL SUBMITTED TEXT:\n${effectiveSubmissionText}\n` : ''}
-${hasVisualMedia ? "INSTRUCTIONS FOR ATTACHED IMAGES/PAGES: Re-inspect the original attached student pages directly before assigning each mark. Never invent working you cannot actually see on a page." : ''}
-
-STRICT 3-PHASE PER-QUESTION PIPELINE RULES:
-1. Evaluate ALL ${totalExpectedQuestions} questions (questionNumber 1 to ${totalExpectedQuestions}). NEVER skip or stop early.
-2. PHASE 1 (Student Answer Extraction): Transcribe EXACTLY what the student wrote in "phase1Extraction" and "studentWorkingFound" ("What was written"). If blank, state "Not attempted / Left blank".
-3. PHASE 2 (Error Identification): In "phase2ErrorAnalysis" and "errorAnalysis", identify the exact mistake and explain WHY it is mathematically wrong (or state exact method/accuracy credit earned if correct).
-4. PHASE 3 (Solution Resolution): In "phase3Solution", write the COMPLETE, FULL, step-by-step worked mathematical solution and exact final answer from start to finish. NEVER write lazy placeholders such as "Check the textbook" or "Refer to textbook" or "..." — always provide the complete worked steps and answer!
-5. Award full marks if mathematically equivalent and partial method marks when valid intermediate steps are shown.
-
-Return ONLY valid JSON matching this 3-Phase schema:
-{
-  "generalFeedback": "2-sentence summary of student performance across all ${totalExpectedQuestions} questions",
-  "diagnosticReview": "Detailed paragraph analyzing mathematical strengths, extracted working, and specific misconceptions",
-  "questions": [
-    {
-      "questionNumber": 1,
-      "displayLabel": "Q1",
-      "observedPage": 1,
-      "phase1Extraction": "What was written — exact line-by-line working and final answer from the student",
-      "studentWorkingFound": "Exact step-by-step handwritten working and final answer read from the page",
-      "earnedMarks": 2,
-      "status": "correct",
-      "phase2ErrorAnalysis": "Exact mistake identified & why it is wrong (or Confirmed correct [M1][A1])",
-      "errorAnalysis": "Step-by-step verification or specific arithmetic/algebraic error found",
-      "phase3Solution": "Step-by-step correct working and final answer",
-      "teacherFeedback": "Constructive teacher feedback referencing the student's actual steps"
-    }
-  ]
-}`;
-
-      const contents: any = hasVisualMedia ? [...mediaParts, { text: gradePrompt }] : gradePrompt;
-      const gradeTimeoutMs = onServerless ? getRemainingBudgetMs() : 55000;
-
-      const response = await generateWithRetry(
-        {
-          model: activeGradingModel,
-          contents,
-          config: {
-            responseMimeType: 'application/json',
-            thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+      const gradingResponseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          generalFeedback: { type: Type.STRING },
+          diagnosticReview: { type: Type.STRING },
+          questions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                questionNumber: { type: Type.INTEGER },
+                displayLabel: { type: Type.STRING },
+                observedPage: { type: Type.INTEGER },
+                phase1Extraction: { type: Type.STRING },
+                studentWorkingFound: { type: Type.STRING },
+                earnedMarks: { type: Type.INTEGER },
+                status: { type: Type.STRING },
+                phase2ErrorAnalysis: { type: Type.STRING },
+                errorAnalysis: { type: Type.STRING },
+                phase3Solution: { type: Type.STRING },
+                teacherFeedback: { type: Type.STRING },
+              },
+              required: [
+                'questionNumber',
+                'displayLabel',
+                'phase1Extraction',
+                'earnedMarks',
+                'status',
+                'phase2ErrorAnalysis',
+                'phase3Solution',
+              ],
+            },
           },
         },
-        0,
-        gradeTimeoutMs,
-        siblingFallbackModels
-      );
+        required: ['generalFeedback', 'diagnosticReview', 'questions'],
+      };
 
-      console.log('[Gemini grade raw]', String(response.text || '').slice(0, 1500));
-      let cleanedJson = String(response.text || '{}').trim();
-      cleanedJson = cleanedJson.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
-      const rawParsed = JSON.parse(cleanedJson);
-      const aiParsed = Array.isArray(rawParsed)
-        ? rawParsed.length > 0 && rawParsed[0] && Array.isArray(rawParsed[0].questions)
-          ? rawParsed[0]
-          : { questions: rawParsed }
-        : rawParsed;
+      const CHUNK_SIZE = 8;
+      const questionChunks: Array<typeof baseReport.questions> = [];
+      if (baseReport.questions.length > 10 && !onServerless) {
+        for (let i = 0; i < baseReport.questions.length; i += CHUNK_SIZE) {
+          questionChunks.push(baseReport.questions.slice(i, i + CHUNK_SIZE));
+        }
+      } else {
+        questionChunks.push(baseReport.questions);
+      }
+
+      const aggregatedQuestions: any[] = [];
+      let combinedGeneralFeedback = '';
+      let combinedDiagnosticReview = '';
+      let lastResponseModel = activeGradingModel;
+
+      for (let cIdx = 0; cIdx < questionChunks.length; cIdx++) {
+        const chunk = questionChunks[cIdx];
+        const compactModelQuestions = chunk
+          .map(
+            (q) =>
+              `Q${q.questionNumber} (${q.displayLabel}) [${q.maxMarks} Marks]: ${q.prompt}\n  Reference Solution: ${q.modelSolution}`
+          )
+          .join('\n');
+
+        const chunkScopeNote =
+          questionChunks.length > 1
+            ? `BATCH ${cIdx + 1} OF ${questionChunks.length}: Evaluate ONLY these ${chunk.length} questions (questionNumber ${chunk[0].questionNumber}..${chunk[chunk.length - 1].questionNumber}).`
+            : `Evaluate ALL ${chunk.length} questions (questionNumber 1..${chunk.length}).`;
+
+        const gradePrompt = `You are Mr. Haitham Hussien's Mathematics examiner (${gradingRubricLabel}).
+Grade the student's ${assignmentKind} submission carefully against the Official Model Answer Key and Mr. Haitham's course sources.
+
+STUDENT NAME: ${safeStudentName}
+ASSIGNMENT: ${effectiveAssignment} (${totalExpectedQuestions} Total Questions, ${baseReport.totalMarks} Total Marks)
+GRADING SYSTEM: ${gradingSystem.toUpperCase()}
+SCOPE: ${chunkScopeNote}
+${groundedSourcesBlock}${calibrationBlock}
+OFFICIAL MODEL ANSWER KEY & MARK SCHEME RULES:
+${fullMarkSchemeExcerpt}
+
+TARGET QUESTIONS TO GRADE IN THIS CALL (${chunk.length} QUESTIONS):
+${compactModelQuestions}
+
+${pass1TranscriptionSummary ? `PASS-1 VERBATIM HANDWRITING TRANSCRIPTION (cross-check directly against the attached images):\n${pass1TranscriptionSummary}\n` : ''}
+${effectiveSubmissionText ? `ADDITIONAL SUBMITTED TEXT:\n${effectiveSubmissionText}\n` : ''}
+${hasVisualMedia ? 'INSTRUCTIONS FOR ATTACHED IMAGES/PAGES: Inspect the original attached student pages directly before assigning each mark. Never invent working you cannot actually see on a page.' : ''}
+
+STRICT 3-PHASE PER-QUESTION PIPELINE RULES:
+1. Return an entry for EVERY question listed in TARGET QUESTIONS above. NEVER skip any question.
+2. PHASE 1 (Student Answer Extraction): Transcribe EXACTLY what the student wrote in "phase1Extraction" and "studentWorkingFound". If blank, state "Not attempted / Left blank".
+3. PHASE 2 (Error Identification): In "phase2ErrorAnalysis" and "errorAnalysis", write warm, clear notes as Mr. Haitham speaking directly to the student in natural IGCSE English (e.g., "Spot on — full marks here." or "You set up the equation well, just watch the sign when expanding the bracket."). Explain what went right or wrong clearly; never use robotic phrasing or raw LaTeX dollar-sign delimiters ($...$) in prose. Follow Mr. Haitham's methods from the course sources above.
+4. PHASE 3 (Solution Resolution): In "phase3Solution", write the COMPLETE step-by-step worked mathematical solution and exact final answer from start to finish in clean plain notation (e.g., x = 4, 3^2 + 4^2 = 25). Never write placeholders like "Check the textbook" or "...".
+5. Award full marks for mathematically equivalent forms (e.g. -2.5 = -5/2) and partial method marks [M1] when valid intermediate steps are shown.`;
+
+        const contents: any = hasVisualMedia ? [...mediaParts, { text: gradePrompt }] : gradePrompt;
+        const gradeTimeoutMs = onServerless ? getRemainingBudgetMs() : pageCount > 12 ? 85000 : 55000;
+
+        const response = await generateWithRetry(
+          {
+            model: activeGradingModel,
+            contents,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: gradingResponseSchema,
+              thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+            },
+          },
+          0,
+          gradeTimeoutMs,
+          siblingFallbackModels
+        );
+
+        lastResponseModel = response?.modelVersion || lastResponseModel;
+        let cleanedJson = String(response.text || '{}').trim();
+        cleanedJson = cleanedJson.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+        const rawParsed = JSON.parse(cleanedJson);
+        const chunkParsed = Array.isArray(rawParsed)
+          ? rawParsed.length > 0 && rawParsed[0] && Array.isArray(rawParsed[0].questions)
+            ? rawParsed[0]
+            : { questions: rawParsed }
+          : rawParsed;
+
+        if (chunkParsed?.generalFeedback && !combinedGeneralFeedback) {
+          combinedGeneralFeedback = String(chunkParsed.generalFeedback);
+        }
+        if (chunkParsed?.diagnosticReview && !combinedDiagnosticReview) {
+          combinedDiagnosticReview = String(chunkParsed.diagnosticReview);
+        }
+        if (Array.isArray(chunkParsed?.questions)) {
+          aggregatedQuestions.push(...chunkParsed.questions);
+        }
+        console.log(
+          `[Homework Grader] Batch ${cIdx + 1}/${questionChunks.length} complete (${chunkParsed?.questions?.length || 0}/${chunk.length} Qs)`
+        );
+      }
+
+      const aiParsed = {
+        generalFeedback: combinedGeneralFeedback,
+        diagnosticReview: combinedDiagnosticReview,
+        questions: aggregatedQuestions,
+      };
       if (aiParsed && Array.isArray(aiParsed.questions) && aiParsed.questions.length > 0) {
         const aiByNum = new Map<number, any>();
         const aiByLabel = new Map<string, any>();
@@ -2260,13 +2341,15 @@ Return ONLY valid JSON matching this 3-Phase schema:
             : undefined;
 
         const gradingMeta = {
-          model: response?.modelVersion || activeGradingModel,
+          model: 'Mr. Haitham Marking Engine',
           precisionMode,
           twoPassOcrUsed,
           pageCount,
           mediaResolution: resolutionLabel,
           thinkingLevel: 'HIGH',
+          batchCount: questionChunks.length,
         };
+        console.log(`[Homework Grader] Completed via ${lastResponseModel} (${earnedMarks}/${totalMarks})`);
 
         const finalReport = {
           ...baseReport,
@@ -2293,20 +2376,13 @@ Return ONLY valid JSON matching this 3-Phase schema:
       }
     } catch (e: any) {
       console.error('Grading draft generation FAILED:', e?.status, e?.message);
-      const noKey = !process.env.GEMINI_API_KEY;
       const rawMsg = String(e?.message || '');
       const isQuotaError =
         e?.status === 429 ||
         rawMsg.includes('429') ||
         rawMsg.includes('RESOURCE_EXHAUSTED') ||
         rawMsg.toLowerCase().includes('quota');
-      const retryMatch = rawMsg.match(/retry in\s+([0-9hms.]+)/i);
-      const cleanMessage = noKey
-        ? 'GEMINI_API_KEY is not set on the server, so the marking assistant cannot generate a draft.'
-        : isQuotaError
-        ? `Daily automated grading quota reached on available free-tier models${retryMatch ? ` (next reset in ${retryMatch[1]})` : ''}. Click "Open Manual Correction Sheet" below to grade manually right now, or update GEMINI_API_KEY in .env.`
-        : `Marking assistant could not process this submission: ${rawMsg.slice(0, 220)}`;
-      const err: any = new Error(cleanMessage);
+      const err: any = new Error(sanitizeEducatorError(e));
       err.statusCode = isQuotaError ? 429 : 502;
       throw err;
     }
@@ -2437,6 +2513,8 @@ interface HomeworkAssignmentRecord {
   instructions: string;
   dueDate: string;
   gradingSystem: 'edexcel' | 'ib' | 'marks';
+  modelAnswerKeyTitle?: string;
+  modelAnswerKeyText?: string;
   createdAt: string;
   createdBy: string;
 }
@@ -2455,6 +2533,19 @@ interface PortalNotification {
   readByUserIds: number[];
 }
 
+interface CourseSubFolderRecord {
+  id: string;
+  name: string;
+  hiddenForStudents?: boolean;
+}
+
+interface CourseMajorFolderRecord {
+  id: string;
+  name: string;
+  hiddenForStudents?: boolean;
+  subFolders: CourseSubFolderRecord[];
+}
+
 interface PortalState {
   enrollments: Record<string, CourseEnrollment>;
   submissions: HomeworkSubmissionRecord[];
@@ -2464,6 +2555,8 @@ interface PortalState {
   directoryUsers: DirectorySeatUser[];
   customVideos: Record<string, any[]>;
   customMaterials: Record<string, any[]>;
+  courseFolders: Record<string, CourseMajorFolderRecord[]>;
+  rubricCalibrations: Record<string, string[]>;
   customQuizzes: any[];
   parentEmails: Record<string, string>;
 }
@@ -2472,6 +2565,56 @@ const DATA_DIR = path.resolve(__dirname, 'data');
 const SUBMISSIONS_MEDIA_DIR = path.join(DATA_DIR, 'submissions');
 const COURSE_MATERIALS_DIR = path.join(DATA_DIR, 'course-materials');
 const PORTAL_STATE_FILE = path.join(DATA_DIR, 'portal-state.json');
+
+function createDefaultSubFolders(): CourseSubFolderRecord[] {
+  return Array.from({ length: 10 }, (_, idx) => ({
+    id: `sf-${idx + 1}`,
+    name: `Sub-Folder ${idx + 1}`,
+  }));
+}
+
+function createDefaultMajorFolders(): CourseMajorFolderRecord[] {
+  const defaultNames = [
+    'Major Folder 1 — Explain Notes & Study Guides',
+    'Major Folder 2 — Homework (HW) & Worksheets',
+    'Major Folder 3',
+    'Major Folder 4',
+    'Major Folder 5',
+    'Major Folder 6',
+    'Major Folder 7',
+    'Major Folder 8',
+    'Major Folder 9',
+    'Major Folder 10 — Revision & Keys',
+  ];
+  return defaultNames.map((name, idx) => ({
+    id: `mf-${idx + 1}`,
+    name,
+    subFolders: createDefaultSubFolders(),
+  }));
+}
+
+function normalizeCourseFolders(existing?: CourseMajorFolderRecord[]): CourseMajorFolderRecord[] {
+  const defaults = createDefaultMajorFolders();
+  if (!Array.isArray(existing) || existing.length === 0) return defaults;
+  return defaults.map((defMajor, mIdx) => {
+    const foundMajor = existing.find((m) => m?.id === defMajor.id) || existing[mIdx];
+    const existingSubs = Array.isArray(foundMajor?.subFolders) ? foundMajor.subFolders : [];
+    const normalizedSubs = defMajor.subFolders.map((defSub, sIdx) => {
+      const foundSub = existingSubs.find((s) => s?.id === defSub.id) || existingSubs[sIdx];
+      return {
+        id: defSub.id,
+        name: foundSub?.name && String(foundSub.name).trim() ? String(foundSub.name).trim() : defSub.name,
+        hiddenForStudents: Boolean(foundSub?.hiddenForStudents),
+      };
+    });
+    return {
+      id: defMajor.id,
+      name: foundMajor?.name && String(foundMajor.name).trim() ? String(foundMajor.name).trim() : defMajor.name,
+      hiddenForStudents: Boolean(foundMajor?.hiddenForStudents),
+      subFolders: normalizedSubs,
+    };
+  });
+}
 
 function ensureDataDirs() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -2494,6 +2637,8 @@ function loadPortalState(): PortalState {
         directoryUsers: Array.isArray(parsed?.directoryUsers) ? parsed.directoryUsers : [],
         customVideos: parsed?.customVideos && typeof parsed.customVideos === 'object' ? parsed.customVideos : {},
         customMaterials: parsed?.customMaterials && typeof parsed.customMaterials === 'object' ? parsed.customMaterials : {},
+        courseFolders: parsed?.courseFolders && typeof parsed.courseFolders === 'object' ? parsed.courseFolders : {},
+        rubricCalibrations: parsed?.rubricCalibrations && typeof parsed.rubricCalibrations === 'object' ? parsed.rubricCalibrations : {},
         customQuizzes: Array.isArray(parsed?.customQuizzes) ? parsed.customQuizzes : [],
         parentEmails: parsed?.parentEmails && typeof parsed.parentEmails === 'object' ? parsed.parentEmails : {},
       };
@@ -2510,6 +2655,8 @@ function loadPortalState(): PortalState {
     directoryUsers: [],
     customVideos: {},
     customMaterials: {},
+    courseFolders: {},
+    rubricCalibrations: {},
     customQuizzes: [],
     parentEmails: {},
   };
@@ -2582,6 +2729,73 @@ function sanitizeSubmissionForStudent(sub: HomeworkSubmissionRecord): any {
   };
 }
 
+/** Sanitize backend errors so zero internal provider/API details appear in the Educator Portal. */
+function sanitizeEducatorError(err: any): string {
+  const raw = String(err?.message || err || '');
+  const lower = raw.toLowerCase();
+  if (!process.env.GEMINI_API_KEY) {
+    return 'Automated marking service is not configured on this server. Open Manual Correction Sheet to grade immediately.';
+  }
+  if (err?.status === 429 || lower.includes('429') || lower.includes('resource_exhausted') || lower.includes('quota')) {
+    return 'Automated marking reached its current capacity. Please wait briefly and click Re-Run Correction Draft, or open Manual Correction Sheet.';
+  }
+  if (err?.status === 503 || lower.includes('503') || lower.includes('unavailable') || lower.includes('timed out') || lower.includes('timeout')) {
+    return 'Automated marking service is temporarily busy. Please click Re-Run Correction Draft, or open Manual Correction Sheet.';
+  }
+  return 'Automated correction could not complete for this paper. Please verify your Model Answer Key and click Re-Run Correction Draft, or open Manual Correction Sheet.';
+}
+
+/** Resolve per-assignment Model Answer Key, uploaded Course Reference PDFs (Explain Notes + HW Sheets), and Mr. Haitham's calibration notes. */
+function resolveGroundedGradingContext(
+  state: PortalState,
+  courseId: string,
+  assignmentId?: string | null,
+  assignmentTitle?: string | null
+): {
+  modelAnswerKeyText: string;
+  modelAnswerTitle: string;
+  courseReferenceContext: string;
+  rubricCalibrationNotes: string;
+} {
+  const matchedAssignment =
+    (assignmentId ? (state.assignments || []).find((a) => a.id === assignmentId) : undefined) ||
+    (assignmentTitle
+      ? (state.assignments || []).find(
+          (a) => a.courseId === courseId && a.title.trim().toLowerCase() === assignmentTitle.trim().toLowerCase()
+        )
+      : undefined);
+
+  const modelAnswerKeyText =
+    matchedAssignment?.modelAnswerKeyText?.trim() || currentModelAnswerKey.text;
+  const modelAnswerTitle =
+    matchedAssignment?.modelAnswerKeyTitle ||
+    matchedAssignment?.title ||
+    assignmentTitle ||
+    currentModelAnswerKey.title;
+
+  // Gather silently indexed Explain Notes & Homework PDFs uploaded to this course
+  const courseMats = (state.customMaterials?.[courseId] || []).filter(
+    (m: any) => m && typeof m.extractedText === 'string' && m.extractedText.trim().length > 25 && !m.teacherOnly
+  );
+  const referenceSections = courseMats.slice(0, 4).map((m: any) => {
+    const label = m.category === 'homework' ? 'Printed Homework Sheet' : 'Mr. Haitham Explain Notes';
+    return `[${label}: ${m.title}]\n${String(m.extractedText).trim().slice(0, 3000)}`;
+  });
+  const courseReferenceContext = referenceSections.join('\n\n').slice(0, 10000);
+
+  // Gather teacher calibration preferences from prior approved edits on this assignment
+  const calKey = `${courseId}::${String(assignmentTitle || matchedAssignment?.title || '').trim().toLowerCase()}`;
+  const notes = state.rubricCalibrations?.[calKey] || [];
+  const rubricCalibrationNotes = notes.slice(0, 8).map((n) => `- ${n}`).join('\n');
+
+  return {
+    modelAnswerKeyText,
+    modelAnswerTitle,
+    courseReferenceContext,
+    rubricCalibrationNotes,
+  };
+}
+
 const inFlightAutoDrafts = new Map<string, Promise<void>>();
 
 async function autoGenerateDraftForSubmission(submissionId: string): Promise<void> {
@@ -2610,12 +2824,13 @@ async function autoGenerateDraftForSubmission(submissionId: string): Promise<voi
       if ((sub.assignmentKind === 'quiz' || sub.assignmentKind === 'essay') && Array.isArray(sub.quizQuestions) && sub.quizQuestions.length > 0) {
         generatedReport = await runQuizOrEssayGradingDraft(sub, chosenSystem);
       } else {
+        const grounded = resolveGroundedGradingContext(startState, sub.courseId, sub.assignmentId, sub.assignment);
         const result = await runHomeworkCorrectionDraft({
           studentName: sub.studentName,
           assignment: sub.assignment,
           submissionText: sub.submissionText,
-          modelAnswerKey: currentModelAnswerKey.text,
-          modelAnswerTitle: sub.assignment || currentModelAnswerKey.title,
+          modelAnswerKey: grounded.modelAnswerKeyText,
+          modelAnswerTitle: grounded.modelAnswerTitle,
           fileName: sub.fileName,
           fileBase64: media?.fileBase64 || null,
           fileMimeType: media?.fileMimeType || sub.fileMimeType || null,
@@ -2623,6 +2838,8 @@ async function autoGenerateDraftForSubmission(submissionId: string): Promise<voi
           precisionMode: 'deep',
           gradingSystem: chosenSystem,
           assignmentKind: sub.assignmentKind || 'homework',
+          courseReferenceContext: grounded.courseReferenceContext,
+          rubricCalibrationNotes: grounded.rubricCalibrationNotes,
         });
         generatedReport = result.report;
       }
@@ -2647,7 +2864,7 @@ async function autoGenerateDraftForSubmission(submissionId: string): Promise<voi
         failState.submissions[failIdx] = {
           ...failState.submissions[failIdx],
           draftStatus: 'failed',
-          draftError: err?.message || 'Automatic draft generation failed.',
+          draftError: sanitizeEducatorError(err),
         };
         savePortalState(failState);
       }
@@ -3412,12 +3629,13 @@ app.post('/api/submissions/:id/draft-grade', async (req: Request, res: Response)
     if ((sub.assignmentKind === 'quiz' || sub.assignmentKind === 'essay') && Array.isArray(sub.quizQuestions) && sub.quizQuestions.length > 0) {
       generatedReport = await runQuizOrEssayGradingDraft(sub, chosenSystem);
     } else {
+      const grounded = resolveGroundedGradingContext(state, sub.courseId, sub.assignmentId, sub.assignment);
       const result = await runHomeworkCorrectionDraft({
         studentName: sub.studentName,
         assignment: sub.assignment,
         submissionText: sub.submissionText,
-        modelAnswerKey,
-        modelAnswerTitle: modelAnswerTitle || sub.assignment,
+        modelAnswerKey: modelAnswerKey || grounded.modelAnswerKeyText,
+        modelAnswerTitle: modelAnswerTitle || grounded.modelAnswerTitle,
         modelKeyFileBase64,
         fileName: sub.fileName,
         fileBase64: media?.fileBase64 || null,
@@ -3426,6 +3644,8 @@ app.post('/api/submissions/:id/draft-grade', async (req: Request, res: Response)
         precisionMode,
         gradingSystem: chosenSystem,
         assignmentKind: sub.assignmentKind || 'homework',
+        courseReferenceContext: grounded.courseReferenceContext,
+        rubricCalibrationNotes: grounded.rubricCalibrationNotes,
       });
       generatedReport = result.report;
     }
@@ -3452,7 +3672,7 @@ app.post('/api/submissions/:id/draft-grade', async (req: Request, res: Response)
     console.error('Error generating educator draft grade:', error);
     return res.status(error?.statusCode || 500).json({
       success: false,
-      error: error?.message || 'Could not generate correction draft.',
+      error: sanitizeEducatorError(error),
     });
   }
 });
@@ -3522,6 +3742,25 @@ app.post('/api/submissions/:id/publish', async (req: Request, res: Response) => 
   if (parentEmail && String(parentEmail).trim()) {
     state.parentEmails = state.parentEmails || {};
     state.parentEmails[String(sub.studentId)] = String(parentEmail).trim();
+  }
+
+  // Silently record teacher calibration preferences if Mr. Haitham adjusted draft marks before publishing
+  if (sub.draftReport && Array.isArray(sub.draftReport.questions)) {
+    const calKey = `${sub.courseId}::${String(sub.assignment || '').trim().toLowerCase()}`;
+    const existingNotes = state.rubricCalibrations?.[calKey] || [];
+    const newNotes: string[] = [];
+    for (const fq of normalizedQuestions) {
+      const orig = sub.draftReport.questions.find((dq: any) => dq.questionNumber === fq.questionNumber);
+      if (orig && orig.earnedMarks !== fq.earnedMarks) {
+        const label = fq.displayLabel || `Q${fq.questionNumber}`;
+        const note = `${label}: Mr. Haitham awarded ${fq.earnedMarks}/${fq.maxMarks} (${String(fq.phase2ErrorAnalysis || fq.teacherFeedback || '').slice(0, 140)})`;
+        if (!existingNotes.includes(note)) newNotes.push(note);
+      }
+    }
+    if (newNotes.length > 0) {
+      state.rubricCalibrations = state.rubricCalibrations || {};
+      state.rubricCalibrations[calKey] = [...newNotes, ...existingNotes].slice(0, 12);
+    }
   }
 
   const updatedSub: HomeworkSubmissionRecord = {
@@ -3638,7 +3877,24 @@ app.get('/api/courses/:courseId/materials', (req: Request, res: Response) => {
   const role = String(req.query.role || 'student');
   let materials = state.customMaterials?.[req.params.courseId] || [];
   if (role !== 'teacher') {
-    materials = materials.filter((m: any) => !m.teacherOnly);
+    const folders = normalizeCourseFolders(state.courseFolders?.[req.params.courseId]);
+    const hiddenMajors = new Set(folders.filter((f) => f.hiddenForStudents).map((f) => f.id));
+    const hiddenSubKeys = new Set<string>();
+    for (const mf of folders) {
+      for (const sf of mf.subFolders) {
+        if (sf.hiddenForStudents) hiddenSubKeys.add(`${mf.id}::${sf.id}`);
+      }
+    }
+    materials = materials.filter((m: any) => {
+      if (m.teacherOnly) return false;
+      const resolvedMajor =
+        m.majorFolderId ||
+        (m.category === 'homework' ? 'mf-2' : m.category === 'resource' ? 'mf-10' : 'mf-1');
+      const resolvedSub = m.subFolderId || 'sf-1';
+      if (hiddenMajors.has(resolvedMajor)) return false;
+      if (hiddenSubKeys.has(`${resolvedMajor}::${resolvedSub}`)) return false;
+      return true;
+    });
   }
   return res.json({ success: true, materials });
 });
@@ -3649,6 +3905,8 @@ app.post('/api/courses/:courseId/materials', (req: Request, res: Response) => {
     const {
       title,
       category = 'explain',
+      majorFolderId = '',
+      subFolderId = '',
       type = 'pdf',
       url = '',
       fileBase64 = null,
@@ -3664,6 +3922,16 @@ app.post('/api/courses/:courseId/materials', (req: Request, res: Response) => {
     const courseId = req.params.courseId;
     const resolvedCategory: 'explain' | 'homework' | 'resource' =
       category === 'homework' || category === 'resource' ? category : 'explain';
+    const resolvedMajorFolderId =
+      majorFolderId && String(majorFolderId).trim()
+        ? String(majorFolderId).trim()
+        : resolvedCategory === 'homework'
+        ? 'mf-2'
+        : resolvedCategory === 'resource'
+        ? 'mf-10'
+        : 'mf-1';
+    const resolvedSubFolderId =
+      subFolderId && String(subFolderId).trim() ? String(subFolderId).trim() : 'sf-1';
     const resolvedTeacherOnly = Boolean(teacherOnly) || resolvedCategory === 'resource';
 
     let finalUrl = String(url || '').trim();
@@ -3702,6 +3970,8 @@ app.post('/api/courses/:courseId/materials', (req: Request, res: Response) => {
       size: finalSize,
       url: finalUrl,
       category: resolvedCategory,
+      majorFolderId: resolvedMajorFolderId,
+      subFolderId: resolvedSubFolderId,
       isA3: Boolean(isA3),
       teacherOnly: resolvedTeacherOnly,
       storedFileName,
@@ -3714,6 +3984,32 @@ app.post('/api/courses/:courseId/materials', (req: Request, res: Response) => {
     const list = state.customMaterials?.[courseId] || [];
     state.customMaterials[courseId] = [item, ...list];
     savePortalState(state);
+
+    // Silently index uploaded PDF/document text in the background so Mr. Haitham's marking engine is grounded in course sources
+    if (fileBase64 && typeof fileBase64 === 'string' && (finalType === 'pdf' || finalType === 'doc')) {
+      const matId = item.id;
+      const mimeGuess = finalType === 'pdf' ? 'application/pdf' : 'text/plain';
+      setImmediate(async () => {
+        try {
+          const text = await extractTextFromDocumentBase64(fileBase64, mimeGuess);
+          if (text && text.trim().length > 25) {
+            const fresh = loadPortalState();
+            const arr = fresh.customMaterials?.[courseId] || [];
+            const targetIdx = arr.findIndex((m: any) => m.id === matId);
+            if (targetIdx !== -1) {
+              arr[targetIdx] = {
+                ...arr[targetIdx],
+                extractedText: text.trim().slice(0, 15000),
+              };
+              fresh.customMaterials[courseId] = arr;
+              savePortalState(fresh);
+            }
+          }
+        } catch {
+          // keep uploaded file accessible even if background indexing skips
+        }
+      });
+    }
 
     return res.json({ success: true, material: item, materials: state.customMaterials[courseId] });
   } catch (err: any) {
@@ -3742,6 +4038,56 @@ app.delete('/api/courses/:courseId/materials/:materialId', (req: Request, res: R
   state.customMaterials[courseId] = next;
   savePortalState(state);
   return res.json({ success: true, materials: next });
+});
+
+app.get('/api/courses/:courseId/folders', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const courseId = req.params.courseId;
+  const role = String(req.query.role || 'teacher');
+  let folders = normalizeCourseFolders(state.courseFolders?.[courseId]);
+  if (role !== 'teacher') {
+    folders = folders
+      .filter((mf) => !mf.hiddenForStudents)
+      .map((mf) => ({
+        ...mf,
+        subFolders: mf.subFolders.filter((sf) => !sf.hiddenForStudents),
+      }));
+  }
+  return res.json({ success: true, folders });
+});
+
+app.put('/api/courses/:courseId/folders', (req: Request, res: Response) => {
+  const { majorFolderId, subFolderId = null, name, hiddenForStudents } = req.body || {};
+  const hasName = name !== undefined && String(name).trim().length > 0;
+  const hasVisibility = typeof hiddenForStudents === 'boolean';
+  if (!majorFolderId || (!hasName && !hasVisibility)) {
+    return res.status(400).json({
+      success: false,
+      error: 'majorFolderId and either folder name or visibility toggle are required.',
+    });
+  }
+  const state = loadPortalState();
+  const courseId = req.params.courseId;
+  const folders = normalizeCourseFolders(state.courseFolders?.[courseId]);
+  const targetMajor = folders.find((f) => f.id === majorFolderId);
+  if (!targetMajor) {
+    return res.status(404).json({ success: false, error: 'Major folder not found.' });
+  }
+  if (subFolderId) {
+    const targetSub = targetMajor.subFolders.find((sf) => sf.id === subFolderId);
+    if (!targetSub) {
+      return res.status(404).json({ success: false, error: 'Sub-folder not found.' });
+    }
+    if (hasName) targetSub.name = String(name).trim();
+    if (hasVisibility) targetSub.hiddenForStudents = Boolean(hiddenForStudents);
+  } else {
+    if (hasName) targetMajor.name = String(name).trim();
+    if (hasVisibility) targetMajor.hiddenForStudents = Boolean(hiddenForStudents);
+  }
+  state.courseFolders = state.courseFolders || {};
+  state.courseFolders[courseId] = folders;
+  savePortalState(state);
+  return res.json({ success: true, folders });
 });
 
 app.get('/api/course-materials/file/:fileName', (req: Request, res: Response) => {
@@ -4082,7 +4428,11 @@ app.get('/api/assignments', (req: Request, res: Response) => {
   if (courseId) {
     items = items.filter((a) => a.courseId === courseId);
   }
-  return res.json({ success: true, assignments: items });
+  const safeItems = items.map(({ modelAnswerKeyText, ...rest }) => ({
+    ...rest,
+    hasCustomModelKey: Boolean(modelAnswerKeyText && modelAnswerKeyText.trim().length > 20),
+  }));
+  return res.json({ success: true, assignments: safeItems });
 });
 
 app.post('/api/assignments', async (req: Request, res: Response) => {
@@ -4096,10 +4446,24 @@ app.post('/api/assignments', async (req: Request, res: Response) => {
       gradingSystem = 'edexcel',
       sendNotification = true,
       notifyEmails = '',
+      modelKeyFileBase64 = null,
+      modelAnswerKeyTitle = '',
     } = req.body || {};
 
     if (!courseId || !title || !String(title).trim()) {
       return res.status(400).json({ success: false, error: 'Group (courseId) and homework title are required.' });
+    }
+
+    let extractedAssignmentKeyText = '';
+    if (modelKeyFileBase64 && typeof modelKeyFileBase64 === 'string') {
+      try {
+        const keyText = await extractTextFromDocumentBase64(modelKeyFileBase64, 'application/pdf');
+        if (keyText && keyText.trim().length > 25) {
+          extractedAssignmentKeyText = keyText.trim();
+        }
+      } catch {
+        // fall back to active global key if key PDF extraction fails
+      }
     }
 
     const state = loadPortalState();
@@ -4111,6 +4475,10 @@ app.post('/api/assignments', async (req: Request, res: Response) => {
       instructions: String(instructions || '').trim(),
       dueDate: String(dueDate || '').trim(),
       gradingSystem: gradingSystem === 'ib' || gradingSystem === 'marks' ? gradingSystem : 'edexcel',
+      modelAnswerKeyTitle: extractedAssignmentKeyText
+        ? String(modelAnswerKeyTitle || title).trim()
+        : undefined,
+      modelAnswerKeyText: extractedAssignmentKeyText || undefined,
       createdAt: new Date().toISOString(),
       createdBy: 'Mr. Haitham Hussien',
     };

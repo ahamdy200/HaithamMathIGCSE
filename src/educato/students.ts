@@ -88,6 +88,16 @@ export const TEACHER_ACCOUNT = {
   role: "teacher" as const,
 };
 
+export const ASSISTANT_ACCOUNT = {
+  id: 2,
+  username: "assistant",
+  password: "assistant2024",
+  fullName: "Teaching Assistant (Homework Review)",
+  domain: "Mr.HaithamHusseinig",
+  role: "teacher" as const,
+  isAssistant: true,
+};
+
 export const PARENTS: ParentAccount[] = STUDENTS.map((student) => {
   const suffix = String(student.id).padStart(2, '0');
   return {

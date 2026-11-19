@@ -46,16 +46,17 @@ export async function renderPdfPagesToImages(
     a3SplitMode?: 'auto' | 'always' | 'off';
   } = {}
 ): Promise<PdfRenderResult> {
-  const { maxPages = 16, quality = 0.91, contrastBoost = false } = options;
+  const { maxPages = 25, quality = 0.88, contrastBoost = false } = options;
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = getDocument({ data: new Uint8Array(arrayBuffer) });
   const pdf = await loadingTask.promise;
 
   const totalPages = pdf.numPages;
   const pagesToRender = Math.min(totalPages, maxPages);
-  // Keep total payload compact for large multi-page PDFs while keeping single/few-page sheets razor sharp
+  // Adaptive JPEG sizing so 1-25 page PDFs render crisp handwriting while staying compact for API & server limits
   const targetLongestSide =
-    pagesToRender <= 4 ? 2200 : pagesToRender <= 8 ? 1900 : 1600;
+    pagesToRender <= 4 ? 2200 : pagesToRender <= 8 ? 1900 : pagesToRender <= 15 ? 1500 : 1280;
+  const effectiveQuality = pagesToRender > 15 ? Math.min(quality, 0.82) : quality;
 
   const pageImages: RenderedPageImage[] = [];
 
@@ -112,7 +113,7 @@ export async function renderPdfPagesToImages(
           sourcePageNumber: pageNum,
           tilePosition,
           pageFormat: 'A3' as const,
-          dataUrl: encodeCanvasToJpeg(tileCanvas, quality),
+          dataUrl: encodeCanvasToJpeg(tileCanvas, effectiveQuality),
           mimeType: 'image/jpeg',
           width: tileCanvas.width,
           height: tileCanvas.height,
@@ -130,7 +131,7 @@ export async function renderPdfPagesToImages(
         sourcePageNumber: pageNum,
         tilePosition: 'full',
         pageFormat: aspectRatio > 1.15 ? 'A3' : 'A4',
-        dataUrl: encodeCanvasToJpeg(canvas, quality),
+        dataUrl: encodeCanvasToJpeg(canvas, effectiveQuality),
         mimeType: 'image/jpeg',
         width: canvas.width,
         height: canvas.height,

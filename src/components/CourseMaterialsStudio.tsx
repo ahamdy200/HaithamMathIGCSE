@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { COURSES, CourseMaterial, CourseVideo } from '../educato/courses';
 import { apiUrl } from '../utils/apiBase';
+import type { CourseMajorFolder } from '../types';
 
 interface CourseMaterialsStudioProps {
   initialCourseId?: string | null;
@@ -35,6 +36,9 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
   const [loadingCourseData, setLoadingCourseData] = useState(false);
 
   // Material / PDF Upload Form state
+  const [courseFolders, setCourseFolders] = useState<CourseMajorFolder[]>([]);
+  const [matMajorFolderId, setMatMajorFolderId] = useState<string>('mf-1');
+  const [matSubFolderId, setMatSubFolderId] = useState<string>('sf-1');
   const [matTitle, setMatTitle] = useState('');
   const [matCategory, setMatCategory] = useState<'explain' | 'homework' | 'resource'>('explain');
   const [matSourceMode, setMatSourceMode] = useState<'file' | 'link'>('file');
@@ -57,9 +61,10 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
   const loadCourseContent = useCallback(async () => {
     setLoadingCourseData(true);
     try {
-      const [mRes, vRes] = await Promise.all([
+      const [mRes, vRes, fRes] = await Promise.all([
         fetch(apiUrl(`/api/courses/${selectedCourseId}/materials?role=teacher`)),
         fetch(apiUrl(`/api/courses/${selectedCourseId}/videos`)),
+        fetch(apiUrl(`/api/courses/${selectedCourseId}/folders`)),
       ]);
       if (mRes.ok) {
         const mData = await mRes.json();
@@ -68,6 +73,10 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
       if (vRes.ok) {
         const vData = await vRes.json();
         setCustomVideos(Array.isArray(vData?.videos) ? vData.videos : []);
+      }
+      if (fRes.ok) {
+        const fData = await fRes.json();
+        setCourseFolders(Array.isArray(fData?.folders) ? fData.folders : []);
       }
     } catch {
       // ignore transient errors
@@ -120,6 +129,8 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
         body: JSON.stringify({
           title: matTitle.trim(),
           category: matCategory,
+          majorFolderId: matMajorFolderId,
+          subFolderId: matSubFolderId,
           type: matSourceMode === 'link' ? 'link' : 'pdf',
           fileBase64: matSourceMode === 'file' ? matFileBase64 : null,
           fileName: matSourceMode === 'file' ? matFile?.name : undefined,
@@ -208,20 +219,20 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#6b1226] via-[#800020] to-[#3b1d5e] rounded-2xl p-6 text-white shadow-lg border border-[#9f1239]">
+      <div className="bg-gradient-to-r from-[#214266] via-[#163252] to-[#0f243d] rounded-2xl p-6 text-white shadow-lg border border-[#2b517c]">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center">
               <UploadCloud className="w-6 h-6 text-amber-200" />
             </div>
             <div>
-              <span className="text-[11px] uppercase tracking-wider font-bold text-rose-100">
+              <span className="text-[11px] uppercase tracking-wider font-bold text-sky-100">
                 Educator Content Manager &bull; Mr.HaithamHusseinig
               </span>
               <h1 className="text-xl sm:text-2xl font-extrabold font-serif mt-0.5">
                 Upload Materials, PDFs &amp; Video Links to Course Sections
               </h1>
-              <p className="text-xs text-rose-100 mt-1">
+              <p className="text-xs text-sky-100 mt-1">
                 Publish Explain Notes, Homework PDFs (including A3 spreads), Educator Keys, and YouTube lessons directly to any group.
               </p>
             </div>
@@ -275,11 +286,11 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
         {/* Form 1: Upload PDF / Document / Resource Link */}
         <form
           onSubmit={handleUploadMaterial}
-          className="lg:col-span-7 bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-xs space-y-4"
+          className="lg:col-span-7 bg-white border border-[#d3dfec] rounded-2xl p-5 shadow-xs space-y-4"
         >
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#fff1f2] text-[#800020] flex items-center justify-center border border-[#fecdd3]">
+              <div className="w-8 h-8 rounded-lg bg-[#dce6f0] text-[#163252] flex items-center justify-center border border-[#c5d6e8]">
                 <FileText className="w-4 h-4" />
               </div>
               <div>
@@ -293,7 +304,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
                 type="button"
                 onClick={() => setMatSourceMode('file')}
                 className={`px-2.5 py-1 rounded-md font-semibold transition ${
-                  matSourceMode === 'file' ? 'bg-white text-[#800020] shadow-2xs' : 'text-slate-600'
+                  matSourceMode === 'file' ? 'bg-white text-[#163252] shadow-2xs' : 'text-slate-600'
                 }`}
               >
                 Upload File
@@ -302,11 +313,46 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
                 type="button"
                 onClick={() => setMatSourceMode('link')}
                 className={`px-2.5 py-1 rounded-md font-semibold transition ${
-                  matSourceMode === 'link' ? 'bg-white text-[#800020] shadow-2xs' : 'text-slate-600'
+                  matSourceMode === 'link' ? 'bg-white text-[#163252] shadow-2xs' : 'text-slate-600'
                 }`}
               >
                 External URL
               </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">Major Folder (1–10)</label>
+              <select
+                value={matMajorFolderId}
+                onChange={(e) => {
+                  setMatMajorFolderId(e.target.value);
+                  setMatSubFolderId('sf-1');
+                }}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold"
+              >
+                {courseFolders.map((mf, i) => (
+                  <option key={mf.id} value={mf.id}>
+                    {i + 1}. {mf.name}{mf.hiddenForStudents ? ' (Hidden from Students)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">Sub-Folder (1–10)</label>
+              <select
+                value={matSubFolderId}
+                onChange={(e) => setMatSubFolderId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold"
+              >
+                {(courseFolders.find((mf) => mf.id === matMajorFolderId)?.subFolders || []).map((sf, i) => (
+                  <option key={sf.id} value={sf.id}>
+                    Sub #{i + 1}: {sf.name}{sf.hiddenForStudents ? ' (Hidden)' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -335,7 +381,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
                 value={matTitle}
                 onChange={(e) => setMatTitle(e.target.value)}
                 placeholder="e.g. Ch.5 Straight Line Graphs Notes"
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#800020]"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#163252]"
                 required
               />
             </div>
@@ -353,9 +399,9 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
               />
               <label
                 htmlFor="course-material-file-input"
-                className="flex flex-col items-center justify-center border-2 border-dashed border-[#e5c1c9] hover:border-[#800020] rounded-xl p-5 cursor-pointer bg-[#fffcfd] hover:bg-[#fff5f7] transition text-center"
+                className="flex flex-col items-center justify-center border-2 border-dashed border-[#b8cde0] hover:border-[#163252] rounded-xl p-5 cursor-pointer bg-[#fffcfd] hover:bg-[#f4f8fc] transition text-center"
               >
-                <UploadCloud className="w-7 h-7 text-[#800020] mb-1.5" />
+                <UploadCloud className="w-7 h-7 text-[#163252] mb-1.5" />
                 {matFile ? (
                   <>
                     <p className="text-xs font-bold text-slate-900">{matFile.name}</p>
@@ -384,7 +430,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
                   value={matUrl}
                   onChange={(e) => setMatUrl(e.target.value)}
                   placeholder="https://drive.google.com/... or https://.../notes.pdf"
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#800020]"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#163252]"
                   required={matSourceMode === 'link'}
                 />
               </div>
@@ -397,7 +443,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
                 type="checkbox"
                 checked={matIsA3}
                 onChange={(e) => setMatIsA3(e.target.checked)}
-                className="rounded border-slate-300 text-[#800020]"
+                className="rounded border-slate-300 text-[#163252]"
               />
               <span>A3 Size Worksheet Spread (Auto-Split Ready)</span>
             </label>
@@ -408,7 +454,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
                 checked={matCategory === 'resource' ? true : matTeacherOnly}
                 disabled={matCategory === 'resource'}
                 onChange={(e) => setMatTeacherOnly(e.target.checked)}
-                className="rounded border-slate-300 text-[#800020]"
+                className="rounded border-slate-300 text-[#163252]"
               />
               <span className="inline-flex items-center gap-1">
                 <Lock className="w-3 h-3 text-amber-600" /> Educator Only (Hide from Students)
@@ -419,7 +465,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
           <button
             type="submit"
             disabled={uploadingMaterial}
-            className="w-full py-2.5 rounded-xl bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold flex items-center justify-center gap-2 transition disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl bg-[#163252] hover:bg-[#0f243d] text-white text-xs font-bold flex items-center justify-center gap-2 transition disabled:opacity-50"
           >
             {uploadingMaterial ? (
               <>
@@ -436,7 +482,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
         {/* Form 2: Add YouTube Video Link */}
         <form
           onSubmit={handleAddVideo}
-          className="lg:col-span-5 bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-xs space-y-4"
+          className="lg:col-span-5 bg-white border border-[#d3dfec] rounded-2xl p-5 shadow-xs space-y-4"
         >
           <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
             <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center border border-red-200">
@@ -455,7 +501,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
               value={vidTitle}
               onChange={(e) => setVidTitle(e.target.value)}
               placeholder="e.g. Ch.5 Gradients & Straight Lines Walkthrough"
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#800020]"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#163252]"
               required
             />
           </div>
@@ -467,7 +513,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
               value={vidUrl}
               onChange={(e) => setVidUrl(e.target.value)}
               placeholder="https://www.youtube.com/watch?v=..."
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#800020]"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#163252]"
               required
             />
           </div>
@@ -479,7 +525,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
               value={vidDuration}
               onChange={(e) => setVidDuration(e.target.value)}
               placeholder="25:00"
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#800020]"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#163252]"
             />
           </div>
 
@@ -505,7 +551,7 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-[#800020]" />
+            <BookOpen className="w-4 h-4 text-[#163252]" />
             <h2 className="text-sm font-bold text-slate-900">
               Uploaded Section Content — {selectedCourse.name}
             </h2>

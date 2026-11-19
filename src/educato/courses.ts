@@ -30,6 +30,8 @@ export interface CourseMaterial {
   size?: string;
   url: string;
   category?: 'explain' | 'homework' | 'resource';
+  majorFolderId?: string;
+  subFolderId?: string;
   isA3?: boolean;
   teacherOnly?: boolean;
 }
@@ -67,7 +69,7 @@ export const COURSES: Course[] = [
     code: 'PRE-IGCSE Y9',
     board: 'Pre-IGCSE Foundation',
     icon: 'H',
-    color: '#800020',
+    color: '#163252',
     teacher: 'Mr. Haitham Hussien',
     description:
       'Year 9 Pre-IGCSE Mathematics covering BIDMAS, directed numbers, algebraic manipulation, linear equations, and foundational geometry.',
@@ -134,7 +136,7 @@ export const COURSES: Course[] = [
     code: '0580 / 0980',
     board: 'Cambridge IGCSE',
     icon: 'H',
-    color: '#9f1239',
+    color: '#214266',
     teacher: 'Mr. Haitham Hussien',
     description:
       'Cambridge IGCSE Mathematics (0580 / 0980 Extended) covering Papers 2 & 4 with step-by-step method feedback and structured homework review.',

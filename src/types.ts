@@ -158,8 +158,23 @@ export interface HomeworkAssignmentRecord {
   instructions: string;
   dueDate: string;
   gradingSystem: GradingSystem;
+  modelAnswerKeyTitle?: string;
+  hasCustomModelKey?: boolean;
   createdAt: string;
   createdBy: string;
+}
+
+export interface CourseSubFolder {
+  id: string;
+  name: string;
+  hiddenForStudents?: boolean;
+}
+
+export interface CourseMajorFolder {
+  id: string;
+  name: string;
+  hiddenForStudents?: boolean;
+  subFolders: CourseSubFolder[];
 }
 
 export interface PortalNotification {

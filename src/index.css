@@ -1,11 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@500;600;700&display=swap');
 @import "tailwindcss";
 
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #fbfaf8;
-    color: #1e293b;
+    background-color: #F7F6F2;
+    color: #16263a;
     margin: 0;
     padding: 0;
     overflow-x: hidden;
@@ -16,44 +16,33 @@
   }
 }
 
-/* White Mathematical Classroom & Burgundy Grid Patterns */
+/* Warm Paper & Subtle Blueprint Grid */
 .math-paper {
   background-color: #ffffff;
   background-image: 
-    linear-gradient(rgba(128, 0, 32, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(128, 0, 32, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(19, 41, 75, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(19, 41, 75, 0.04) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
 .math-paper-dense {
-  background-color: #faf8f5;
+  background-color: #F7F6F2;
   background-image: 
-    linear-gradient(rgba(136, 19, 55, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(136, 19, 55, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(19, 41, 75, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(19, 41, 75, 0.045) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 
-/* Academic Regal Burgundy Textures */
-.burgundy-banner {
-  background: linear-gradient(135deg, #701a2d 0%, #881337 50%, #4c0519 100%);
+/* Deep Academic Navy Surfaces */
+.navy-notebook-banner {
+  background: linear-gradient(135deg, #13294B 0%, #1B365D 100%);
   color: #ffffff;
 }
 
-.burgundy-card-light {
-  background-color: #ffffff;
-  border: 1px solid #fecdd3;
-  box-shadow: 0 4px 15px -3px rgba(128, 0, 32, 0.05);
-}
-
-.chalkboard-burgundy {
-  background: radial-gradient(circle at 50% 15%, #631124 0%, #3d0512 100%);
-  border: 1px solid rgba(244, 63, 94, 0.25);
-  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.4);
-}
-
-.chalkboard-slate {
-  background: radial-gradient(circle at 50% 15%, #631124 0%, #3d0512 100%);
-  border: 1px solid rgba(244, 63, 94, 0.25);
+.chalkboard-navy {
+  background: radial-gradient(circle at 50% 15%, #24476e 0%, #163252 100%);
+  border: 1px solid rgba(220, 230, 240, 0.22);
+  box-shadow: inset 0 0 60px rgba(8, 18, 32, 0.35);
 }
 
 .chalkboard-green {
@@ -67,9 +56,9 @@
   letter-spacing: 0.02em;
 }
 
-/* Classical mathematical serif headers and notation */
+/* Editorial serif headers */
 .math-serif {
-  font-family: 'Crimson Pro', Georgia, serif;
+  font-family: 'Fraunces', Georgia, serif;
 }
 
 /* Ink-friendly paper preview mode for students & teachers */

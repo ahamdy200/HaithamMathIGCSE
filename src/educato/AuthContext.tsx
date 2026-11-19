@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { STUDENTS, PARENTS, TEACHER_ACCOUNT, DOMAINS } from './students';
+import { STUDENTS, PARENTS, TEACHER_ACCOUNT, ASSISTANT_ACCOUNT, DOMAINS } from './students';
 import type { DirectorySeatUser } from '../types';
 
 export interface AuthUser {
@@ -8,6 +8,7 @@ export interface AuthUser {
   username: string;
   fullName: string;
   role: 'student' | 'teacher' | 'parent';
+  isAssistant?: boolean;
   grade?: string;
   section?: string;
   linkedStudentId?: number;
@@ -51,6 +52,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username: TEACHER_ACCOUNT.username,
         fullName: TEACHER_ACCOUNT.fullName,
         role: 'teacher',
+      };
+    }
+
+    if (trimUser === ASSISTANT_ACCOUNT.username && trimPass === ASSISTANT_ACCOUNT.password) {
+      return {
+        id: ASSISTANT_ACCOUNT.id,
+        domain: cleanDomain,
+        username: ASSISTANT_ACCOUNT.username,
+        fullName: ASSISTANT_ACCOUNT.fullName,
+        role: 'teacher',
+        isAssistant: true,
       };
     }
 

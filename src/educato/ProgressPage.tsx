@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { CheckCircle2, Target, FileText, Mail } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { Course, CourseEnrollment } from './courses';
 import { apiUrl } from '../utils/apiBase';
@@ -102,46 +103,56 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
     <div className="max-w-6xl mx-auto space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="math-serif text-2xl sm:text-3xl font-bold text-[#13294B]">
             {isTeacher
-              ? 'Statistics Tracker (Stat) & Notification Gateway'
+              ? 'Class Progress & Parent Emails'
               : isParent
-              ? `Child Statistics — ${user?.linkedStudentName}`
-              : 'My Course Statistics'}
+              ? `Child Progress — ${user?.linkedStudentName}`
+              : 'My Course Progress'}
           </h1>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             {isTeacher
-              ? `Cohort Analytics · ${stats?.activeDirectorySeats || 100} Active Accounts`
+              ? "Mr. Haitham's Class Overview · Summary of marked homework and parent correspondence"
               : 'Only Mr. Haitham-approved final reports are counted here.'}
           </p>
         </div>
         {isTeacher && (
           <span
-            className={`px-3 py-1.5 rounded-full text-xs font-bold border ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
               resendConfigured
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : 'bg-amber-50 text-amber-800 border-amber-200'
             }`}
           >
-            {resendConfigured ? 'Resend Live Key Connected' : 'Resend Local Outbox Preview Mode'}
+            {resendConfigured ? 'Parent Email Delivery Ready' : 'Outbox Preview Mode'}
           </span>
         )}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Approved Reports" value={String(gradedCount)} icon="✅" color="green" />
-        <StatCard label="Approved Average" value={gradedCount > 0 ? `${avgPct}%` : '—'} icon="🎯" color="blue" />
+        <StatCard
+          label="Approved Reports"
+          value={String(gradedCount)}
+          icon={<CheckCircle2 className="w-5 h-5 text-emerald-700" />}
+          color="green"
+        />
+        <StatCard
+          label="Approved Average"
+          value={gradedCount > 0 ? `${avgPct}%` : '—'}
+          icon={<Target className="w-5 h-5 text-[#1B365D]" />}
+          color="blue"
+        />
         <StatCard
           label={isTeacher ? 'Total Submissions' : isParent ? 'Approved Courses' : 'Total Submissions'}
           value={String(isParent ? visibleCourses.length : totalCount)}
-          icon="📝"
-          color="purple"
+          icon={<FileText className="w-5 h-5 text-[#1B365D]" />}
+          color="navy"
         />
         <StatCard
-          label={isTeacher ? 'Emails Logged / Sent' : 'Parent Notifications'}
+          label={isTeacher ? 'Parent Emails Sent' : 'Parent Notifications'}
           value={String(outbox.length)}
-          icon="✉️"
-          color="orange"
+          icon={<Mail className="w-5 h-5 text-amber-700" />}
+          color="amber"
         />
       </div>
 
@@ -154,12 +165,12 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
           ) : (
             <div className="space-y-2.5">
               {Object.entries(bySystem).map(([sys, val]: [string, any]) => (
-                <div key={sys} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <div key={sys} className="flex items-center justify-between p-3 rounded-xl bg-[#f7f9fc] border border-gray-100">
                   <div>
                     <span className="text-xs font-bold text-gray-900">{sys}</span>
                     <p className="text-[11px] text-gray-500">{val.count} approved assessment(s)</p>
                   </div>
-                  <span className="text-sm font-extrabold text-[#800020]">{val.avgPercentage}% avg</span>
+                  <span className="text-sm font-extrabold text-[#163252]">{val.avgPercentage}% avg</span>
                 </div>
               ))}
             </div>
@@ -173,7 +184,7 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
           ) : (
             <div className="space-y-2">
               {weakSpots.map((w: any) => (
-                <div key={w.label} className="flex items-center justify-between p-3 rounded-xl bg-rose-50/60 border border-rose-100">
+                <div key={w.label} className="flex items-center justify-between p-3 rounded-xl bg-rose-50/60 border border-[#dce6f0]">
                   <span className="text-xs font-bold text-gray-900">{w.label}</span>
                   <span className="text-xs font-semibold text-rose-700">
                     {w.misses} missed / {w.total} attempt(s)
@@ -208,7 +219,7 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
                     <td className="py-2.5 pr-3 text-gray-700">{r.assignment}</td>
                     <td className="py-2.5 pr-3 uppercase text-[10px] font-bold text-indigo-700">{r.kind}</td>
                     <td className="py-2.5 pr-3 uppercase text-[10px] font-bold text-gray-600">{r.gradingSystem}</td>
-                    <td className="py-2.5 pr-3 font-bold text-[#800020]">{r.earnedMarks}/{r.totalMarks} ({r.percentage}%)</td>
+                    <td className="py-2.5 pr-3 font-bold text-[#163252]">{r.earnedMarks}/{r.totalMarks} ({r.percentage}%)</td>
                     <td className="py-2.5 text-gray-700">{r.grade}</td>
                   </tr>
                 ))}
@@ -218,14 +229,14 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
         </div>
       )}
 
-      {/* Notification Gateway — Resend Email Outbox */}
+      {/* Parent Emails Sent Log */}
       {(isTeacher || isParent) && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 space-y-4 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-sm font-bold text-gray-900">Notification Gateway — Resend Parent Email Log</h2>
-              <p className="text-xs text-gray-500">
-                Triggered automatically after Mr. Haitham approves &amp; releases each final report.
+              <h2 className="math-serif text-base font-bold text-[#13294B]">Parent Emails Sent</h2>
+              <p className="text-xs text-slate-500">
+                Sent automatically after Mr. Haitham approves &amp; releases each final report.
               </p>
             </div>
             {isTeacher && (
@@ -233,8 +244,8 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
                 type="email"
                 value={resendTo}
                 onChange={(e) => setResendTo(e.target.value)}
-                placeholder="Optional override recipient for Resend test"
-                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs w-64"
+                placeholder="Optional test email address"
+                className="px-3 py-1.5 rounded-lg border border-[#E5E7EB] text-xs w-64"
               />
             )}
           </div>
@@ -250,7 +261,7 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
           ) : (
             <div className="space-y-2.5">
               {outbox.map((mail) => (
-                <div key={mail.id} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/70 space-y-2">
+                <div key={mail.id} className="p-3.5 rounded-xl border border-gray-100 bg-[#f7f9fc]/70 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <span
@@ -279,7 +290,7 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
                         <button
                           disabled={resendBusyId === mail.id}
                           onClick={() => handleResendEmail(mail.id)}
-                          className="px-3 py-1.5 rounded-lg bg-[#800020] text-white text-xs font-semibold hover:bg-[#6b1226] disabled:opacity-60"
+                          className="px-3 py-1.5 rounded-lg bg-[#163252] text-white text-xs font-semibold hover:bg-[#214266] disabled:opacity-60"
                         >
                           {resendBusyId === mail.id ? 'Sending...' : 'Re-send'}
                         </button>
@@ -302,27 +313,37 @@ export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) 
   );
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  color: string;
+}) {
   const colors: Record<string, string> = {
-    blue: 'bg-blue-50',
-    green: 'bg-green-50',
-    purple: 'bg-purple-50',
-    orange: 'bg-orange-50',
+    blue: 'bg-[#F3F6FA]',
+    navy: 'bg-[#EEF3F9]',
+    green: 'bg-emerald-50',
+    amber: 'bg-amber-50',
   };
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4">
-      <div className={`w-10 h-10 ${colors[color] || 'bg-gray-50'} rounded-xl flex items-center justify-center mb-3`}>
-        <span className="text-xl">{icon}</span>
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-2xs">
+      <div className={`w-10 h-10 ${colors[color] || 'bg-[#F3F6FA]'} rounded-xl flex items-center justify-center mb-3`}>
+        {icon}
       </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+      <p className="math-serif text-2xl font-bold text-[#13294B]">{value}</p>
+      <p className="text-xs text-slate-500 mt-0.5">{label}</p>
     </div>
   );
 }
 
 function InfoMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+    <div className="bg-[#f7f9fc] rounded-lg p-3 border border-gray-100">
       <p className="text-[11px] text-gray-500">{label}</p>
       <p className="text-sm font-semibold text-gray-900 mt-0.5">{value}</p>
     </div>

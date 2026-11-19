@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Bell } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { DashboardPage } from './DashboardPage';
 import { CoursePage } from './CoursePage';
@@ -8,6 +9,7 @@ import { useAuth } from './AuthContext';
 import { StudentHomeworkPortal } from '../components/StudentHomeworkPortal';
 import { TeacherModelKeyViewer } from '../components/TeacherModelKeyViewer';
 import { CourseMaterialsStudio } from '../components/CourseMaterialsStudio';
+import { LessonSketchSvg } from '../components/LessonSketchSvg';
 import { apiUrl } from '../utils/apiBase';
 import type { PortalNotification } from '../types';
 
@@ -24,6 +26,7 @@ export function Layout() {
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   const [focusSubmissionId, setFocusSubmissionId] = useState<string | null>(null);
+  const [activeLessonTopic, setActiveLessonTopic] = useState<string>('');
 
   const isTeacher = user?.role === 'teacher';
   const isParent = user?.role === 'parent';
@@ -114,11 +117,14 @@ export function Layout() {
         return;
       }
     }
+    if (view !== 'course') {
+      setActiveLessonTopic('');
+    }
     setActiveView(view);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#F7F6F2]">
       <Sidebar
         activeCourseId={activeCourseId}
         activeView={activeView}
@@ -130,19 +136,38 @@ export function Layout() {
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
-      <main className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-[68px]' : 'ml-64'}`}>
+      <main className={`relative min-h-screen transition-all duration-300 ${sidebarCollapsed ? 'ml-[68px]' : 'ml-64'}`}>
+        {/* Large 30% Transparent Dynamic Math Shape Watermark (updates per chosen course/lesson) */}
+        <div className="fixed bottom-2 right-4 w-[480px] sm:w-[660px] h-[300px] sm:h-[400px] pointer-events-none z-0 overflow-hidden">
+          <LessonSketchSvg
+            topicText={
+              activeLessonTopic ||
+              (activeView === 'course' && activeCourse
+                ? `${activeCourse.name} ${activeCourse.description}`
+                : activeView === 'progress'
+                ? 'statistics histogram probability'
+                : activeView === 'homework-studio'
+                ? 'linear equations algebra'
+                : 'OL Edexcel Linear')
+            }
+            courseId={activeView === 'course' ? activeCourse?.id || '' : ''}
+            variant="watermark"
+            watermarkTone="light"
+          />
+        </div>
+
         {/* Top Notification Header */}
-        <div className="px-6 lg:px-8 pt-4 flex items-center justify-end relative">
+        <div className="relative z-20 px-6 lg:px-8 pt-4 flex items-center justify-end">
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowNotificationsMenu((v) => !v)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-gray-200 hover:border-[#800020]/40 shadow-2xs text-xs font-semibold text-gray-700 transition"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-[#E5E7EB] hover:border-[#1B365D]/40 shadow-2xs text-xs font-semibold text-gray-700 transition"
             >
-              <span>🔔</span>
+              <Bell className="w-3.5 h-3.5 text-[#1B365D]" />
               <span>Notifications</span>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-[#800020] text-white text-[10px] font-bold">
+                <span className="px-1.5 py-0.5 rounded-full bg-[#1B365D] text-white text-[10px] font-bold">
                   {unreadCount}
                 </span>
               )}
@@ -150,7 +175,7 @@ export function Layout() {
 
             {showNotificationsMenu && (
               <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-[#f7f9fc]">
                   <span className="text-xs font-bold text-gray-900">Portal Notifications</span>
                   <button
                     type="button"
@@ -169,7 +194,7 @@ export function Layout() {
                       return (
                         <div
                           key={n.id}
-                          className={`p-3.5 text-xs space-y-1 ${isUnread ? 'bg-rose-50/40' : 'bg-white'}`}
+                          className={`p-3.5 text-xs space-y-1 ${isUnread ? 'bg-[#eef4fa]/70' : 'bg-white'}`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-bold text-gray-900">{n.title}</span>
@@ -177,7 +202,7 @@ export function Layout() {
                               <button
                                 type="button"
                                 onClick={() => handleMarkNotificationRead(n.id)}
-                                className="text-[10px] font-semibold text-[#800020] hover:underline shrink-0"
+                                className="text-[10px] font-semibold text-[#163252] hover:underline shrink-0"
                               >
                                 Mark read
                               </button>
@@ -200,7 +225,7 @@ export function Layout() {
                                   handleSelectView('homework-studio');
                                 }
                               }}
-                              className="text-[#800020] font-semibold hover:underline"
+                              className="text-[#163252] font-semibold hover:underline"
                             >
                               {n.type === 'submission'
                                 ? 'Review Paper →'
@@ -219,7 +244,7 @@ export function Layout() {
           </div>
         </div>
 
-        <div className="p-6 lg:p-8 pt-4">
+        <div className="relative z-10 p-6 lg:p-8 pt-4">
           {activeView === 'dashboard' && (
             <DashboardPage
               enrollment={enrollment}
@@ -230,6 +255,7 @@ export function Layout() {
               onRefreshEnrollment={refreshEnrollment}
               onSelectCourse={setActiveCourseId}
               onSelectView={handleSelectView}
+              onHoverTopicChange={setActiveLessonTopic}
             />
           )}
           {activeView === 'course' && activeCourse && (
@@ -237,6 +263,7 @@ export function Layout() {
               course={activeCourse}
               onOpenModelKey={isTeacher ? () => handleSelectView('modelkey') : undefined}
               onOpenUploadStudio={isTeacher ? () => handleSelectView('upload-studio') : undefined}
+              onActiveTopicChange={setActiveLessonTopic}
             />
           )}
           {activeView === 'progress' && (

@@ -1,4 +1,5 @@
 import React from 'react';
+import { ClipboardCheck, UploadCloud, BookOpen, FileCheck2 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { Course } from './courses';
 
@@ -31,14 +32,14 @@ export function Sidebar({
 
   const navItems = isTeacher
     ? [
-        { id: 'homework-studio', label: 'Approval & Review Inbox', badge: 'Teacher', icon: '📝' },
-        { id: 'upload-studio', label: 'Upload PDFs & Videos', badge: 'Content', icon: '📤' },
-        { id: 'modelkey', label: 'Official Model Keys', badge: 'Educator', icon: '📘' },
+        { id: 'homework-studio', label: 'Approval & Review Inbox', badge: 'Teacher', Icon: ClipboardCheck },
+        { id: 'upload-studio', label: 'Upload PDFs & Videos', badge: 'Content', Icon: UploadCloud },
+        { id: 'modelkey', label: 'Official Model Keys', badge: 'Educator', Icon: BookOpen },
       ]
     : isParent
-    ? [{ id: 'homework-studio', label: 'Approved Child Reports', badge: 'Parent', icon: '📄' }]
+    ? [{ id: 'homework-studio', label: 'Approved Child Reports', badge: 'Parent', Icon: FileCheck2 }]
     : isApprovedStudent
-    ? [{ id: 'homework-studio', label: 'Homework & Reports', badge: 'Submit', icon: '📝' }]
+    ? [{ id: 'homework-studio', label: 'Homework & Reports', badge: 'Submit', Icon: ClipboardCheck }]
     : [];
 
   return (
@@ -51,12 +52,12 @@ export function Sidebar({
       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
         {!collapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 bg-gradient-to-br from-[#800020] to-[#590e1f] rounded-lg flex items-center justify-center text-white font-serif font-extrabold text-lg shrink-0 shadow-xs">
+            <div className="w-9 h-9 bg-[#163252] rounded-lg flex items-center justify-center text-white font-serif font-extrabold text-lg shrink-0 shadow-xs">
               H
             </div>
             <div className="min-w-0">
-              <span className="font-bold text-gray-900 text-sm block truncate">Mr. Haitham Hub</span>
-              <span className="text-[10px] text-gray-400 block truncate">IGCSE Mathematics Portal</span>
+              <span className="font-bold text-[#163252] text-sm block truncate math-serif">Math made easy</span>
+              <span className="text-[10px] text-[#5b7797] block truncate teacher-handwriting">The Blue Notebook</span>
             </div>
           </div>
         )}
@@ -109,40 +110,43 @@ export function Sidebar({
 
         {navItems.length > 0 && !collapsed && (
           <div className="px-3 pt-4 pb-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#800020]">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#163252]">
               {isTeacher ? 'Educator Workspace' : isParent ? 'Parent Portal' : 'Homework & Feedback'}
             </p>
           </div>
         )}
 
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => onSelectView(item.id)}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl mb-0.5 transition text-left ${
-              activeView === item.id
-                ? 'bg-[#fdf2f4] text-[#800020] font-semibold border border-[#f0d8dd]'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`}
-            title={item.label}
-          >
-            <span className="text-base flex-shrink-0">{item.icon}</span>
-            {!collapsed && (
-              <>
-                <span className="text-xs flex-1 truncate">{item.label}</span>
-                {item.id === 'homework-studio' && unreadNotificationCount > 0 ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#800020] text-white font-bold">
-                    {unreadNotificationCount} new
-                  </span>
-                ) : (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">
-                    {item.badge}
-                  </span>
-                )}
-              </>
-            )}
-          </button>
-        ))}
+        {navItems.map((item) => {
+          const NavIcon = item.Icon;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onSelectView(item.id)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl mb-0.5 transition text-left ${
+                activeView === item.id
+                  ? 'bg-[#eef4fa] text-[#1B365D] font-semibold border border-[#c5d6e8]'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              title={item.label}
+            >
+              <NavIcon className="w-4 h-4 flex-shrink-0" />
+              {!collapsed && (
+                <>
+                  <span className="text-xs flex-1 truncate">{item.label}</span>
+                  {item.id === 'homework-studio' && unreadNotificationCount > 0 ? (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#1B365D] text-white font-bold">
+                      {unreadNotificationCount} new
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">
+                      {item.badge}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          );
+        })}
 
         {!collapsed && (
           <div className="px-3 pt-4 pb-2">
@@ -195,7 +199,7 @@ export function Sidebar({
       <div className="p-3 border-t border-gray-100">
         {!collapsed && user && (
           <div className="flex items-center gap-2.5 px-2 py-1.5 mb-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#800020] to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[#163252] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
               {user.fullName
                 .split(' ')
                 .map((n) => n[0])
@@ -206,7 +210,7 @@ export function Sidebar({
               <p className="text-xs font-semibold text-gray-900 truncate">{user.fullName}</p>
               <p className="text-[11px] text-gray-400 truncate">
                 {user.role === 'teacher'
-                  ? `Educator · ${user.domain || 'Mr.HaithamHusseinig'}`
+                  ? `${user.isAssistant ? 'Assistant' : 'Educator'} · ${user.domain || 'Mr.HaithamHusseinig'}`
                   : user.role === 'parent'
                   ? `Parent · ${user.linkedStudentName || 'Student'}`
                   : `${user.domain || 'Mr.HaithamHusseinig'} · ${user.grade} - ${user.section}`}
