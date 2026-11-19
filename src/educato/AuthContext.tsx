@@ -12,6 +12,7 @@ export interface AuthUser {
   grade?: string;
   section?: string;
   linkedStudentId?: number;
+  linkedStudentIds?: number[];
   linkedStudentName?: string;
   parentEmail?: string;
 }
@@ -139,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           grade: seat.grade,
           section: seat.section,
           linkedStudentId: seat.linkedStudentId,
+          linkedStudentIds: seat.linkedStudentIds,
           linkedStudentName: seat.linkedStudentName,
           parentEmail: seat.parentEmail,
         };

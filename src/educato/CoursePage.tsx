@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Folder, FolderOpen, Pencil, Eye, EyeOff } from 'lucide-react';
+import { Folder, FolderOpen, Pencil, Eye, EyeOff, ChevronDown, ChevronRight, FileText, Video, Upload } from 'lucide-react';
 import { Course, CourseVideo, CourseMaterial, DEFAULT_COURSE_QUIZZES } from './courses';
 import { useAuth } from './AuthContext';
 import { StudentHomeworkPortal } from '../components/StudentHomeworkPortal';
@@ -55,12 +55,30 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
   const [newMatFile, setNewMatFile] = useState<File | null>(null);
   const [newMatFileBase64, setNewMatFileBase64] = useState<string | null>(null);
   const [newMatIsA3, setNewMatIsA3] = useState(false);
+  const [newMatHidden, setNewMatHidden] = useState(false);
   const [uploadingMat, setUploadingMat] = useState(false);
+
+  // Inline Sub-Folder Upload Tool state
+  const [inlineUploadTarget, setInlineUploadTarget] = useState<{
+    majorFolderId: string;
+    subFolderId: string;
+  } | null>(null);
+  const [inlineMatTitle, setInlineMatTitle] = useState('');
+  const [inlineMatCategory, setInlineMatCategory] = useState<'explain' | 'homework' | 'resource'>('explain');
+  const [inlineMatUrl, setInlineMatUrl] = useState('');
+  const [inlineMatFile, setInlineMatFile] = useState<File | null>(null);
+  const [inlineMatFileBase64, setInlineMatFileBase64] = useState<string | null>(null);
+  const [inlineMatIsA3, setInlineMatIsA3] = useState(false);
+  const [inlineMatHidden, setInlineMatHidden] = useState(false);
+  const [uploadingInline, setUploadingInline] = useState(false);
 
   // 10 Major Folders x 10 Sub-Folders state (Renameable at any time)
   const [courseFolders, setCourseFolders] = useState<CourseMajorFolder[]>([]);
   const [selectedMajorFolderId, setSelectedMajorFolderId] = useState<string>('mf-1');
   const [selectedSubFolderId, setSelectedSubFolderId] = useState<string>('all');
+  const [expandedMajorIds, setExpandedMajorIds] = useState<Record<string, boolean>>({ 'mf-1': true });
+  const [expandedSubIds, setExpandedSubIds] = useState<Record<string, boolean>>({});
+  const [studentPreviewMode, setStudentPreviewMode] = useState<boolean>(false);
   const [renamingFolderTarget, setRenamingFolderTarget] = useState<{
     majorFolderId: string;
     subFolderId?: string;
@@ -255,6 +273,7 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
     setUploadingMat(true);
     try {
       const targetSubId = selectedSubFolderId !== 'all' ? selectedSubFolderId : 'sf-1';
+      const hiddenFlag = newMatCategory === 'resource' ? true : newMatHidden;
       const res = await fetch(apiUrl(`/api/courses/${course.id}/materials`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -268,7 +287,8 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
           fileName: newMatFile?.name,
           url: newMatUrl.trim(),
           isA3: newMatIsA3,
-          teacherOnly: newMatCategory === 'resource',
+          teacherOnly: hiddenFlag,
+          hiddenForStudents: hiddenFlag,
         }),
       });
       if (res.ok) {
@@ -277,10 +297,78 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
         setNewMatFile(null);
         setNewMatFileBase64(null);
         setNewMatIsA3(false);
+        setNewMatHidden(false);
         await loadCourseExtensions();
       }
     } finally {
       setUploadingMat(false);
+    }
+  };
+
+  const handleSelectInlineMaterialFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setInlineMatFile(file);
+    if (!inlineMatTitle.trim()) setInlineMatTitle(file.name.replace(/\.[^.]+$/, ''));
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setInlineMatFileBase64(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleInlineSubUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inlineUploadTarget || !inlineMatTitle.trim() || (!inlineMatFileBase64 && !inlineMatUrl.trim())) return;
+    setUploadingInline(true);
+    try {
+      const hiddenFlag = inlineMatCategory === 'resource' ? true : inlineMatHidden;
+      const res = await fetch(apiUrl(`/api/courses/${course.id}/materials`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: inlineMatTitle.trim(),
+          category: inlineMatCategory,
+          majorFolderId: inlineUploadTarget.majorFolderId,
+          subFolderId: inlineUploadTarget.subFolderId,
+          type: inlineMatFileBase64 ? 'pdf' : 'link',
+          fileBase64: inlineMatFileBase64,
+          fileName: inlineMatFile?.name,
+          url: inlineMatUrl.trim(),
+          isA3: inlineMatIsA3,
+          teacherOnly: hiddenFlag,
+          hiddenForStudents: hiddenFlag,
+        }),
+      });
+      if (res.ok) {
+        setInlineMatTitle('');
+        setInlineMatUrl('');
+        setInlineMatFile(null);
+        setInlineMatFileBase64(null);
+        setInlineMatIsA3(false);
+        setInlineMatHidden(false);
+        setInlineUploadTarget(null);
+        await loadCourseExtensions();
+      }
+    } finally {
+      setUploadingInline(false);
+    }
+  };
+
+  const handleToggleMaterialVisibility = async (matId: string, nextHidden: boolean) => {
+    try {
+      const res = await fetch(apiUrl(`/api/courses/${course.id}/materials/${matId}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hiddenForStudents: nextHidden }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.materials)) setCustomMaterials(data.materials);
+        else await loadCourseExtensions();
+      }
+    } catch {
+      // ignore transient error
     }
   };
 
@@ -353,12 +441,13 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
   };
 
   const allCourseMaterials = [...customMaterials, ...course.materials];
-  const visibleMaterials = isTeacher
-    ? allCourseMaterials
-    : allCourseMaterials.filter((m) => !m.teacherOnly);
+  const visibleMaterials =
+    isTeacher && !studentPreviewMode
+      ? allCourseMaterials
+      : allCourseMaterials.filter((m) => !m.teacherOnly && !m.hiddenForStudents);
   const explainMaterials = visibleMaterials.filter((m) => m.category === 'explain' || (!m.category && !m.teacherOnly));
   const homeworkMaterials = visibleMaterials.filter((m) => m.category === 'homework');
-  const keyMaterials = visibleMaterials.filter((m) => m.teacherOnly);
+  const keyMaterials = visibleMaterials.filter((m) => m.teacherOnly || m.hiddenForStudents);
 
   const tabs: { key: CourseTab; label: string; icon: React.ReactNode }[] = [
     {
@@ -569,7 +658,15 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
           )}
 
           {allVideos.length === 0 ? (
-            <EmptyState icon="🎬" text="No videos available yet" />
+            <div className="bg-white rounded-2xl border border-dashed border-[#E5E7EB] py-12 px-4 text-center">
+              <Video className="w-8 h-8 text-[#1B365D]/40 mx-auto" />
+              <p className="text-slate-600 font-medium text-sm mt-3">No lesson videos added yet.</p>
+              {isTeacher && (
+                <p className="text-slate-400 text-xs mt-1">
+                  Paste a YouTube link above to publish a recorded lesson for this class.
+                </p>
+              )}
+            </div>
           ) : (
             allVideos.map((video, i) => {
               const hasYt = Boolean(toYouTubeEmbedUrl(video.youtubeUrl || video.url));
@@ -624,363 +721,631 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
 
       {activeTab === 'materials' && (
         <div className="space-y-6">
-          {/* 10 Major Folders x 10 Sub-Folders Explorer with Rename Tool */}
+          {/* Lined Expandable Folder & Sub-Folder Tree */}
           {(() => {
-            const activeMajor =
-              courseFolders.find((f) => f.id === selectedMajorFolderId) || courseFolders[0];
-            const itemsInMajor = activeMajor
-              ? visibleMaterials.filter((m) => resolveMaterialMajorId(m) === activeMajor.id)
-              : visibleMaterials;
-            const filteredFolderItems =
-              selectedSubFolderId === 'all'
-                ? itemsInMajor
-                : itemsInMajor.filter((m) => resolveMaterialSubId(m) === selectedSubFolderId);
+            const simulatingStudent = isTeacher && studentPreviewMode;
+            const displayedMajors = simulatingStudent
+              ? courseFolders.filter((f) => !f.hiddenForStudents)
+              : courseFolders;
 
             return (
-              <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-5 shadow-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 space-y-4 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
                   <div>
-                    <h3 className="text-sm font-bold text-gray-900">
-                      Course Folders (10 Major Folders &times; 10 Sub-Folders)
+                    <h3 className="math-serif text-base font-bold text-[#13294B]">
+                      Course Content &amp; Folders ({displayedMajors.length} Units)
                     </h3>
-                    <p className="text-xs text-gray-500">
-                      {isTeacher
-                        ? 'Click any major folder or sub-folder to browse PDFs, or click Rename to customize any folder name at any time.'
-                        : 'Select a major folder and sub-folder below to open your notes and homework sheets.'}
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {isTeacher && !simulatingStudent
+                        ? 'Expand any unit or subfolder inline to browse files, toggle visibility, or rename.'
+                        : 'Expand a unit and subfolder below to open your notes and homework sheets.'}
                     </p>
                   </div>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#EEF3F9] text-[#1B365D] border border-[#DCE5F0]">
-                    {courseFolders.length || 10} Major Folders
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const anyOpen = Object.values(expandedMajorIds).some(Boolean);
+                        if (anyOpen) {
+                          setExpandedMajorIds({});
+                          setExpandedSubIds({});
+                        } else {
+                          const allOpen: Record<string, boolean> = {};
+                          for (const f of displayedMajors) allOpen[f.id] = true;
+                          setExpandedMajorIds(allOpen);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-[#E5E7EB] bg-[#FAF9F5] hover:bg-[#EEF3F9] text-[11px] font-semibold text-[#1B365D] transition"
+                    >
+                      {Object.values(expandedMajorIds).some(Boolean) ? 'Collapse All' : 'Expand All Units'}
+                    </button>
+                    {isTeacher && (
+                      <div className="inline-flex rounded-lg border border-[#E5E7EB] overflow-hidden text-[11px] font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setStudentPreviewMode(false)}
+                          className={`px-2.5 py-1.5 transition ${
+                            !studentPreviewMode
+                              ? 'bg-[#1B365D] text-white'
+                              : 'bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          Teacher View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudentPreviewMode(true)}
+                          className={`px-2.5 py-1.5 transition ${
+                            studentPreviewMode
+                              ? 'bg-[#1B365D] text-white'
+                              : 'bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          Student Preview
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* 10 Major Folders Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-                  {courseFolders.map((major, idx) => {
-                    const isSelected = activeMajor?.id === major.id;
-                    const count = visibleMaterials.filter((m) => resolveMaterialMajorId(m) === major.id).length;
-                    const isEditingThis =
-                      renamingFolderTarget?.majorFolderId === major.id &&
-                      !renamingFolderTarget?.subFolderId;
+                {simulatingStudent && (
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
+                    <span>
+                      <strong>Student Preview active:</strong> Hidden folders and sub-folders are concealed exactly as students see them.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStudentPreviewMode(false)}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 shrink-0"
+                    >
+                      Exit Preview
+                    </button>
+                  </div>
+                )}
 
-                    return (
-                      <div
-                        key={major.id}
-                        className={`rounded-xl border p-3 transition flex flex-col justify-between gap-2 ${
-                          major.hiddenForStudents
-                            ? 'bg-slate-100/80 border-dashed border-slate-300 opacity-75'
-                            : isSelected
-                            ? 'bg-[#eef4fa] border-[#163252] shadow-xs'
-                            : 'bg-[#f7f9fc]/70 border-gray-200 hover:border-[#163252]/40 hover:bg-white'
-                        }`}
-                      >
-                        {isEditingThis ? (
-                          <form onSubmit={handleSaveFolderRename} className="space-y-1.5">
-                            <input
-                              type="text"
-                              value={renameDraftText}
-                              onChange={(e) => setRenameDraftText(e.target.value)}
-                              className="w-full px-2 py-1 rounded border border-[#163252] text-xs bg-white outline-none"
-                              autoFocus
-                              required
-                            />
-                            <div className="flex gap-1">
-                              <button
-                                type="submit"
-                                disabled={savingRename}
-                                className="flex-1 py-1 rounded bg-[#163252] text-white text-[10px] font-bold"
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setRenamingFolderTarget(null)}
-                                className="px-2 py-1 rounded border border-gray-300 bg-white text-[10px] text-gray-600"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </form>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedMajorFolderId(major.id);
-                                setSelectedSubFolderId('all');
-                              }}
-                              className="text-left space-y-1 flex-1"
-                            >
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="text-[10px] font-extrabold uppercase text-[#163252]">
-                                  Folder {idx + 1}
-                                </span>
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-bold">
-                                  {count} file{count === 1 ? '' : 's'}
-                                </span>
-                              </div>
-                              <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug flex items-start gap-1.5">
-                                <Folder className="w-3.5 h-3.5 text-[#1B365D] shrink-0 mt-0.5" />
-                                <span>{major.name}</span>
-                              </p>
-                            </button>
-                            {isTeacher && (
-                              <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-gray-200/70">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleToggleFolderVisibility(major.id, null, !major.hiddenForStudents)
-                                  }
-                                  title={
-                                    major.hiddenForStudents
-                                      ? 'Hidden from students — click to show'
-                                      : 'Visible to students — click to hide'
-                                  }
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition inline-flex items-center gap-1 ${
-                                    major.hiddenForStudents
-                                      ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
-                                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                  }`}
-                                >
-                                  {major.hiddenForStudents ? (
-                                    <>
-                                      <EyeOff className="w-3 h-3" /> Hidden
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Eye className="w-3 h-3" /> Visible
-                                    </>
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setRenamingFolderTarget({ majorFolderId: major.id });
-                                    setRenameDraftText(major.name);
-                                  }}
-                                  className="text-[10px] font-semibold text-[#1B365D] hover:underline inline-flex items-center gap-1"
-                                >
-                                  <Pencil className="w-2.5 h-2.5" /> Rename
-                                </button>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                {displayedMajors.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-xl">
+                    No visible folders in this course yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {displayedMajors.map((major, idx) => {
+                      const isMajorOpen = Boolean(expandedMajorIds[major.id]);
+                      const itemsInMajor = visibleMaterials.filter(
+                        (m) => resolveMaterialMajorId(m) === major.id
+                      );
+                      const visibleSubs = simulatingStudent
+                        ? major.subFolders.filter((sf) => !sf.hiddenForStudents)
+                        : major.subFolders;
+                      const isEditingThis =
+                        renamingFolderTarget?.majorFolderId === major.id &&
+                        !renamingFolderTarget?.subFolderId;
 
-                {/* 10 Sub-Folders Inside Selected Major Folder */}
-                {activeMajor && (
-                  <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                          <FolderOpen className="w-4 h-4 text-[#1B365D] shrink-0" />
-                          <span>{activeMajor.name} &rarr; 10 Sub-Folders</span>
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          Showing {filteredFolderItems.length} file(s)
-                          {selectedSubFolderId === 'all'
-                            ? ' across all sub-folders'
-                            : ` inside ${activeMajor.subFolders.find((s) => s.id === selectedSubFolderId)?.name || 'sub-folder'}`}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedSubFolderId('all')}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition ${
-                          selectedSubFolderId === 'all'
-                            ? 'bg-[#163252] text-white border-[#163252]'
-                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        All 10 Sub-Folders ({itemsInMajor.length})
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                      {activeMajor.subFolders.map((sub, sIdx) => {
-                        const subActive = selectedSubFolderId === sub.id;
-                        const subCount = itemsInMajor.filter((m) => resolveMaterialSubId(m) === sub.id).length;
-                        const isEditingSub =
-                          renamingFolderTarget?.majorFolderId === activeMajor.id &&
-                          renamingFolderTarget?.subFolderId === sub.id;
-
-                        return (
-                          <div
-                            key={sub.id}
-                            className={`rounded-lg border p-2.5 transition ${
-                              sub.hiddenForStudents
-                                ? 'bg-slate-100/80 border-dashed border-slate-300 opacity-75'
-                                : subActive
-                                ? 'bg-white border-[#1B365D] ring-1 ring-[#1B365D]/30 shadow-2xs'
-                                : 'bg-white border-slate-200 hover:border-[#1B365D]/40'
-                            }`}
-                          >
-                            {isEditingSub ? (
-                              <form onSubmit={handleSaveFolderRename} className="space-y-1">
+                      return (
+                        <div
+                          key={major.id}
+                          className={`rounded-xl border transition ${
+                            major.hiddenForStudents && !simulatingStudent
+                              ? 'bg-slate-50 border-dashed border-slate-300 opacity-80'
+                              : selectedMajorFolderId === major.id
+                              ? 'bg-white border-[#1B365D]/40 shadow-2xs'
+                              : 'bg-white border-[#E5E7EB]'
+                          }`}
+                        >
+                          {/* Major Folder Row */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
+                            {isEditingThis ? (
+                              <form onSubmit={handleSaveFolderRename} className="flex flex-1 items-center gap-2">
                                 <input
                                   type="text"
                                   value={renameDraftText}
                                   onChange={(e) => setRenameDraftText(e.target.value)}
-                                  className="w-full px-1.5 py-1 rounded border border-[#163252] text-[11px] bg-white outline-none"
+                                  className="flex-1 px-2.5 py-1.5 rounded-lg border border-[#1B365D] text-xs bg-white outline-none"
                                   autoFocus
                                   required
                                 />
-                                <div className="flex gap-1">
-                                  <button
-                                    type="submit"
-                                    disabled={savingRename}
-                                    className="flex-1 py-0.5 rounded bg-[#163252] text-white text-[10px] font-bold"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setRenamingFolderTarget(null)}
-                                    className="px-1.5 py-0.5 rounded border border-gray-300 text-[10px]"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </form>
-                            ) : (
-                              <div className="space-y-1.5">
+                                <button
+                                  type="submit"
+                                  disabled={savingRename}
+                                  className="px-3 py-1.5 rounded-lg bg-[#1B365D] text-white text-[11px] font-bold"
+                                >
+                                  Save
+                                </button>
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedSubFolderId(sub.id)}
-                                  className="text-left min-w-0 w-full"
+                                  onClick={() => setRenamingFolderTarget(null)}
+                                  className="px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-[11px] text-gray-600"
                                 >
-                                  <span className="text-[10px] font-bold text-slate-400 block">
-                                    #{sIdx + 1} · {subCount} file{subCount === 1 ? '' : 's'}
+                                  Cancel
+                                </button>
+                              </form>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setExpandedMajorIds((prev) => ({
+                                      ...prev,
+                                      [major.id]: !prev[major.id],
+                                    }));
+                                    setSelectedMajorFolderId(major.id);
+                                    setSelectedSubFolderId('all');
+                                  }}
+                                  className="flex items-center gap-2.5 text-left flex-1 min-w-0"
+                                >
+                                  {isMajorOpen ? (
+                                    <ChevronDown className="w-4 h-4 text-[#1B365D] shrink-0" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                                  )}
+                                  {isMajorOpen ? (
+                                    <FolderOpen className="w-4 h-4 text-[#1B365D] shrink-0" />
+                                  ) : (
+                                    <Folder className="w-4 h-4 text-[#1B365D] shrink-0" />
+                                  )}
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#EEF3F9] text-[#1B365D] shrink-0">
+                                    {String(idx + 1).padStart(2, '0')}
                                   </span>
-                                  <span className="text-[11px] font-semibold text-slate-800 block truncate">
-                                    {sub.name}
+                                  <span className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                    {major.name}
+                                  </span>
+                                  <span className="text-[11px] text-slate-400 font-medium shrink-0">
+                                    {visibleSubs.length} subfolders &middot; {itemsInMajor.length} file{itemsInMajor.length === 1 ? '' : 's'}
                                   </span>
                                 </button>
-                                {isTeacher && (
-                                  <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100">
+
+                                {isTeacher && !simulatingStudent && (
+                                  <div className="flex items-center gap-1.5 shrink-0">
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        handleToggleFolderVisibility(
-                                          activeMajor.id,
-                                          sub.id,
-                                          !sub.hiddenForStudents
-                                        )
+                                        handleToggleFolderVisibility(major.id, null, !major.hiddenForStudents)
                                       }
                                       title={
-                                        sub.hiddenForStudents
+                                        major.hiddenForStudents
                                           ? 'Hidden from students — click to show'
                                           : 'Visible to students — click to hide'
                                       }
-                                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition inline-flex items-center gap-1 ${
-                                        sub.hiddenForStudents
+                                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition inline-flex items-center gap-1 ${
+                                        major.hiddenForStudents
                                           ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
                                           : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                                       }`}
                                     >
-                                      {sub.hiddenForStudents ? (
+                                      {major.hiddenForStudents ? (
                                         <>
-                                          <EyeOff className="w-2.5 h-2.5" /> Hidden
+                                          <EyeOff className="w-3 h-3" /> Hidden
                                         </>
                                       ) : (
                                         <>
-                                          <Eye className="w-2.5 h-2.5" /> Visible
+                                          <Eye className="w-3 h-3" /> Visible
                                         </>
                                       )}
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        setRenamingFolderTarget({
-                                          majorFolderId: activeMajor.id,
-                                          subFolderId: sub.id,
-                                        });
-                                        setRenameDraftText(sub.name);
+                                        setRenamingFolderTarget({ majorFolderId: major.id });
+                                        setRenameDraftText(major.name);
                                       }}
-                                      title="Rename Sub-Folder"
-                                      className="text-[10px] text-[#1B365D] hover:text-[#13294B] shrink-0 p-0.5"
+                                      className="px-2 py-1 rounded-lg border border-[#E5E7EB] bg-[#FAF9F5] hover:bg-[#EEF3F9] text-[10px] font-semibold text-[#1B365D] inline-flex items-center gap-1 transition"
                                     >
-                                      <Pencil className="w-3 h-3" />
+                                      <Pencil className="w-2.5 h-2.5" /> Rename
                                     </button>
                                   </div>
                                 )}
-                              </div>
+                              </>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
 
-                    {/* Files inside Selected Major Folder / Sub-Folder */}
-                    {filteredFolderItems.length === 0 ? (
-                      <div className="bg-white rounded-xl border border-dashed border-slate-300 p-5 text-center text-xs text-slate-500">
-                        No PDFs or links inside this folder yet.
-                        {isTeacher && ' Use the Upload form below to add a PDF or link directly to this folder.'}
-                      </div>
-                    ) : (
-                      <div className="space-y-2 pt-1">
-                        {filteredFolderItems.map((mat) => {
-                          const subLabel =
-                            activeMajor.subFolders.find((sf) => sf.id === resolveMaterialSubId(mat))?.name ||
-                            'Sub-Folder 1';
-                          return (
-                            <div
-                              key={mat.id}
-                              className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-white rounded-xl border border-gray-200 hover:shadow-2xs transition"
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
-                                  <span className="text-red-500 font-bold text-[11px] uppercase">{mat.type}</span>
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-xs sm:text-sm font-bold text-gray-900 truncate">{mat.title}</p>
-                                  <p className="text-[11px] text-gray-500 mt-0.5">
-                                    {subLabel} &middot; {mat.category === 'homework' ? 'Homework (HW)' : mat.teacherOnly ? 'Educator Key' : 'Explain'} &middot; {mat.size}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {mat.url && mat.url !== '#' ? (
-                                  <a
-                                    href={mat.url.startsWith('/api/') ? apiUrl(mat.url) : mat.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-3 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                          {/* Nested Sub-Folders with Left Hierarchy Connector Line */}
+                          {isMajorOpen && (
+                            <div className="ml-5 pl-3.5 border-l-2 border-[#DCE5F0] pb-3 pr-3 space-y-1.5">
+                              {visibleSubs.map((sub, sIdx) => {
+                                const subKey = `${major.id}::${sub.id}`;
+                                const subItems = itemsInMajor.filter((m) => resolveMaterialSubId(m) === sub.id);
+                                const isSubOpen = Boolean(expandedSubIds[subKey]);
+                                const isEditingSub =
+                                  renamingFolderTarget?.majorFolderId === major.id &&
+                                  renamingFolderTarget?.subFolderId === sub.id;
+
+                                return (
+                                  <div
+                                    key={sub.id}
+                                    className={`rounded-lg border transition ${
+                                      sub.hiddenForStudents && !simulatingStudent
+                                        ? 'bg-slate-100/80 border-dashed border-slate-300 opacity-75'
+                                        : selectedMajorFolderId === major.id && selectedSubFolderId === sub.id
+                                        ? 'bg-[#F8FAFD] border-[#1B365D]/40'
+                                        : 'bg-[#FAF9F5] border-[#E5E7EB]'
+                                    }`}
                                   >
-                                    Open PDF / Link
-                                  </a>
-                                ) : (
-                                  <span className="px-2.5 py-1 text-[11px] font-medium text-gray-400 bg-[#f7f9fc] rounded-lg">
-                                    Template Item
-                                  </span>
-                                )}
-                                {mat.category === 'homework' && !isParent && (
-                                  <button
-                                    onClick={() => setActiveTab('homework')}
-                                    className="px-3 py-1.5 text-xs font-semibold text-[#163252] bg-rose-50 hover:bg-rose-100 rounded-lg transition"
-                                  >
-                                    Submit Solved PDF
-                                  </button>
-                                )}
-                                {isTeacher && (mat as any).isCustom && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteCourseMaterial(mat.id)}
-                                    className="px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition"
-                                  >
-                                    Remove
-                                  </button>
-                                )}
-                              </div>
+                                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                                      {isEditingSub ? (
+                                        <form onSubmit={handleSaveFolderRename} className="flex flex-1 items-center gap-1.5">
+                                          <input
+                                            type="text"
+                                            value={renameDraftText}
+                                            onChange={(e) => setRenameDraftText(e.target.value)}
+                                            className="flex-1 px-2 py-1 rounded border border-[#1B365D] text-xs bg-white outline-none"
+                                            autoFocus
+                                            required
+                                          />
+                                          <button
+                                            type="submit"
+                                            disabled={savingRename}
+                                            className="px-2.5 py-1 rounded bg-[#1B365D] text-white text-[10px] font-bold"
+                                          >
+                                            Save
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setRenamingFolderTarget(null)}
+                                            className="px-2 py-1 rounded border border-gray-300 bg-white text-[10px]"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </form>
+                                      ) : (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedMajorFolderId(major.id);
+                                              setSelectedSubFolderId(sub.id);
+                                              setExpandedSubIds((prev) => ({
+                                                ...prev,
+                                                [subKey]: !prev[subKey],
+                                              }));
+                                            }}
+                                            className="flex items-center gap-2 text-left flex-1 min-w-0"
+                                          >
+                                            {isSubOpen ? (
+                                              <ChevronDown className="w-3.5 h-3.5 text-[#1B365D] shrink-0" />
+                                            ) : (
+                                              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                            )}
+                                            <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                                              #{sIdx + 1}
+                                            </span>
+                                            <span className="text-xs font-semibold text-slate-800 truncate">
+                                              {sub.name}
+                                            </span>
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold shrink-0">
+                                              {subItems.length} file{subItems.length === 1 ? '' : 's'}
+                                            </span>
+                                          </button>
+
+                                          {isTeacher && !simulatingStudent && (
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const isSame =
+                                                    inlineUploadTarget?.majorFolderId === major.id &&
+                                                    inlineUploadTarget?.subFolderId === sub.id;
+                                                  setSelectedMajorFolderId(major.id);
+                                                  setSelectedSubFolderId(sub.id);
+                                                  if (isSame) {
+                                                    setInlineUploadTarget(null);
+                                                  } else {
+                                                    setExpandedMajorIds((prev) => ({ ...prev, [major.id]: true }));
+                                                    setExpandedSubIds((prev) => ({ ...prev, [subKey]: true }));
+                                                    setInlineUploadTarget({
+                                                      majorFolderId: major.id,
+                                                      subFolderId: sub.id,
+                                                    });
+                                                    setInlineMatTitle('');
+                                                    setInlineMatUrl('');
+                                                    setInlineMatFile(null);
+                                                    setInlineMatFileBase64(null);
+                                                    setInlineMatCategory('explain');
+                                                    setInlineMatIsA3(false);
+                                                    setInlineMatHidden(Boolean(sub.hiddenForStudents || major.hiddenForStudents));
+                                                  }
+                                                }}
+                                                title="Upload PDF or Link directly into this sub-folder"
+                                                className={`px-1.5 py-0.5 rounded border text-[10px] font-bold transition inline-flex items-center gap-1 ${
+                                                  inlineUploadTarget?.majorFolderId === major.id &&
+                                                  inlineUploadTarget?.subFolderId === sub.id
+                                                    ? 'bg-[#1B365D] text-white border-[#1B365D]'
+                                                    : 'bg-white text-[#1B365D] border-[#DCE5F0] hover:bg-[#EEF3F9]'
+                                                }`}
+                                              >
+                                                <Upload className="w-2.5 h-2.5" /> Upload
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleToggleFolderVisibility(
+                                                    major.id,
+                                                    sub.id,
+                                                    !sub.hiddenForStudents
+                                                  )
+                                                }
+                                                title={
+                                                  sub.hiddenForStudents
+                                                    ? 'Hidden from students — click to show'
+                                                    : 'Visible to students — click to hide'
+                                                }
+                                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition inline-flex items-center gap-1 ${
+                                                  sub.hiddenForStudents
+                                                    ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                                }`}
+                                              >
+                                                {sub.hiddenForStudents ? (
+                                                  <>
+                                                    <EyeOff className="w-2.5 h-2.5" /> Hidden
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <Eye className="w-2.5 h-2.5" /> Visible
+                                                  </>
+                                                )}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setRenamingFolderTarget({
+                                                    majorFolderId: major.id,
+                                                    subFolderId: sub.id,
+                                                  });
+                                                  setRenameDraftText(sub.name);
+                                                }}
+                                                title="Rename Sub-Folder"
+                                                className="px-1.5 py-0.5 rounded border border-[#E5E7EB] bg-white hover:bg-[#EEF3F9] text-[10px] font-semibold text-[#1B365D] inline-flex items-center gap-1"
+                                              >
+                                                <Pencil className="w-2.5 h-2.5" /> Rename
+                                              </button>
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+
+                                    {/* Nested Upload Tool & Files Inside Sub-Folder with Connector Line */}
+                                    {(isSubOpen ||
+                                      (isTeacher &&
+                                        !simulatingStudent &&
+                                        inlineUploadTarget?.majorFolderId === major.id &&
+                                        inlineUploadTarget?.subFolderId === sub.id)) && (
+                                      <div className="ml-4 pl-3 border-l-2 border-[#E5E7EB] pb-2.5 pr-2.5 space-y-2">
+                                        {isTeacher &&
+                                          !simulatingStudent &&
+                                          inlineUploadTarget?.majorFolderId === major.id &&
+                                          inlineUploadTarget?.subFolderId === sub.id && (
+                                            <form
+                                              onSubmit={handleInlineSubUpload}
+                                              className="bg-white rounded-xl border border-[#1B365D]/30 p-3 space-y-2.5 shadow-2xs"
+                                            >
+                                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <span className="text-[11px] font-bold text-[#13294B]">
+                                                  Upload Material into Sub #{sIdx + 1}: {sub.name}
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    if (inlineMatCategory !== 'resource') {
+                                                      setInlineMatHidden((prev) => !prev);
+                                                    }
+                                                  }}
+                                                  disabled={inlineMatCategory === 'resource'}
+                                                  title="Toggle whether students can see this uploaded material"
+                                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition inline-flex items-center gap-1 ${
+                                                    inlineMatCategory === 'resource' || inlineMatHidden
+                                                      ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                  }`}
+                                                >
+                                                  {inlineMatCategory === 'resource' || inlineMatHidden ? (
+                                                    <>
+                                                      <EyeOff className="w-3 h-3" /> Hidden from Students
+                                                    </>
+                                                  ) : (
+                                                    <>
+                                                      <Eye className="w-3 h-3" /> Visible to Students
+                                                    </>
+                                                  )}
+                                                </button>
+                                              </div>
+                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                <select
+                                                  value={inlineMatCategory}
+                                                  onChange={(e) => {
+                                                    const val = e.target.value as 'explain' | 'homework' | 'resource';
+                                                    setInlineMatCategory(val);
+                                                    if (val === 'resource') setInlineMatHidden(true);
+                                                  }}
+                                                  className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-semibold"
+                                                >
+                                                  <option value="explain">Explain Notes</option>
+                                                  <option value="homework">Homework (HW) PDF</option>
+                                                  <option value="resource">Educator Model Key</option>
+                                                </select>
+                                                <input
+                                                  type="text"
+                                                  value={inlineMatTitle}
+                                                  onChange={(e) => setInlineMatTitle(e.target.value)}
+                                                  placeholder="Material / PDF Title"
+                                                  className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px]"
+                                                  required
+                                                />
+                                                <input
+                                                  type="url"
+                                                  value={inlineMatUrl}
+                                                  onChange={(e) => setInlineMatUrl(e.target.value)}
+                                                  placeholder="Optional URL (or choose PDF)"
+                                                  className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px]"
+                                                />
+                                              </div>
+                                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <div className="flex flex-wrap items-center gap-2.5">
+                                                  <label className="px-2.5 py-1 rounded-lg bg-[#EEF3F9] hover:bg-[#DCE5F0] border border-[#C5D6E8] text-[#1B365D] text-[11px] font-semibold cursor-pointer inline-flex items-center gap-1">
+                                                    <Upload className="w-3 h-3" />
+                                                    <span>{inlineMatFile ? inlineMatFile.name : 'Choose PDF / File'}</span>
+                                                    <input
+                                                      type="file"
+                                                      accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
+                                                      onChange={handleSelectInlineMaterialFile}
+                                                      className="hidden"
+                                                    />
+                                                  </label>
+                                                  <label className="inline-flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={inlineMatIsA3}
+                                                      onChange={(e) => setInlineMatIsA3(e.target.checked)}
+                                                    />
+                                                    <span>A3 Spread</span>
+                                                  </label>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setInlineUploadTarget(null)}
+                                                    className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-[11px] text-slate-600 hover:bg-slate-50"
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                  <button
+                                                    type="submit"
+                                                    disabled={uploadingInline || (!inlineMatFileBase64 && !inlineMatUrl.trim())}
+                                                    className="px-3 py-1 rounded-lg bg-[#1B365D] hover:bg-[#13294B] disabled:opacity-50 text-white text-[11px] font-bold transition"
+                                                  >
+                                                    {uploadingInline ? 'Uploading...' : 'Publish to Sub-Folder'}
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </form>
+                                          )}
+
+                                        {subItems.length === 0 ? (
+                                          <div className="px-3 py-2 rounded-lg bg-white border border-dashed border-slate-200 text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-2">
+                                            <span>No files inside this subfolder yet.</span>
+                                            {isTeacher && !simulatingStudent && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedMajorFolderId(major.id);
+                                                  setSelectedSubFolderId(sub.id);
+                                                  setInlineUploadTarget({
+                                                    majorFolderId: major.id,
+                                                    subFolderId: sub.id,
+                                                  });
+                                                  setInlineMatHidden(Boolean(sub.hiddenForStudents || major.hiddenForStudents));
+                                                }}
+                                                className="text-[#1B365D] font-semibold hover:underline inline-flex items-center gap-1"
+                                              >
+                                                <Upload className="w-3 h-3" /> Upload file here
+                                              </button>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          subItems.map((mat) => {
+                                            const matHidden = Boolean(mat.hiddenForStudents || mat.teacherOnly);
+                                            return (
+                                            <div
+                                              key={mat.id}
+                                              className={`flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 bg-white rounded-lg border transition ${
+                                                matHidden && !simulatingStudent
+                                                  ? 'border-dashed border-slate-300 opacity-80'
+                                                  : 'border-[#E5E7EB] hover:border-[#1B365D]/30'
+                                              }`}
+                                            >
+                                              <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className="w-8 h-8 bg-[#EEF3F9] rounded-lg flex items-center justify-center shrink-0">
+                                                  <FileText className="w-4 h-4 text-[#1B365D]" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                  <p className="text-xs font-bold text-slate-900 truncate">
+                                                    {mat.title}
+                                                  </p>
+                                                  <p className="text-[11px] text-slate-500">
+                                                    {mat.type.toUpperCase()} &middot;{' '}
+                                                    {mat.category === 'homework'
+                                                      ? 'Homework (HW)'
+                                                      : mat.teacherOnly
+                                                      ? 'Educator Key'
+                                                      : 'Explain'}{' '}
+                                                    &middot; {mat.size}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center gap-1.5 shrink-0">
+                                                {isTeacher && !simulatingStudent && (mat as any).isCustom && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleToggleMaterialVisibility(mat.id, !matHidden)}
+                                                    title={
+                                                      matHidden
+                                                        ? 'Hidden from students — click to show'
+                                                        : 'Visible to students — click to hide'
+                                                    }
+                                                    className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition inline-flex items-center gap-1 ${
+                                                      matHidden
+                                                        ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                                    }`}
+                                                  >
+                                                    {matHidden ? (
+                                                      <>
+                                                        <EyeOff className="w-2.5 h-2.5" /> Hidden
+                                                      </>
+                                                    ) : (
+                                                      <>
+                                                        <Eye className="w-2.5 h-2.5" /> Visible
+                                                      </>
+                                                    )}
+                                                  </button>
+                                                )}
+                                                {mat.url && mat.url !== '#' ? (
+                                                  <a
+                                                    href={mat.url.startsWith('/api/') ? apiUrl(mat.url) : mat.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-2.5 py-1 text-[11px] font-semibold text-[#1B365D] bg-[#EEF3F9] hover:bg-[#DCE5F0] rounded-lg transition"
+                                                  >
+                                                    Open PDF / Link
+                                                  </a>
+                                                ) : (
+                                                  <span className="px-2 py-1 text-[10px] font-medium text-gray-400 bg-[#f7f9fc] rounded-lg">
+                                                    Template Item
+                                                  </span>
+                                                )}
+                                                {mat.category === 'homework' && !isParent && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setActiveTab('homework')}
+                                                    className="px-2.5 py-1 text-[11px] font-semibold text-white bg-[#1B365D] hover:bg-[#13294B] rounded-lg transition"
+                                                  >
+                                                    Submit Solved PDF
+                                                  </button>
+                                                )}
+                                                {isTeacher && !simulatingStudent && (mat as any).isCustom && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteCourseMaterial(mat.id)}
+                                                    className="px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded-lg transition"
+                                                  >
+                                                    Remove
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                            );
+                                          })
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1037,7 +1402,11 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
                 </select>
                 <select
                   value={newMatCategory}
-                  onChange={(e) => setNewMatCategory(e.target.value as 'explain' | 'homework' | 'resource')}
+                  onChange={(e) => {
+                    const val = e.target.value as 'explain' | 'homework' | 'resource';
+                    setNewMatCategory(val);
+                    if (val === 'resource') setNewMatHidden(true);
+                  }}
                   className="px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-xs font-semibold"
                 >
                   <option value="explain">Explain Notes</option>
@@ -1062,8 +1431,9 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <label className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-[#c5d6e8] text-[#163252] text-xs font-semibold cursor-pointer">
-                    {newMatFile ? `Selected: ${newMatFile.name}` : 'Choose PDF / File'}
+                  <label className="px-3 py-1.5 rounded-lg bg-[#EEF3F9] hover:bg-[#DCE5F0] border border-[#c5d6e8] text-[#163252] text-xs font-semibold cursor-pointer inline-flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{newMatFile ? `Selected: ${newMatFile.name}` : 'Choose PDF / File'}</span>
                     <input
                       type="file"
                       accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
@@ -1071,6 +1441,28 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
                       className="hidden"
                     />
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newMatCategory !== 'resource') setNewMatHidden((v) => !v);
+                    }}
+                    disabled={newMatCategory === 'resource'}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition inline-flex items-center gap-1.5 ${
+                      newMatCategory === 'resource' || newMatHidden
+                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    }`}
+                  >
+                    {newMatCategory === 'resource' || newMatHidden ? (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5" /> Hidden from Students
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5" /> Visible to Students
+                      </>
+                    )}
+                  </button>
                   <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1134,6 +1526,32 @@ export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio, onActiv
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {isTeacher && !studentPreviewMode && (mat as any).isCustom && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleMaterialVisibility(
+                              mat.id,
+                              !(mat.hiddenForStudents || mat.teacherOnly)
+                            )
+                          }
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition inline-flex items-center gap-1 ${
+                            mat.hiddenForStudents || mat.teacherOnly
+                              ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {mat.hiddenForStudents || mat.teacherOnly ? (
+                            <>
+                              <EyeOff className="w-3.5 h-3.5" /> Hidden
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3.5 h-3.5" /> Visible
+                            </>
+                          )}
+                        </button>
+                      )}
                       {mat.url && mat.url !== '#' ? (
                         <a
                           href={mat.url.startsWith('/api/') ? apiUrl(mat.url) : mat.url}

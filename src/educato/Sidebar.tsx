@@ -1,7 +1,8 @@
 import React from 'react';
-import { ClipboardCheck, UploadCloud, BookOpen, FileCheck2 } from 'lucide-react';
+import { ClipboardCheck, UploadCloud, BookOpen, FileCheck2, ShieldCheck } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { Course } from './courses';
+import { clearEducatorSession } from '../components/Auth/AdminPinModal';
 
 interface SidebarProps {
   activeCourseId: string | null;
@@ -32,6 +33,7 @@ export function Sidebar({
 
   const navItems = isTeacher
     ? [
+        { id: 'admin-console', label: 'Admin Console', badge: 'Roster', Icon: ShieldCheck },
         { id: 'homework-studio', label: 'Approval & Review Inbox', badge: 'Teacher', Icon: ClipboardCheck },
         { id: 'upload-studio', label: 'Upload PDFs & Videos', badge: 'Content', Icon: UploadCloud },
         { id: 'modelkey', label: 'Official Model Keys', badge: 'Educator', Icon: BookOpen },
@@ -219,7 +221,10 @@ export function Sidebar({
           </div>
         )}
         <button
-          onClick={logout}
+          onClick={() => {
+            clearEducatorSession();
+            logout();
+          }}
           className="w-full flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-xl transition text-xs font-medium"
           title="Sign Out"
         >

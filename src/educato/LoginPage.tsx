@@ -77,7 +77,7 @@ export function LoginPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 bg-gray-50 focus:bg-white"
-                  placeholder="e.g. student01 or parent01"
+                  placeholder="Enter your username"
                   required
                 />
               </div>
@@ -124,10 +124,10 @@ export function LoginPage() {
 
           <div className="mt-6 pt-6 border-t border-gray-100 space-y-1.5">
             <p className="text-xs text-center text-gray-500">
-              Student: <code className="bg-gray-100 px-1 rounded">student01</code> • Parent: <code className="bg-gray-100 px-1 rounded">parent01</code> • Educator: <code className="bg-gray-100 px-1 rounded">teacher</code> • Assistant: <code className="bg-gray-100 px-1 rounded">assistant</code>
+              Educator: <code className="bg-gray-100 px-1 rounded">teacher</code> &bull; Assistant: <code className="bg-gray-100 px-1 rounded">assistant</code>
             </p>
             <p className="text-xs text-center text-gray-400">
-              Contact Mr. Haitham if you forgot your credentials
+              Students &amp; parents sign in using accounts added to Mr. Haitham&apos;s roster
             </p>
           </div>
         </div>

@@ -47,15 +47,15 @@ export function DashboardPage({
   // Teacher dashboard & RCIS Access Hub (3500 seats) state
   const [allEnrollments, setAllEnrollments] = useState<CourseEnrollment[]>([]);
   const [pendingSubmissionsCount, setPendingSubmissionsCount] = useState(0);
-  const [assignStudentId, setAssignStudentId] = useState<number>(STUDENTS[0]?.id || 1);
+  const [assignStudentId, setAssignStudentId] = useState<number>(0);
   const [assignCourseId, setAssignCourseId] = useState<string>(COURSES[0]?.id || 'year-9');
   const [actionBusyId, setActionBusyId] = useState<number | null>(null);
   const [directorySeats, setDirectorySeats] = useState<DirectorySeatUser[]>([]);
   const [parentEmailsMap, setParentEmailsMap] = useState<Record<string, string>>({});
-  const [activeSeatsCount, setActiveSeatsCount] = useState<number>(100);
+  const [activeSeatsCount, setActiveSeatsCount] = useState<number>(0);
   const [csvImportText, setCsvImportText] = useState<string>('');
   const [directoryNotice, setDirectoryNotice] = useState<string | null>(null);
-  const [editParentStudentId, setEditParentStudentId] = useState<number>(STUDENTS[0]?.id || 1);
+  const [editParentStudentId, setEditParentStudentId] = useState<number>(0);
   const [editParentEmailVal, setEditParentEmailVal] = useState<string>('');
   const [outboxCount, setOutboxCount] = useState<number>(0);
 
@@ -92,7 +92,12 @@ export function DashboardPage({
         const custom = Array.isArray(dirData?.customUsers) ? dirData.customUsers : [];
         setDirectorySeats(custom);
         setParentEmailsMap(dirData?.parentEmails || {});
-        setActiveSeatsCount(100 + custom.length);
+        setActiveSeatsCount(custom.length);
+        const firstStudent = custom.find((u: DirectorySeatUser) => u.role === 'student');
+        if (firstStudent) {
+          setAssignStudentId((prev) => (prev > 0 ? prev : firstStudent.id));
+          setEditParentStudentId((prev) => (prev > 0 ? prev : firstStudent.id));
+        }
       }
       if (outboxRes.ok) {
         const outData = await outboxRes.json();
@@ -663,9 +668,9 @@ export function DashboardPage({
               <span className="font-semibold text-white text-sm">{featuredContinueCourse.name}</span>
             </div>
             <div className="hidden sm:block">
-              <span className="text-white font-medium block">{featuredContinueCourse.videos[0]?.title || 'Core Algebra'}</span>
+              <span className="text-white font-medium block">{featuredContinueCourse.board}</span>
               <span className="text-[11px] text-sky-200/75">
-                {featuredContinueCourse.videos.length} video lessons available
+                {featuredContinueCourse.materials.filter((m) => isTeacher || !m.teacherOnly).length} course files &amp; study folders
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -813,7 +818,7 @@ export function DashboardPage({
           >
             <p className="text-lg font-bold text-gray-900">{studentCourse?.name}</p>
             <p className="text-xs text-gray-500 mt-1">
-              {studentCourse?.videos.length || 0} video lessons &middot; {studentMaterialCount} files &rarr;
+              {studentCourse?.materials.filter((m) => !m.teacherOnly).length || 0} study files &amp; homework &rarr;
             </p>
           </div>
           <div
@@ -928,24 +933,29 @@ export function DashboardPage({
               <label className="block text-[11px] font-semibold text-slate-600 mb-1">Place Student</label>
               <button
                 type="button"
+                disabled={allRosterStudents.length === 0}
                 onClick={() => {
                   setAssignPickerOpen((v) => !v);
                   setParentPickerOpen(false);
                   setStudentPickerQuery('');
                 }}
-                className="w-full px-3 py-2 border border-[#E5E7EB] rounded-xl text-xs bg-white flex items-center justify-between gap-2 hover:border-[#1B365D]/40 transition"
+                className="w-full px-3 py-2 border border-[#E5E7EB] rounded-xl text-xs bg-white flex items-center justify-between gap-2 hover:border-[#1B365D]/40 transition disabled:opacity-60"
               >
-                <span className="flex items-center gap-2 min-w-0">
-                  <span className="w-6 h-6 rounded-full bg-[#eef4fa] text-[#13294B] text-[10px] font-bold flex items-center justify-center shrink-0">
-                    {getInitials(selectedAssignStudent?.fullName || 'ST')}
+                {selectedAssignStudent ? (
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="w-6 h-6 rounded-full bg-[#eef4fa] text-[#13294B] text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {getInitials(selectedAssignStudent.fullName)}
+                    </span>
+                    <span className="font-semibold text-slate-800 truncate">
+                      {selectedAssignStudent.fullName}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F7F6F2] text-slate-600 border border-[#E5E7EB] shrink-0">
+                      {selectedAssignStudent.grade || 'IGCSE'} {selectedAssignStudent.section || ''}
+                    </span>
                   </span>
-                  <span className="font-semibold text-slate-800 truncate">
-                    {selectedAssignStudent?.fullName}
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F7F6F2] text-slate-600 border border-[#E5E7EB] shrink-0">
-                    {selectedAssignStudent?.grade || 'IGCSE'} {selectedAssignStudent?.section || ''}
-                  </span>
-                </span>
+                ) : (
+                  <span className="text-slate-400">No students in roster yet</span>
+                )}
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </button>
               {assignPickerOpen && (
@@ -1003,9 +1013,9 @@ export function DashboardPage({
             </div>
             <button
               type="button"
-              disabled={actionBusyId === assignStudentId}
-              onClick={() => handleTeacherApprove(assignStudentId, assignCourseId)}
-              className="px-4 py-2.5 rounded-xl bg-[#1B365D] hover:bg-[#13294B] text-white text-xs font-bold transition shadow-2xs"
+              disabled={!selectedAssignStudent || actionBusyId === selectedAssignStudent.id}
+              onClick={() => selectedAssignStudent && handleTeacherApprove(selectedAssignStudent.id, assignCourseId)}
+              className="px-4 py-2.5 rounded-xl bg-[#1B365D] hover:bg-[#13294B] text-white text-xs font-bold transition shadow-2xs disabled:opacity-50"
             >
               Approve &amp; Place Student
             </button>
@@ -1028,6 +1038,13 @@ export function DashboardPage({
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSelectView('admin-console')}
+                  className="px-3.5 py-2 rounded-xl bg-white border border-[#E5E7EB] hover:border-[#1B365D]/40 hover:bg-[#F7F6F2] text-[#13294B] text-xs font-semibold transition"
+                >
+                  Open Admin Console
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowCsvImportModal(true)}
@@ -1056,24 +1073,29 @@ export function DashboardPage({
                 <div className="flex-1 min-w-[210px] relative">
                   <button
                     type="button"
+                    disabled={allRosterStudents.length === 0}
                     onClick={() => {
                       setParentPickerOpen((v) => !v);
                       setAssignPickerOpen(false);
                       setStudentPickerQuery('');
                     }}
-                    className="w-full px-3 py-2 border border-[#E5E7EB] rounded-xl text-xs bg-white flex items-center justify-between gap-2 hover:border-[#1B365D]/40 transition"
+                    className="w-full px-3 py-2 border border-[#E5E7EB] rounded-xl text-xs bg-white flex items-center justify-between gap-2 hover:border-[#1B365D]/40 transition disabled:opacity-60"
                   >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <span className="w-6 h-6 rounded-full bg-[#eef4fa] text-[#13294B] text-[10px] font-bold flex items-center justify-center shrink-0">
-                        {getInitials(selectedParentStudent?.fullName || 'ST')}
+                    {selectedParentStudent ? (
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="w-6 h-6 rounded-full bg-[#eef4fa] text-[#13294B] text-[10px] font-bold flex items-center justify-center shrink-0">
+                          {getInitials(selectedParentStudent.fullName)}
+                        </span>
+                        <span className="font-semibold text-slate-800 truncate">
+                          {selectedParentStudent.fullName}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F7F6F2] text-slate-600 border border-[#E5E7EB] shrink-0">
+                          {selectedParentStudent.grade || 'IGCSE'} {selectedParentStudent.section || ''}
+                        </span>
                       </span>
-                      <span className="font-semibold text-slate-800 truncate">
-                        {selectedParentStudent?.fullName}
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F7F6F2] text-slate-600 border border-[#E5E7EB] shrink-0">
-                        {selectedParentStudent?.grade || 'IGCSE'} {selectedParentStudent?.section || ''}
-                      </span>
-                    </span>
+                    ) : (
+                      <span className="text-slate-400">No students added yet</span>
+                    )}
                     <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   </button>
                   {parentPickerOpen && (
@@ -1119,23 +1141,31 @@ export function DashboardPage({
                   type="email"
                   value={editParentEmailVal}
                   onChange={(e) => setEditParentEmailVal(e.target.value)}
-                  placeholder={parentEmailsMap[String(editParentStudentId)] || 'parent@domain.com'}
-                  className="flex-1 min-w-[200px] px-3 py-2 rounded-xl border border-[#E5E7EB] bg-white text-xs outline-none focus:border-[#1B365D]"
+                  placeholder={(selectedParentStudent && parentEmailsMap[String(selectedParentStudent.id)]) || 'parent@domain.com'}
+                  disabled={!selectedParentStudent}
+                  className="flex-1 min-w-[200px] px-3 py-2 rounded-xl border border-[#E5E7EB] bg-white text-xs outline-none focus:border-[#1B365D] disabled:opacity-60"
                   required
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#1B365D] text-white text-xs font-semibold hover:bg-[#13294B] transition"
+                  disabled={!selectedParentStudent}
+                  className="px-4 py-2 rounded-xl bg-[#1B365D] text-white text-xs font-semibold hover:bg-[#13294B] transition disabled:opacity-50"
                 >
                   Save Email
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500">
-                Saved email for <strong>{selectedParentStudent?.fullName}</strong>:{' '}
-                <span className="bg-white px-2 py-0.5 rounded-md border border-[#E5E7EB] text-slate-700 font-medium">
-                  {parentEmailsMap[String(editParentStudentId)] || `parent.student${String(editParentStudentId).padStart(2, '0')}@mrhaithamhusseinig.edu`}
-                </span>
-              </p>
+              {selectedParentStudent ? (
+                <p className="text-[11px] text-slate-500">
+                  Saved email for <strong>{selectedParentStudent.fullName}</strong>:{' '}
+                  <span className="bg-white px-2 py-0.5 rounded-md border border-[#E5E7EB] text-slate-700 font-medium">
+                    {parentEmailsMap[String(selectedParentStudent.id)] || selectedParentStudent.parentEmail || 'Not set yet'}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-500">
+                  Use <strong>Manage Roster &amp; CSV Import</strong> above to add students before binding parent contact emails.
+                </p>
+              )}
             </form>
           </div>
         </div>
@@ -1219,8 +1249,8 @@ export function DashboardPage({
           <div className="bg-gradient-to-r from-[#f4f8fc] via-white to-amber-50/40 rounded-2xl border-2 border-[#9ec2ea] p-5 shadow-xs space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
-                <span className="w-8 h-8 rounded-xl bg-[#163252] text-white flex items-center justify-center text-sm shadow-2xs">
-                  🔔
+                <span className="w-8 h-8 rounded-xl bg-[#163252] text-white flex items-center justify-center shadow-2xs">
+                  <Bell className="w-4 h-4" />
                 </span>
                 <div>
                   <div className="flex items-center gap-2">
@@ -1381,8 +1411,6 @@ export function DashboardPage({
               : course.materials.filter((m) => !m.teacherOnly).length;
             const numLabel = String(idx + 1).padStart(2, '0');
             const enrolledCount = approvedEnrollments.filter((e) => e.courseId === course.id).length;
-            const displayStudents = enrolledCount > 0 ? enrolledCount : [14, 18, 22, 16, 11, 15, 13, 19][idx % 8];
-            const updatedLabels = ['Updated today', 'Updated 1d ago', 'Updated 2d ago', 'Updated 2d ago', 'Updated 3d ago', 'Updated 4d ago', 'Updated 5d ago', 'Updated 1w ago'];
             return (
               <button
                 key={course.id}
@@ -1422,14 +1450,14 @@ export function DashboardPage({
                         {course.board}
                       </span>
                       <span className="text-[10px] text-slate-400">
-                        {updatedLabels[idx % updatedLabels.length]}
+                        {enrolledCount} {enrolledCount === 1 ? 'student' : 'students'}
                       </span>
                     </div>
                     <h3 className="font-bold text-[#13294B] math-serif text-base mt-1 group-hover:text-[#1B365D] transition leading-snug">
                       {course.name}
                     </h3>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      {displayStudents} students &middot; {course.videos.length} videos &middot; {visibleMatCount} files
+                      {visibleMatCount} study {visibleMatCount === 1 ? 'file' : 'files'}
                     </p>
                   </div>
 

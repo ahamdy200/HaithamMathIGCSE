@@ -97,6 +97,9 @@ export interface OutboxEmailRecord {
   note?: string;
 }
 
+export type DirectoryEnrollmentStatus = 'active' | 'pending' | 'paused' | 'graduated';
+export type DirectoryAttendanceMode = 'on_campus' | 'online';
+
 export interface DirectorySeatUser {
   id: number;
   domain: string;
@@ -106,9 +109,18 @@ export interface DirectorySeatUser {
   role: 'student' | 'parent' | 'teacher';
   grade?: string;
   section?: string;
+  status?: DirectoryEnrollmentStatus;
+  attendanceMode?: DirectoryAttendanceMode;
+  phone?: string;
+  parentPhone?: string;
+  email?: string;
   parentEmail?: string;
+  paymentMethod?: string;
+  courseId?: string;
   linkedStudentId?: number;
+  linkedStudentIds?: number[];
   linkedStudentName?: string;
+  notes?: string;
   createdAt: string;
 }
 
@@ -160,6 +172,9 @@ export interface HomeworkAssignmentRecord {
   gradingSystem: GradingSystem;
   modelAnswerKeyTitle?: string;
   hasCustomModelKey?: boolean;
+  worksheetPdfUrl?: string;
+  worksheetPdfName?: string;
+  worksheetPdfSize?: string;
   createdAt: string;
   createdBy: string;
 }
@@ -189,4 +204,22 @@ export interface PortalNotification {
   dueDate?: string;
   createdAt: string;
   readByUserIds: number[];
+}
+
+export interface HomeworkSubmissionRecord {
+  id: string;
+  studentId: number;
+  studentUsername: string;
+  studentName: string;
+  courseId: string;
+  courseTitle: string;
+  assignment: string;
+  assignmentKind?: AssignmentKind;
+  gradingSystem?: GradingSystem;
+  submittedAt: string;
+  status: 'pending' | 'graded';
+  pageCount?: number;
+  draftReport?: HomeworkGradingReport | null;
+  publishedReport?: HomeworkGradingReport | null;
+  publishedAt?: string;
 }

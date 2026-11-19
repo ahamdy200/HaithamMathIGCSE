@@ -34,6 +34,7 @@ export interface CourseMaterial {
   subFolderId?: string;
   isA3?: boolean;
   teacherOnly?: boolean;
+  hiddenForStudents?: boolean;
 }
 
 export interface HomeworkSubmission {
@@ -73,12 +74,7 @@ export const COURSES: Course[] = [
     teacher: 'Mr. Haitham Hussien',
     description:
       'Year 9 Pre-IGCSE Mathematics covering BIDMAS, directed numbers, algebraic manipulation, linear equations, and foundational geometry.',
-    videos: [
-      { id: 'y9-v1', title: 'Chapter 1: Order of Operations (BIDMAS) & Number Sense', duration: '42:15', thumbnail: '', url: 'https://www.youtube.com/watch?v=dAgfnK528RA', youtubeUrl: 'https://www.youtube.com/watch?v=dAgfnK528RA' },
-      { id: 'y9-v2', title: 'Chapter 2: Expanding Brackets & Algebraic Expressions', duration: '38:40', thumbnail: '', url: 'https://www.youtube.com/watch?v=V3dFHt9p5W8', youtubeUrl: 'https://www.youtube.com/watch?v=V3dFHt9p5W8' },
-      { id: 'y9-v3', title: 'Chapter 3: Solving Linear Equations & Inequalities', duration: '46:10', thumbnail: '', url: '#' },
-      { id: 'y9-v4', title: 'Chapter 4: Percentages, Ratios & Proportion', duration: '44:25', thumbnail: '', url: '#' },
-    ],
+    videos: [],
     materials: [
       { id: 'y9-m1', title: 'Explain Notes — Ch.1 BIDMAS & Algebraic Manipulation', type: 'pdf', size: '2.4 MB', url: '#', category: 'explain' },
       { id: 'y9-m4', title: 'HW Sheet 1 — Mixed BIDMAS & Linear Equations (A3 Spread)', type: 'pdf', size: '1.6 MB', url: '#', category: 'homework', isA3: true },
@@ -96,12 +92,7 @@ export const COURSES: Course[] = [
     teacher: 'Mr. Haitham Hussien',
     description:
       'Pearson Edexcel International GCSE Mathematics A (Modular) — Group 1 covering Unit 1H & Unit 2H higher tier modules with exam-style practice.',
-    videos: [
-      { id: 'eg1-v1', title: 'Unit 1H: Surds, Indices & Fractional Powers', duration: '51:20', thumbnail: '', url: '#' },
-      { id: 'eg1-v2', title: 'Unit 1H: Quadratics & Completing the Square', duration: '49:05', thumbnail: '', url: '#' },
-      { id: 'eg1-v3', title: 'Unit 2H: Functions, Differentiation & Rates of Change', duration: '54:30', thumbnail: '', url: '#' },
-      { id: 'eg1-v4', title: 'Unit 2H: Circle Theorems & Vectors', duration: '47:15', thumbnail: '', url: '#' },
-    ],
+    videos: [],
     materials: [
       { id: 'eg1-m1', title: 'Explain Guide — Pearson Edexcel Modular Spec (4XMA1)', type: 'pdf', size: '2.8 MB', url: '#', category: 'explain' },
       { id: 'eg1-m2', title: 'Group 1 Monthly Exam 1 — Official Model Answer Key', type: 'pdf', size: '1.6 MB', url: '#', category: 'resource', teacherOnly: true },
@@ -118,12 +109,7 @@ export const COURSES: Course[] = [
     teacher: 'Mr. Haitham Hussien',
     description:
       'Pearson Edexcel International GCSE Mathematics A (Linear 4MA1) — Full Higher Tier Papers 1H & 2H preparation with step-by-step worked training.',
-    videos: [
-      { id: 'el-v1', title: 'Paper 1H Core Algebra & Simultaneous Equations', duration: '48:50', thumbnail: '', url: '#' },
-      { id: 'el-v2', title: 'Paper 2H Sequences, Series & Graphs', duration: '52:10', thumbnail: '', url: '#' },
-      { id: 'el-v3', title: 'Trigonometry: Sine & Cosine Rules in 3D', duration: '45:35', thumbnail: '', url: '#' },
-      { id: 'el-v4', title: 'Histograms, Cumulative Frequency & Probability', duration: '41:00', thumbnail: '', url: '#' },
-    ],
+    videos: [],
     materials: [
       { id: 'el-m1', title: 'Edexcel 4MA1 Linear Formula Booklet', type: 'pdf', size: '940 KB', url: '#' },
       { id: 'el-m2', title: 'Linear Paper 1H & 2H Model Mark Schemes', type: 'pdf', size: '3.2 MB', url: '#', teacherOnly: true },
@@ -140,12 +126,7 @@ export const COURSES: Course[] = [
     teacher: 'Mr. Haitham Hussien',
     description:
       'Cambridge IGCSE Mathematics (0580 / 0980 Extended) covering Papers 2 & 4 with step-by-step method feedback and structured homework review.',
-    videos: [
-      { id: 'oc-v1', title: 'Chapter 1: Order of Operations (BIDMAS) & Number Skills', duration: '45:20', thumbnail: '', url: '#' },
-      { id: 'oc-v2', title: 'Chapter 2: Algebraic Fractions & Quadratic Inequalities', duration: '43:15', thumbnail: '', url: '#' },
-      { id: 'oc-v3', title: 'Chapter 3: Functions, Calculus & Kinematics Graphs', duration: '53:00', thumbnail: '', url: '#' },
-      { id: 'oc-v4', title: 'Chapter 4: Transformations, Vectors & Mensuration', duration: '46:45', thumbnail: '', url: '#' },
-    ],
+    videos: [],
     materials: [
       { id: 'oc-m1', title: 'Explain Notes — Cambridge 0580 / 0980 Core Concepts', type: 'pdf', size: '2.1 MB', url: '#', category: 'explain' },
       { id: 'oc-m2', title: 'Order of Operations — Official Model Answer Key', type: 'pdf', size: '880 KB', url: '#', category: 'resource', teacherOnly: true },
@@ -163,12 +144,7 @@ export const COURSES: Course[] = [
     teacher: 'Mr. Haitham Hussien',
     description:
       'Year 8 Mathematics building fluency in integers, fractions, decimals, expressions, angles, area/volume, and structured problem solving.',
-    videos: [
-      { id: 'y8-v1', title: 'Integers, Factors, Multiples & Prime Decomposition', duration: '36:20', thumbnail: '', url: '#' },
-      { id: 'y8-v2', title: 'Fractions, Decimals, Percentages & BIDMAS', duration: '40:10', thumbnail: '', url: '#' },
-      { id: 'y8-v3', title: 'Simplifying Expressions & Solving Equations', duration: '39:05', thumbnail: '', url: '#' },
-      { id: 'y8-v4', title: 'Angles in Parallel Lines & Polygons', duration: '37:50', thumbnail: '', url: '#' },
-    ],
+    videos: [],
     materials: [
       { id: 'y8-m1', title: 'Year 8 Core Practice Pack', type: 'pdf', size: '1.8 MB', url: '#' },
       { id: 'y8-m2', title: 'BIDMAS Warm-Up Homework & Model Key', type: 'pdf', size: '740 KB', url: '#', teacherOnly: true },
@@ -184,11 +160,7 @@ export const COURSES: Course[] = [
     teacher: 'Mr. Haitham Hussien',
     description:
       'Pearson Edexcel International GCSE Mathematics A (Modular) — Group 2 cohort with structured homework checkpoints and teacher-reviewed progress reports.',
-    videos: [
-      { id: 'eg2-v1', title: 'Unit 1H: Indices, Standard Form & Bounds', duration: '44:15', thumbnail: '', url: '#' },
-      { id: 'eg2-v2', title: 'Unit 1H: Inequalities & Linear Programming', duration: '48:00', thumbnail: '', url: '#' },
-      { id: 'eg2-v3', title: 'Unit 2H: Similarity, Congruence & Trigonometry', duration: '50:25', thumbnail: '', url: '#' },
-    ],
+    videos: [],
     materials: [
       { id: 'eg2-m1', title: 'Group 2 Modular Revision Guide', type: 'pdf', size: '2.2 MB', url: '#' },
       { id: 'eg2-m2', title: 'Group 2 Weekly Homework Booklet', type: 'pdf', size: '1.5 MB', url: '#' },
@@ -204,11 +176,7 @@ export const COURSES: Course[] = [
     teacher: 'Mr. Haitham Hussien',
     description:
       'Pearson Edexcel International GCSE Mathematics A (Modular) — Group 3 track focusing on algebra mastery, graphs, and exam speed.',
-    videos: [
-      { id: 'eg3-v1', title: 'Unit 1H: Algebraic Fractions & Formula Rearrangement', duration: '46:40', thumbnail: '', url: '#' },
-      { id: 'eg3-v2', title: 'Unit 2H: Transforming Graphs & Differentiation', duration: '52:55', thumbnail: '', url: '#' },
-      { id: 'eg3-v3', title: 'Unit 2H: Venn Diagrams & Tree Diagrams', duration: '41:30', thumbnail: '', url: '#' },
-    ],
+    videos: [],
     materials: [
       { id: 'eg3-m1', title: 'Group 3 Modular Practice Booklet', type: 'pdf', size: '2.0 MB', url: '#' },
       { id: 'eg3-m2', title: 'Group 3 Timed Quiz & Model Solutions', type: 'pdf', size: '1.3 MB', url: '#', teacherOnly: true },
@@ -224,11 +192,7 @@ export const COURSES: Course[] = [
     teacher: 'Mr. Haitham Hussien',
     description:
       'Pearson Edexcel International GCSE Mathematics A (Modular) — Mr.HaithamHusseinig cohort featuring tailored assignments and detailed teacher feedback from Mr. Haitham Hussien.',
-    videos: [
-      { id: 'rcis-v1', title: 'Mr.HaithamHusseinig Unit 1H: Number, Ratio & Percentages', duration: '45:10', thumbnail: '', url: 'https://www.youtube.com/watch?v=dAgfnK528RA', youtubeUrl: 'https://www.youtube.com/watch?v=dAgfnK528RA' },
-      { id: 'rcis-v2', title: 'Mr.HaithamHusseinig Unit 1H: Quadratics & Simultaneous Systems', duration: '49:45', thumbnail: '', url: 'https://www.youtube.com/watch?v=IlNAJl36-10', youtubeUrl: 'https://www.youtube.com/watch?v=IlNAJl36-10' },
-      { id: 'rcis-v3', title: 'Mr.HaithamHusseinig Unit 2H: Vectors, Circle Geometry & Calculus', duration: '54:15', thumbnail: '', url: '#' },
-    ],
+    videos: [],
     materials: [
       { id: 'rcis-m1', title: 'Explain Booklet — Mr.HaithamHusseinig Edexcel Modular Unit 1H', type: 'pdf', size: '2.6 MB', url: '#', category: 'explain' },
       { id: 'rcis-m3', title: 'HW Booklet 1 — Unit 1H Quadratics & Surds (A3 Double Spread)', type: 'pdf', size: '1.9 MB', url: '#', category: 'homework', isA3: true },

@@ -519,7 +519,7 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   defaultStudentName = '',
   userRole = 'student',
   studentId = 1,
-  studentUsername = 'student01',
+  studentUsername = '',
   viewerUserId,
   focusSubmissionId = null,
   onClearFocusSubmission,
@@ -551,6 +551,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
   const [assignSendNotifications, setAssignSendNotifications] = useState<boolean>(true);
   const [assignModelKeyBase64, setAssignModelKeyBase64] = useState<string | null>(null);
   const [assignModelKeyName, setAssignModelKeyName] = useState<string>('');
+  const [assignWorksheetBase64, setAssignWorksheetBase64] = useState<string | null>(null);
+  const [assignWorksheetName, setAssignWorksheetName] = useState<string>('');
+  const [assignWorksheetUrl, setAssignWorksheetUrl] = useState<string>('');
   const [isSavingAssignment, setIsSavingAssignment] = useState<boolean>(false);
   const [inboxCourseFilter, setInboxCourseFilter] = useState<string>('all');
   const [isModelKeyModalOpen, setIsModelKeyModalOpen] = useState(false);
@@ -753,6 +756,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
           notifyEmails: assignNotifyEmails.trim(),
           modelKeyFileBase64: assignModelKeyBase64,
           modelAnswerKeyTitle: assignModelKeyName || assignTitle.trim(),
+          worksheetFileBase64: assignWorksheetBase64,
+          worksheetFileName: assignWorksheetName,
+          worksheetUrl: assignWorksheetUrl.trim(),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -775,6 +781,9 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       setAssignNotifyEmails('');
       setAssignModelKeyBase64(null);
       setAssignModelKeyName('');
+      setAssignWorksheetBase64(null);
+      setAssignWorksheetName('');
+      setAssignWorksheetUrl('');
       await loadAssignments();
     } catch (err: any) {
       showToast('error', err?.message || 'Failed to save assignment.');
@@ -2005,6 +2014,44 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                           <strong>Instructions:</strong> {activeHw.instructions}
                         </p>
                       )}
+                      {activeHw.worksheetPdfUrl && (
+                        <div className="mt-2 pt-2 border-t border-[#DCE5F0] flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-bold text-[#13294B] block truncate">
+                              Homework Sheet: {activeHw.worksheetPdfName || `${activeHw.title}.pdf`}
+                              {activeHw.worksheetPdfSize ? ` (${activeHw.worksheetPdfSize})` : ''}
+                            </span>
+                            <span className="text-[10px] text-slate-500 block">
+                              Download this PDF to solve the questions, then upload your solved work below.
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <a
+                              href={
+                                activeHw.worksheetPdfUrl.startsWith('/api/')
+                                  ? `${apiUrl(activeHw.worksheetPdfUrl)}?download=1`
+                                  : activeHw.worksheetPdfUrl
+                              }
+                              download={activeHw.worksheetPdfName || `${activeHw.title}.pdf`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1B365D] hover:bg-[#13294B] text-white text-[11px] font-bold shadow-2xs transition"
+                            >
+                              <Download className="w-3.5 h-3.5" /> Download Homework PDF
+                            </a>
+                            <a
+                              href={
+                                activeHw.worksheetPdfUrl.startsWith('/api/')
+                                  ? apiUrl(activeHw.worksheetPdfUrl)
+                                  : activeHw.worksheetPdfUrl
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#C5D6E8] hover:bg-[#EEF3F9] text-[#1B365D] text-[11px] font-semibold transition"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> View
+                            </a>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 }
@@ -2671,6 +2718,55 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                   />
                 </div>
 
+                <div className="bg-[#FAF9F5] rounded-xl border border-[#DCE5F0] p-3 space-y-2">
+                  <label className="text-[11px] font-bold text-[#13294B] block">
+                    Homework Question Sheet PDF (Visible to Students · Download &amp; Solve)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="px-3 py-1.5 rounded-lg bg-[#1B365D] hover:bg-[#13294B] text-white text-[11px] font-semibold cursor-pointer transition inline-flex items-center gap-1.5">
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>{assignWorksheetName ? `Attached: ${assignWorksheetName}` : 'Attach Homework PDF'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setAssignWorksheetName(file.name);
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (typeof reader.result === 'string') setAssignWorksheetBase64(reader.result);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                    {assignWorksheetName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAssignWorksheetBase64(null);
+                          setAssignWorksheetName('');
+                        }}
+                        className="text-[11px] text-slate-500 hover:text-rose-700 underline"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={assignWorksheetUrl}
+                    onChange={(e) => setAssignWorksheetUrl(e.target.value)}
+                    placeholder="Or paste direct PDF download URL (optional)"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px]"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    Students will get a direct Download Homework PDF link on this assignment so they can solve on it and submit back.
+                  </p>
+                </div>
+
                 <div className="bg-[#eef4fa]/70 rounded-xl border border-[#c5d6e8]/70 p-3 space-y-1.5">
                   <label className="text-[11px] font-bold text-[#163252] block">
                     Dedicated Model Answer Key PDF for this Assignment (Educator Only · Optional)
@@ -2795,6 +2891,39 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
                         <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
                           {hw.instructions}
                         </p>
+                        {hw.worksheetPdfUrl && (
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
+                            <span className="text-[11px] font-semibold text-[#1B365D] truncate">
+                              Student PDF: {hw.worksheetPdfName || `${hw.title}.pdf`}
+                              {hw.worksheetPdfSize ? ` (${hw.worksheetPdfSize})` : ''}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={
+                                  hw.worksheetPdfUrl.startsWith('/api/')
+                                    ? `${apiUrl(hw.worksheetPdfUrl)}?download=1`
+                                    : hw.worksheetPdfUrl
+                                }
+                                download={hw.worksheetPdfName || `${hw.title}.pdf`}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1B365D] hover:bg-[#13294B] text-white text-[11px] font-semibold transition"
+                              >
+                                <Download className="w-3 h-3" /> Download PDF
+                              </a>
+                              <a
+                                href={
+                                  hw.worksheetPdfUrl.startsWith('/api/')
+                                    ? apiUrl(hw.worksheetPdfUrl)
+                                    : hw.worksheetPdfUrl
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[#1B365D] text-[11px] font-semibold transition"
+                              >
+                                <Eye className="w-3 h-3" /> Open
+                              </a>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

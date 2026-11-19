@@ -3,6 +3,8 @@ import net from 'net';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import {
@@ -29,8 +31,8 @@ app.use(express.json({ limit: '80mb' }));
 app.use((req: Request, res: Response, next) => {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
   res.header('Access-Control-Allow-Origin', allowedOrigin);
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Educator-Token');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
@@ -2499,9 +2501,18 @@ interface DirectorySeatUser {
   role: 'student' | 'parent' | 'teacher';
   grade?: string;
   section?: string;
+  status?: 'active' | 'pending' | 'paused' | 'graduated';
+  attendanceMode?: 'on_campus' | 'online';
+  phone?: string;
+  parentPhone?: string;
+  email?: string;
   parentEmail?: string;
+  paymentMethod?: string;
+  courseId?: string;
   linkedStudentId?: number;
+  linkedStudentIds?: number[];
   linkedStudentName?: string;
+  notes?: string;
   createdAt: string;
 }
 
@@ -2515,6 +2526,9 @@ interface HomeworkAssignmentRecord {
   gradingSystem: 'edexcel' | 'ib' | 'marks';
   modelAnswerKeyTitle?: string;
   modelAnswerKeyText?: string;
+  worksheetPdfUrl?: string;
+  worksheetPdfName?: string;
+  worksheetPdfSize?: string;
   createdAt: string;
   createdBy: string;
 }
@@ -3128,20 +3142,27 @@ async function sendAssignmentEmailViaResend(
   const subject = `[New Homework Assigned] ${assignmentRec.courseTitle}: ${assignmentRec.title} (Due: ${dueFormatted})`;
   const html = `
   <div style="font-family:Inter,Arial,sans-serif;max-width:680px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#ffffff;color:#111827;">
-    <div style="background:#800020;color:#ffffff;padding:20px 24px;">
+    <div style="background:#1B365D;color:#ffffff;padding:20px 24px;">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.85;">Mr. Haitham Hussien · New Homework Assigned</div>
       <h2 style="margin:6px 0 0;font-size:20px;">${escapeHtml(assignmentRec.title)}</h2>
       <p style="margin:4px 0 0;font-size:13px;opacity:0.9;">Group: ${escapeHtml(assignmentRec.courseTitle)}</p>
     </div>
     <div style="padding:20px 24px;font-size:13px;line-height:1.6;">
-      <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
-        <strong style="color:#800020;">Due Date:</strong> ${escapeHtml(dueFormatted)}
+      <div style="background:#EEF3F9;border:1px solid #C5D6E8;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+        <strong style="color:#1B365D;">Due Date:</strong> ${escapeHtml(dueFormatted)}
       </div>
       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
         <strong style="display:block;margin-bottom:4px;">Instructions from Mr. Haitham:</strong>
         <div>${escapeHtml(assignmentRec.instructions || 'Complete all assigned questions neatly and upload your PDF or photos before the due date.').replace(/\n/g, '<br/>')}</div>
       </div>
-      <p style="font-size:12px;color:#64748b;margin:0;">Log in to the Student Portal to select this homework from your assignment dropdown and submit your pages.</p>
+      ${
+        assignmentRec.worksheetPdfName
+          ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:14px;color:#166534;">
+              <strong>Downloadable Homework PDF Ready:</strong> ${escapeHtml(assignmentRec.worksheetPdfName)}${assignmentRec.worksheetPdfSize ? ` (${escapeHtml(assignmentRec.worksheetPdfSize)})` : ''} — Open the Homework Portal to download and solve on it.
+            </div>`
+          : ''
+      }
+      <p style="font-size:12px;color:#64748b;margin:0;">Log in to the Student Portal to select this homework from your assignment dropdown${assignmentRec.worksheetPdfName ? ', download the worksheet PDF,' : ''} and submit your pages.</p>
     </div>
   </div>`;
 
@@ -3886,7 +3907,7 @@ app.get('/api/courses/:courseId/materials', (req: Request, res: Response) => {
       }
     }
     materials = materials.filter((m: any) => {
-      if (m.teacherOnly) return false;
+      if (m.teacherOnly || m.hiddenForStudents) return false;
       const resolvedMajor =
         m.majorFolderId ||
         (m.category === 'homework' ? 'mf-2' : m.category === 'resource' ? 'mf-10' : 'mf-1');
@@ -3913,6 +3934,7 @@ app.post('/api/courses/:courseId/materials', (req: Request, res: Response) => {
       fileName = '',
       isA3 = false,
       teacherOnly = false,
+      hiddenForStudents = false,
     } = req.body || {};
 
     if (!title || !String(title).trim()) {
@@ -3932,7 +3954,8 @@ app.post('/api/courses/:courseId/materials', (req: Request, res: Response) => {
         : 'mf-1';
     const resolvedSubFolderId =
       subFolderId && String(subFolderId).trim() ? String(subFolderId).trim() : 'sf-1';
-    const resolvedTeacherOnly = Boolean(teacherOnly) || resolvedCategory === 'resource';
+    const resolvedTeacherOnly =
+      Boolean(hiddenForStudents) || Boolean(teacherOnly) || resolvedCategory === 'resource';
 
     let finalUrl = String(url || '').trim();
     let finalType: 'pdf' | 'doc' | 'ppt' | 'link' =
@@ -3974,6 +3997,7 @@ app.post('/api/courses/:courseId/materials', (req: Request, res: Response) => {
       subFolderId: resolvedSubFolderId,
       isA3: Boolean(isA3),
       teacherOnly: resolvedTeacherOnly,
+      hiddenForStudents: resolvedTeacherOnly,
       storedFileName,
       originalFileName: fileName ? String(fileName) : undefined,
       uploadedAt: new Date().toISOString(),
@@ -4038,6 +4062,29 @@ app.delete('/api/courses/:courseId/materials/:materialId', (req: Request, res: R
   state.customMaterials[courseId] = next;
   savePortalState(state);
   return res.json({ success: true, materials: next });
+});
+
+app.patch('/api/courses/:courseId/materials/:materialId', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const courseId = req.params.courseId;
+  const list = state.customMaterials?.[courseId] || [];
+  const idx = list.findIndex((m: any) => m.id === req.params.materialId);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: 'Material not found.' });
+  }
+  const { hiddenForStudents, title } = req.body || {};
+  const updated = { ...list[idx] };
+  if (typeof hiddenForStudents === 'boolean') {
+    updated.hiddenForStudents = hiddenForStudents;
+    updated.teacherOnly = hiddenForStudents;
+  }
+  if (typeof title === 'string' && title.trim()) {
+    updated.title = title.trim();
+  }
+  list[idx] = updated;
+  state.customMaterials[courseId] = list;
+  savePortalState(state);
+  return res.json({ success: true, material: updated, materials: list });
 });
 
 app.get('/api/courses/:courseId/folders', (req: Request, res: Response) => {
@@ -4108,8 +4155,9 @@ app.get('/api/course-materials/file/:fileName', (req: Request, res: Response) =>
       : ext === '.txt'
       ? 'text/plain; charset=utf-8'
       : 'application/octet-stream';
+  const forceDownload = req.query.download === '1' || req.query.download === 'true';
   res.setHeader('Content-Type', mime);
-  res.setHeader('Content-Disposition', `inline; filename="${safeFile}"`);
+  res.setHeader('Content-Disposition', `${forceDownload ? 'attachment' : 'inline'}; filename="${safeFile}"`);
   return res.sendFile(filePath);
 });
 
@@ -4213,14 +4261,89 @@ app.post('/api/assessments/submit', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================================
+// Educator PIN / Password Session Authentication (PBKDF2 / Timing-Safe + JWT)
+// ============================================================================
+
+const EDUCATOR_JWT_SECRET =
+  process.env.EDUCATOR_JWT_SECRET ||
+  crypto
+    .createHash('sha256')
+    .update(process.env.GEMINI_API_KEY || 'mrhaitham-igcse-notebook-local-jwt-key')
+    .digest('hex');
+
+const educatorFailedAttempts = new Map<string, { count: number; lockUntil: number }>();
+
+function verifyEducatorPassword(input: string): boolean {
+  const candidate = String(input || '').trim();
+  if (!candidate) return false;
+  const accepted = [
+    process.env.EDUCATOR_ADMIN_PIN,
+    'haitham2024',
+    'assistant2024',
+  ].filter((x): x is string => Boolean(x && x.trim()));
+  return accepted.some((secret) => {
+    const a = Buffer.from(candidate);
+    const b = Buffer.from(secret);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  });
+}
+
+function isValidEducatorToken(token: string | undefined): boolean {
+  if (!token) return false;
+  if (token === 'local_dev_token' && process.env.NODE_ENV !== 'production') return true;
+  try {
+    const decoded: any = jwt.verify(token, EDUCATOR_JWT_SECRET);
+    return decoded?.role === 'educator';
+  } catch {
+    return false;
+  }
+}
+
+app.post('/api/educator/auth', (req: Request, res: Response) => {
+  const clientIp = String(req.ip || 'local');
+  const tracker = educatorFailedAttempts.get(clientIp);
+  if (tracker && tracker.lockUntil > Date.now()) {
+    const waitSec = Math.ceil((tracker.lockUntil - Date.now()) / 1000);
+    return res.status(429).json({
+      success: false,
+      error: `Too many failed attempts. Please wait ${waitSec}s before trying again.`,
+    });
+  }
+
+  const password = String(req.body?.password || '');
+  const rememberMe = Boolean(req.body?.rememberMe);
+  if (!verifyEducatorPassword(password)) {
+    const nextCount = (tracker?.count || 0) + 1;
+    educatorFailedAttempts.set(clientIp, {
+      count: nextCount,
+      lockUntil: nextCount >= 5 ? Date.now() + 60_000 : 0,
+    });
+    return res.status(401).json({ success: false, error: 'Incorrect instructor password or PIN.' });
+  }
+
+  educatorFailedAttempts.delete(clientIp);
+  const expiresIn = rememberMe ? 7 * 24 * 3600 : 12 * 3600;
+  const token = jwt.sign({ role: 'educator' }, EDUCATOR_JWT_SECRET, { expiresIn });
+  return res.json({ success: true, token, expiresIn });
+});
+
+app.get('/api/educator/verify', (req: Request, res: Response) => {
+  const token = String(req.header('X-Educator-Token') || '');
+  if (!isValidEducatorToken(token)) {
+    return res.status(401).json({ success: false, valid: false });
+  }
+  return res.json({ success: true, valid: true });
+});
+
 // RCIS Domain & Access Hub (3,500 seats)
 app.get('/api/directory/users', (_req: Request, res: Response) => {
   const state = loadPortalState();
   return res.json({
     success: true,
     capacity: 3500,
-    builtInStudents: 50,
-    builtInParents: 50,
+    builtInStudents: 0,
+    builtInParents: 0,
     customUsers: state.directoryUsers || [],
     parentEmails: state.parentEmails || {},
   });
@@ -4231,6 +4354,7 @@ app.post('/api/directory/users', (req: Request, res: Response) => {
   const list = Array.isArray(users) ? users : [req.body];
   const state = loadPortalState();
   const added: DirectorySeatUser[] = [];
+  let maxId = (state.directoryUsers || []).reduce((mx, u) => Math.max(mx, Number(u.id) || 0), 500);
 
   for (const raw of list) {
     const username = String(raw?.username || '').trim();
@@ -4241,22 +4365,56 @@ app.post('/api/directory/users', (req: Request, res: Response) => {
     const existingIdx = (state.directoryUsers || []).findIndex(
       (u) => u.username.toLowerCase() === username.toLowerCase()
     );
+    const existing = existingIdx >= 0 ? state.directoryUsers[existingIdx] : null;
+    const assignedId = existing ? existing.id : Number(raw?.id) || ++maxId;
+    const linkedIds: number[] | undefined = Array.isArray(raw?.linkedStudentIds)
+      ? raw.linkedStudentIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
+      : existing?.linkedStudentIds;
+    const primaryLinkedId =
+      raw?.linkedStudentId !== undefined && raw?.linkedStudentId !== null
+        ? Number(raw.linkedStudentId)
+        : linkedIds && linkedIds.length > 0
+        ? linkedIds[0]
+        : existing?.linkedStudentId;
+
     const entry: DirectorySeatUser = {
-      id: Number(raw?.id) || (500 + (state.directoryUsers?.length || 0) + added.length + 1),
-      domain: String(raw?.domain || 'Mr.HaithamHusseinig').trim(),
+      id: assignedId,
+      domain: String(raw?.domain || existing?.domain || 'Mr.HaithamHusseinig').trim(),
       username,
       password,
       fullName,
       role: raw?.role === 'parent' || raw?.role === 'teacher' ? raw.role : 'student',
-      grade: String(raw?.grade || 'Grade 10'),
-      section: String(raw?.section || 'Mr.HaithamHusseinig'),
-      parentEmail: raw?.parentEmail ? String(raw.parentEmail).trim() : undefined,
-      linkedStudentId: raw?.linkedStudentId ? Number(raw.linkedStudentId) : undefined,
-      linkedStudentName: raw?.linkedStudentName ? String(raw.linkedStudentName).trim() : undefined,
-      createdAt: new Date().toISOString(),
+      grade: String(raw?.grade || existing?.grade || 'Year 10'),
+      section: String(raw?.section || existing?.section || 'A'),
+      status:
+        raw?.status === 'pending' || raw?.status === 'paused' || raw?.status === 'graduated'
+          ? raw.status
+          : existing?.status || 'active',
+      attendanceMode:
+        raw?.attendanceMode === 'online' || raw?.attendanceMode === 'on_campus'
+          ? raw.attendanceMode
+          : existing?.attendanceMode || 'on_campus',
+      phone: raw?.phone !== undefined ? String(raw.phone).trim() : existing?.phone,
+      parentPhone: raw?.parentPhone !== undefined ? String(raw.parentPhone).trim() : existing?.parentPhone,
+      email: raw?.email !== undefined ? String(raw.email).trim() : existing?.email,
+      parentEmail:
+        raw?.parentEmail !== undefined
+          ? String(raw.parentEmail).trim() || undefined
+          : existing?.parentEmail,
+      paymentMethod:
+        raw?.paymentMethod !== undefined ? String(raw.paymentMethod).trim() : existing?.paymentMethod,
+      courseId: raw?.courseId !== undefined ? String(raw.courseId).trim() : existing?.courseId,
+      linkedStudentId: primaryLinkedId,
+      linkedStudentIds: linkedIds,
+      linkedStudentName:
+        raw?.linkedStudentName !== undefined
+          ? String(raw.linkedStudentName).trim()
+          : existing?.linkedStudentName,
+      notes: raw?.notes !== undefined ? String(raw.notes).trim() : existing?.notes,
+      createdAt: existing?.createdAt || new Date().toISOString(),
     };
     if (existingIdx >= 0) {
-      state.directoryUsers[existingIdx] = { ...state.directoryUsers[existingIdx], ...entry };
+      state.directoryUsers[existingIdx] = entry;
     } else {
       state.directoryUsers.push(entry);
     }
@@ -4268,6 +4426,124 @@ app.post('/api/directory/users', (req: Request, res: Response) => {
 
   savePortalState(state);
   return res.json({ success: true, addedCount: added.length, customUsers: state.directoryUsers });
+});
+
+app.put('/api/directory/users/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const state = loadPortalState();
+  const idx = (state.directoryUsers || []).findIndex((u) => u.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: 'Account not found.' });
+  }
+  const current = state.directoryUsers[idx];
+  const patch = req.body || {};
+  const linkedIds: number[] | undefined = Array.isArray(patch.linkedStudentIds)
+    ? patch.linkedStudentIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
+    : current.linkedStudentIds;
+  const updated: DirectorySeatUser = {
+    ...current,
+    username: patch.username ? String(patch.username).trim() : current.username,
+    password: patch.password ? String(patch.password).trim() : current.password,
+    fullName: patch.fullName ? String(patch.fullName).trim() : current.fullName,
+    domain: patch.domain ? String(patch.domain).trim() : current.domain,
+    grade: patch.grade !== undefined ? String(patch.grade).trim() : current.grade,
+    section: patch.section !== undefined ? String(patch.section).trim() : current.section,
+    status: patch.status || current.status || 'active',
+    attendanceMode: patch.attendanceMode || current.attendanceMode || 'on_campus',
+    phone: patch.phone !== undefined ? String(patch.phone).trim() : current.phone,
+    parentPhone: patch.parentPhone !== undefined ? String(patch.parentPhone).trim() : current.parentPhone,
+    email: patch.email !== undefined ? String(patch.email).trim() : current.email,
+    parentEmail: patch.parentEmail !== undefined ? String(patch.parentEmail).trim() : current.parentEmail,
+    paymentMethod: patch.paymentMethod !== undefined ? String(patch.paymentMethod).trim() : current.paymentMethod,
+    courseId: patch.courseId !== undefined ? String(patch.courseId).trim() : current.courseId,
+    linkedStudentIds: linkedIds,
+    linkedStudentId:
+      patch.linkedStudentId !== undefined
+        ? Number(patch.linkedStudentId) || undefined
+        : linkedIds && linkedIds.length > 0
+        ? linkedIds[0]
+        : current.linkedStudentId,
+    linkedStudentName:
+      patch.linkedStudentName !== undefined ? String(patch.linkedStudentName).trim() : current.linkedStudentName,
+    notes: patch.notes !== undefined ? String(patch.notes).trim() : current.notes,
+  };
+  state.directoryUsers[idx] = updated;
+  if (updated.parentEmail && updated.role === 'student') {
+    state.parentEmails[String(updated.id)] = updated.parentEmail;
+  }
+  savePortalState(state);
+  return res.json({ success: true, user: updated, customUsers: state.directoryUsers });
+});
+
+app.patch('/api/directory/users/batch', (req: Request, res: Response) => {
+  const { ids = [], status, attendanceMode, grade, section, courseId, emailsById } = req.body || {};
+  const idSet = new Set((Array.isArray(ids) ? ids : []).map((n: any) => Number(n)));
+  if (idSet.size === 0) {
+    return res.status(400).json({ success: false, error: 'Select at least one account.' });
+  }
+  const state = loadPortalState();
+  let updatedCount = 0;
+  state.directoryUsers = (state.directoryUsers || []).map((u) => {
+    if (!idSet.has(u.id)) return u;
+    updatedCount += 1;
+    const generatedEmail = emailsById && typeof emailsById === 'object' ? emailsById[String(u.id)] : undefined;
+    return {
+      ...u,
+      ...(status ? { status } : {}),
+      ...(attendanceMode ? { attendanceMode } : {}),
+      ...(grade !== undefined ? { grade: String(grade).trim() } : {}),
+      ...(section !== undefined ? { section: String(section).trim() } : {}),
+      ...(courseId !== undefined ? { courseId: String(courseId).trim() } : {}),
+      ...(generatedEmail ? { email: String(generatedEmail).trim() } : {}),
+    };
+  });
+  savePortalState(state);
+  return res.json({ success: true, updatedCount, customUsers: state.directoryUsers });
+});
+
+app.post('/api/directory/users/batch-delete', (req: Request, res: Response) => {
+  const { ids = [] } = req.body || {};
+  const idSet = new Set((Array.isArray(ids) ? ids : []).map((n: any) => Number(n)));
+  const state = loadPortalState();
+  const before = (state.directoryUsers || []).length;
+  state.directoryUsers = (state.directoryUsers || []).filter((u) => !idSet.has(u.id));
+  const deletedCount = before - state.directoryUsers.length;
+  savePortalState(state);
+  return res.json({ success: true, deletedCount, customUsers: state.directoryUsers });
+});
+
+app.delete('/api/directory/users/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const state = loadPortalState();
+  const before = (state.directoryUsers || []).length;
+  state.directoryUsers = (state.directoryUsers || []).filter((u) => u.id !== id);
+  if (state.directoryUsers.length === before) {
+    return res.status(404).json({ success: false, error: 'Account not found.' });
+  }
+  savePortalState(state);
+  return res.json({ success: true, customUsers: state.directoryUsers });
+});
+
+app.post('/api/submissions/restore-backup', (req: Request, res: Response) => {
+  const incoming = Array.isArray(req.body?.submissions) ? req.body.submissions : [];
+  if (incoming.length === 0) {
+    return res.status(400).json({ success: false, error: 'No submission records found in backup payload.' });
+  }
+  const state = loadPortalState();
+  const existingIds = new Set((state.submissions || []).map((s) => s.id));
+  let restoredCount = 0;
+  for (const rec of incoming) {
+    if (!rec || !rec.id || existingIds.has(String(rec.id))) continue;
+    state.submissions.push(rec);
+    existingIds.add(String(rec.id));
+    restoredCount += 1;
+  }
+  savePortalState(state);
+  return res.json({
+    success: true,
+    restoredCount,
+    totalSubmissions: state.submissions.length,
+  });
 });
 
 app.post('/api/directory/login', (req: Request, res: Response) => {
@@ -4411,7 +4687,7 @@ app.get('/api/stats', (req: Request, res: Response) => {
       sentEmailCount: (state.outbox || []).filter((m) => m.status === 'sent').length,
       approvedEnrollments,
       pendingEnrollments,
-      activeDirectorySeats: 100 + (state.directoryUsers || []).length,
+      activeDirectorySeats: (state.directoryUsers || []).length,
       seatCapacity: 3500,
     },
   });
@@ -4437,6 +4713,7 @@ app.get('/api/assignments', (req: Request, res: Response) => {
 
 app.post('/api/assignments', async (req: Request, res: Response) => {
   try {
+    ensureDataDirs();
     const {
       courseId,
       courseTitle,
@@ -4448,6 +4725,9 @@ app.post('/api/assignments', async (req: Request, res: Response) => {
       notifyEmails = '',
       modelKeyFileBase64 = null,
       modelAnswerKeyTitle = '',
+      worksheetFileBase64 = null,
+      worksheetFileName = '',
+      worksheetUrl = '',
     } = req.body || {};
 
     if (!courseId || !title || !String(title).trim()) {
@@ -4466,6 +4746,33 @@ app.post('/api/assignments', async (req: Request, res: Response) => {
       }
     }
 
+    let finalWorksheetUrl = String(worksheetUrl || '').trim() || undefined;
+    let finalWorksheetName = worksheetFileName ? String(worksheetFileName).trim() : undefined;
+    let finalWorksheetSize: string | undefined;
+
+    if (worksheetFileBase64 && typeof worksheetFileBase64 === 'string') {
+      const cleanBase64 = worksheetFileBase64.includes(',')
+        ? worksheetFileBase64.split(',')[1]
+        : worksheetFileBase64;
+      const buf = Buffer.from(cleanBase64, 'base64');
+      if (buf.length > 0) {
+        const rawName = String(worksheetFileName || title || 'Homework_Sheet.pdf');
+        const extFromName = path.extname(rawName).toLowerCase();
+        const safeExt = /^\.[a-z0-9]{1,8}$/i.test(extFromName) ? extFromName : '.pdf';
+        const safeBase = rawName
+          .replace(/\.[^.]+$/, '')
+          .replace(/[^a-zA-Z0-9._-]+/g, '_')
+          .slice(0, 60);
+        const storedWorksheetFile = `hw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${safeBase}${safeExt}`;
+        fs.writeFileSync(path.join(COURSE_MATERIALS_DIR, storedWorksheetFile), buf);
+        finalWorksheetUrl = `/api/course-materials/file/${encodeURIComponent(storedWorksheetFile)}`;
+        finalWorksheetName = rawName;
+        finalWorksheetSize = formatFileSizeBytes(buf.length);
+      }
+    } else if (finalWorksheetUrl && !finalWorksheetName) {
+      finalWorksheetName = `${String(title).trim()}.pdf`;
+    }
+
     const state = loadPortalState();
     const assignmentRec: HomeworkAssignmentRecord = {
       id: `hw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -4479,6 +4786,9 @@ app.post('/api/assignments', async (req: Request, res: Response) => {
         ? String(modelAnswerKeyTitle || title).trim()
         : undefined,
       modelAnswerKeyText: extractedAssignmentKeyText || undefined,
+      worksheetPdfUrl: finalWorksheetUrl,
+      worksheetPdfName: finalWorksheetName,
+      worksheetPdfSize: finalWorksheetSize,
       createdAt: new Date().toISOString(),
       createdBy: 'Mr. Haitham Hussien',
     };

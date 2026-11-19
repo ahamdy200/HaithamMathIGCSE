@@ -11,6 +11,8 @@ import {
   Lock,
   Loader2,
   Link2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { COURSES, CourseMaterial, CourseVideo } from '../educato/courses';
 import { apiUrl } from '../utils/apiBase';
@@ -202,6 +204,17 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
     });
     if (res.ok) {
       setNotice({ type: 'success', text: 'Uploaded material removed from section.' });
+      await loadCourseContent();
+    }
+  };
+
+  const handleToggleMaterialVisibility = async (materialId: string, nextHidden: boolean) => {
+    const res = await fetch(apiUrl(`/api/courses/${selectedCourseId}/materials/${materialId}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hiddenForStudents: nextHidden }),
+    });
+    if (res.ok) {
       await loadCourseContent();
     }
   };
@@ -590,6 +603,32 @@ export const CourseMaterialsStudio: React.FC<CourseMaterialsStudioProps> = ({
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleToggleMaterialVisibility(m.id, !(m.hiddenForStudents || m.teacherOnly))
+                        }
+                        title={
+                          m.hiddenForStudents || m.teacherOnly
+                            ? 'Hidden from students — click to show'
+                            : 'Visible to students — click to hide'
+                        }
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition inline-flex items-center gap-1 ${
+                          m.hiddenForStudents || m.teacherOnly
+                            ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {m.hiddenForStudents || m.teacherOnly ? (
+                          <>
+                            <EyeOff className="w-3 h-3" /> Hidden
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3 h-3" /> Visible
+                          </>
+                        )}
+                      </button>
                       {m.url && m.url !== '#' && (
                         <a
                           href={m.url.startsWith('/api/') ? apiUrl(m.url) : m.url}

@@ -10,6 +10,9 @@ import { StudentHomeworkPortal } from '../components/StudentHomeworkPortal';
 import { TeacherModelKeyViewer } from '../components/TeacherModelKeyViewer';
 import { CourseMaterialsStudio } from '../components/CourseMaterialsStudio';
 import { LessonSketchSvg } from '../components/LessonSketchSvg';
+import { AdminPinModal, hasEducatorSession, clearEducatorSession } from '../components/Auth/AdminPinModal';
+import { StudentManagementView } from '../components/Admin/StudentManagementView';
+import { verifyEducatorSessionServer } from '../utils/educatorApi';
 import { apiUrl } from '../utils/apiBase';
 import type { PortalNotification } from '../types';
 
@@ -27,10 +30,24 @@ export function Layout() {
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   const [focusSubmissionId, setFocusSubmissionId] = useState<string | null>(null);
   const [activeLessonTopic, setActiveLessonTopic] = useState<string>('');
+  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
+  const [selectedChildId, setSelectedChildId] = useState<number | undefined>(undefined);
 
   const isTeacher = user?.role === 'teacher';
   const isParent = user?.role === 'parent';
-  const targetStudentId = isParent ? user?.linkedStudentId : user?.role === 'student' ? user.id : null;
+  const parentChildIds = isParent
+    ? Array.from(
+        new Set([
+          ...(Array.isArray(user?.linkedStudentIds) ? user.linkedStudentIds : []),
+          ...(user?.linkedStudentId ? [user.linkedStudentId] : []),
+        ])
+      )
+    : [];
+  const targetStudentId = isParent
+    ? selectedChildId || parentChildIds[0] || user?.linkedStudentId
+    : user?.role === 'student'
+    ? user.id
+    : null;
   const isApprovedStudent = user?.role === 'student' && enrollment?.status === 'approved';
   const isApprovedParent = isParent && enrollment?.status === 'approved';
 
@@ -111,11 +128,22 @@ export function Layout() {
 
   const handleSelectView = (view: string) => {
     if (!isTeacher) {
-      if (view === 'modelkey' || view === 'upload-studio') return;
+      if (view === 'modelkey' || view === 'upload-studio' || view === 'admin-console') return;
       if (!isApprovedStudent && !isParent && (view === 'homework-studio' || view === 'course')) {
         setActiveView('dashboard');
         return;
       }
+    } else if (view === 'admin-console') {
+      if (!hasEducatorSession()) {
+        setIsAdminPinModalOpen(true);
+        return;
+      }
+      void verifyEducatorSessionServer().then((ok) => {
+        if (!ok) {
+          setActiveView('dashboard');
+          setIsAdminPinModalOpen(true);
+        }
+      });
     }
     if (view !== 'course') {
       setActiveLessonTopic('');
@@ -156,8 +184,22 @@ export function Layout() {
           />
         </div>
 
-        {/* Top Notification Header */}
-        <div className="relative z-20 px-6 lg:px-8 pt-4 flex items-center justify-end">
+        {/* Top Child Switcher (Multi-child Parents) + Notification Header */}
+        <div className="relative z-20 px-6 lg:px-8 pt-4 flex items-center justify-end gap-2">
+          {isParent && parentChildIds.length > 1 && (
+            <select
+              value={targetStudentId || ''}
+              onChange={(e) => setSelectedChildId(Number(e.target.value))}
+              className="px-3 py-2 rounded-xl bg-white border border-[#E5E7EB] text-xs font-semibold text-[#13294B]"
+              title="Switch child profile"
+            >
+              {parentChildIds.map((cid, idx) => (
+                <option key={cid} value={cid}>
+                  Child #{idx + 1} (ID {cid})
+                </option>
+              ))}
+            </select>
+          )}
           <div className="relative">
             <button
               type="button"
@@ -304,7 +346,24 @@ export function Layout() {
             />
           )}
           {activeView === 'modelkey' && isTeacher && <TeacherModelKeyViewer />}
+          {activeView === 'admin-console' && isTeacher && hasEducatorSession() && (
+            <StudentManagementView
+              onLockConsole={() => {
+                clearEducatorSession();
+                setActiveView('dashboard');
+              }}
+            />
+          )}
         </div>
+
+        <AdminPinModal
+          isOpen={isAdminPinModalOpen}
+          onClose={() => setIsAdminPinModalOpen(false)}
+          onSuccess={() => {
+            setIsAdminPinModalOpen(false);
+            setActiveView('admin-console');
+          }}
+        />
       </main>
     </div>
   );
