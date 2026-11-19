@@ -43,6 +43,9 @@ export interface QuestionGrading {
   markSchemeRef: string;
   studentWorkingFound: string;
   modelSolution: string;
+  phase1Extraction?: string;
+  phase2ErrorAnalysis?: string;
+  phase3Solution?: string;
   status: 'correct' | 'partial' | 'incorrect';
   statusLabel?: 'CORRECT' | 'INCORRECT' | 'PARTIAL';
   errorAnalysis?: string;
@@ -52,6 +55,61 @@ export interface QuestionGrading {
 export interface HomeworkActionPlanItem {
   title: string;
   detail: string;
+}
+
+export type GradingSystem = 'edexcel' | 'ib' | 'marks';
+export type AssignmentKind = 'homework' | 'quiz' | 'essay';
+
+export interface QuizQuestion {
+  id: string;
+  prompt: string;
+  type: 'mcq' | 'short';
+  options?: string[];
+  correctAnswer?: string;
+  marks: number;
+}
+
+export interface QuizDefinition {
+  id: string;
+  courseId: string;
+  title: string;
+  kind: 'quiz' | 'essay';
+  gradingSystem: GradingSystem;
+  instructions: string;
+  questions: QuizQuestion[];
+  createdAt: string;
+}
+
+export interface OutboxEmailRecord {
+  id: string;
+  createdAt: string;
+  submissionId: string;
+  studentId: number;
+  studentName: string;
+  parentName?: string;
+  to: string;
+  from: string;
+  subject: string;
+  html: string;
+  provider: 'resend' | 'local-preview';
+  status: 'sent' | 'logged_locally' | 'failed';
+  resendId?: string;
+  note?: string;
+}
+
+export interface DirectorySeatUser {
+  id: number;
+  domain: string;
+  username: string;
+  password: string;
+  fullName: string;
+  role: 'student' | 'parent' | 'teacher';
+  grade?: string;
+  section?: string;
+  parentEmail?: string;
+  linkedStudentId?: number;
+  linkedStudentName?: string;
+  createdAt: string;
 }
 
 export interface HomeworkGradingReport {
@@ -68,6 +126,9 @@ export interface HomeworkGradingReport {
   earnedMarks: number;
   percentage: number;
   grade: string;
+  gradingSystem?: GradingSystem;
+  assignmentKind?: AssignmentKind;
+  criterionBreakdown?: Array<{ label: string; score: string; note?: string }>;
   performanceLevel: string;
   generalFeedback: string;
   diagnosticReview?: string;
@@ -88,3 +149,29 @@ export interface HomeworkGradingReport {
   };
 }
 
+
+export interface HomeworkAssignmentRecord {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  title: string;
+  instructions: string;
+  dueDate: string;
+  gradingSystem: GradingSystem;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface PortalNotification {
+  id: string;
+  recipientRole: 'student' | 'parent' | 'teacher' | 'all';
+  courseId?: string;
+  studentId?: number;
+  submissionId?: string;
+  title: string;
+  message: string;
+  type: 'assignment' | 'report' | 'submission';
+  dueDate?: string;
+  createdAt: string;
+  readByUserIds: number[];
+}

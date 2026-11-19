@@ -1,10 +1,30 @@
+export const DOMAINS = ['Mr.HaithamHusseinig', 'IGCSE-Online'] as const;
+export type PortalDomain = (typeof DOMAINS)[number] | string;
+export const RCIS_CAPACITY = 3500;
+
 export interface Student {
   id: number;
+  domain?: string;
   username: string;
   password: string;
   fullName: string;
   grade: string;
   section: string;
+  parentEmail?: string;
+}
+
+export interface ParentAccount {
+  id: number;
+  domain: string;
+  username: string;
+  password: string;
+  fullName: string;
+  email: string;
+  linkedStudentId: number;
+  linkedStudentName: string;
+  grade: string;
+  section: string;
+  role: 'parent';
 }
 
 export const STUDENTS: Student[] = [
@@ -64,5 +84,23 @@ export const TEACHER_ACCOUNT = {
   username: "teacher",
   password: "haitham2024",
   fullName: "Mr. Haitham",
+  domain: "Mr.HaithamHusseinig",
   role: "teacher" as const,
 };
+
+export const PARENTS: ParentAccount[] = STUDENTS.map((student) => {
+  const suffix = String(student.id).padStart(2, '0');
+  return {
+    id: 1000 + student.id,
+    domain: 'Mr.HaithamHusseinig',
+    username: `parent${suffix}`,
+    password: `parent2024@${suffix}`,
+    fullName: `Parent of ${student.fullName}`,
+    email: student.parentEmail || `parent.${student.username}@mrhaithamhusseinig.edu`,
+    linkedStudentId: student.id,
+    linkedStudentName: student.fullName,
+    grade: student.grade,
+    section: student.section,
+    role: 'parent' as const,
+  };
+});

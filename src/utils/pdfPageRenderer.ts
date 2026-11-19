@@ -10,12 +10,16 @@ export interface RenderedPageImage {
   width: number;
   height: number;
   rotation: number;
+  sourcePageNumber?: number;
+  tilePosition?: 'full' | 'left' | 'right';
+  pageFormat?: 'A3' | 'A4';
 }
 
 export interface PdfRenderResult {
   pageImages: RenderedPageImage[];
   totalPages: number;
   truncated: boolean;
+  a3SpreadCount?: number;
 }
 
 /**
@@ -39,6 +43,7 @@ export async function renderPdfPagesToImages(
     maxPages?: number;
     quality?: number;
     contrastBoost?: boolean;
+    a3SplitMode?: 'auto' | 'always' | 'off';
   } = {}
 ): Promise<PdfRenderResult> {
   const { maxPages = 16, quality = 0.91, contrastBoost = false } = options;
@@ -81,20 +86,64 @@ export async function renderPdfPagesToImages(
     await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
     ctx.filter = 'none';
 
-    pageImages.push({
-      pageNumber: pageNum,
-      dataUrl: encodeCanvasToJpeg(canvas, quality),
-      mimeType: 'image/jpeg',
-      width: canvas.width,
-      height: canvas.height,
-      rotation: 0,
-    });
+    const a3Mode = options.a3SplitMode ?? 'auto';
+    const aspectRatio = canvas.width / Math.max(1, canvas.height);
+    const shouldSplitA3 =
+      a3Mode === 'always' ||
+      (a3Mode === 'auto' && aspectRatio > 1.32);
+
+    if (shouldSplitA3) {
+      const overlapPx = Math.round(canvas.width * 0.04);
+      const halfWidth = Math.max(1, Math.round(canvas.width / 2) + overlapPx);
+      const rightStartX = Math.max(0, Math.round(canvas.width / 2) - overlapPx);
+      const rightWidth = Math.max(1, canvas.width - rightStartX);
+
+      const sliceToTile = (sx: number, sw: number, tilePosition: 'left' | 'right') => {
+        const tileCanvas = document.createElement('canvas');
+        tileCanvas.width = sw;
+        tileCanvas.height = canvas.height;
+        const tileCtx = tileCanvas.getContext('2d');
+        if (!tileCtx) return null;
+        tileCtx.fillStyle = '#ffffff';
+        tileCtx.fillRect(0, 0, sw, canvas.height);
+        tileCtx.drawImage(canvas, sx, 0, sw, canvas.height, 0, 0, sw, canvas.height);
+        return {
+          pageNumber: pageImages.length + 1,
+          sourcePageNumber: pageNum,
+          tilePosition,
+          pageFormat: 'A3' as const,
+          dataUrl: encodeCanvasToJpeg(tileCanvas, quality),
+          mimeType: 'image/jpeg',
+          width: tileCanvas.width,
+          height: tileCanvas.height,
+          rotation: 0,
+        };
+      };
+
+      const leftTile = sliceToTile(0, halfWidth, 'left');
+      if (leftTile) pageImages.push(leftTile);
+      const rightTile = sliceToTile(rightStartX, rightWidth, 'right');
+      if (rightTile) pageImages.push(rightTile);
+    } else {
+      pageImages.push({
+        pageNumber: pageImages.length + 1,
+        sourcePageNumber: pageNum,
+        tilePosition: 'full',
+        pageFormat: aspectRatio > 1.15 ? 'A3' : 'A4',
+        dataUrl: encodeCanvasToJpeg(canvas, quality),
+        mimeType: 'image/jpeg',
+        width: canvas.width,
+        height: canvas.height,
+        rotation: 0,
+      });
+    }
   }
 
   return {
     pageImages,
     totalPages,
     truncated: totalPages > pagesToRender,
+    a3SpreadCount: pageImages.filter((p) => p.tilePosition === 'left').length,
   };
 }
 

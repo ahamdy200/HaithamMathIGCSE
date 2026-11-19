@@ -36,8 +36,8 @@ app.use((req: Request, res: Response, next) => {
   next();
 });
 
-// Homework grading always uses Gemini Flash by default (override with GEMINI_GRADING_MODEL if needed)
-const GRADING_MODEL = process.env.GEMINI_GRADING_MODEL || 'gemini-3.6-flash';
+// Homework grading uses Gemini 3.8 Flash by default (override with GEMINI_GRADING_MODEL if needed)
+const GRADING_MODEL = process.env.GEMINI_GRADING_MODEL || 'gemini-3.8-flash';
 const DEEP_REASONING_MODEL = process.env.GEMINI_DEEP_GRADING_MODEL || 'gemini-4-hydrogen';
 
 // Initialize GoogleGenAI SDK server-side
@@ -51,16 +51,10 @@ const ai = new GoogleGenAI({
 });
 
 // Health check endpoint
-app.get('/api/health', (req: Request, res: Response) => {
+app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
-    model: GRADING_MODEL,
-    deepModel: DEEP_REASONING_MODEL,
-    visionPipeline: '2-pass-transcribe-then-grade',
-    mediaResolution: 'MEDIA_RESOLUTION_ULTRA_HIGH (page images) / MEDIA_RESOLUTION_HIGH (PDF)',
-    thinkingLevel: 'HIGH',
-    githubRepo: 'https://github.com/ahamdy200/HaithamMathIGCSE.git',
     time: new Date().toISOString(),
   });
 });
@@ -103,131 +97,36 @@ app.get('/api/github/status', (_req: Request, res: Response) => {
   }
 });
 
-// Multi-Repository Registry Endpoint
+// Course & Portal Metadata Endpoint
 app.get('/api/repos', (_req: Request, res: Response) => {
-  try {
-    const reposDir = path.resolve(__dirname, 'repos');
-    const reposList: any[] = [
+  res.json({
+    success: true,
+    totalCount: 1,
+    repositories: [
       {
         id: 'haitham-math',
-        name: 'HaithamMathIGCSE',
+        name: 'Mr. Haitham Hussien IGCSE Portal',
         fullName: 'ahamdy200/HaithamMathIGCSE',
-        description: 'Cambridge IGCSE Mathematics AI Homework Evaluation, Mark Scheme & Notebook Studio',
-        remoteUrl: 'https://github.com/ahamdy200/HaithamMathIGCSE.git',
+        description: 'Cambridge & Edexcel IGCSE Mathematics Homework & Progress Portal',
         branch: 'main',
         localPath: '.',
         isPrimary: true,
-        category: 'Core Curriculum & Grading',
-        status: 'Connected (origin/main)',
+        category: 'Core Curriculum',
+        status: 'Active',
         features: [
-          'Order of Operations (BIDMAS) Homework Checker',
-          'NotebookLM-style Diagnostic Evaluation Reports',
-          'Interactive Colab Notebook Studio',
-          'Official Cambridge Mark Scheme Engine',
+          'Student Homework Submission & Teacher Feedback',
+          'Approved Course & Progress Tracking',
+          'Educator Marking & Official Assessment Reports',
         ],
       },
-    ];
-
-    if (fs.existsSync(reposDir)) {
-      const items = fs.readdirSync(reposDir);
-      for (const item of items) {
-        const itemPath = path.join(reposDir, item);
-        if (fs.statSync(itemPath).isDirectory()) {
-          const files = fs.readdirSync(itemPath);
-          const hasNotebook = files.includes('Notebook.ipynb');
-          const hasApp = files.includes('app.py');
-          const hasPredict = files.includes('predict.py');
-
-          let remoteUrl = 'https://github.com/Sgvkamalakar/Hand-Written-Equation-Solver.git';
-          let role = 'Deep Learning Computer Vision & Math OCR';
-          let category = 'Deep Learning & OCR';
-          let branch = 'main';
-          let features = [
-            '44-Cell Colab Training Pipeline (Notebook.ipynb)',
-            'OpenCV Math Symbol Segmentation (32x32 ROIs)',
-            'Interactive Drawing Canvas & Stroke Adjustment',
-            'CNN Character Classification (97.57% Accuracy)',
-          ];
-
-          if (item.toLowerCase().includes('pix2text')) {
-            remoteUrl = 'https://github.com/breezedeus/Pix2Text.git';
-            role = 'Open Source Mathematical Formula Detection (MFD), Formula Recognition (MFR) & LaTeX OCR Skill';
-            category = 'Math Formula OCR & LaTeX Parser';
-            branch = 'main';
-            features = [
-              'Mathematical Formula Detection (MFD-1.5) for isolating formulas',
-              'Mathematical Formula Recognition (MFR-1.5) producing LaTeX expressions',
-              'DocLayout-YOLO Document Layout Analysis & Table Parsing',
-              'Image & PDF Conversion directly to Markdown with KaTeX math rendering',
-            ];
-          } else if (item.toLowerCase().includes('ai-math-grader') || item.toLowerCase().includes('grader-openai')) {
-            remoteUrl = 'https://github.com/bluehawana/AI-Math-Grader-OpenAI.git';
-            role = 'Multi-Provider Vision-AI Math Exam Grader (Gemini, GPT-4o, Claude)';
-            category = 'Multimodal AI Exam Grader';
-            branch = 'main';
-            features = [
-              'Multimodal Vision-AI: Intelligent OCR & reasoning for student handwriting',
-              'Multi-Provider Architecture: Google Gemini, OpenAI GPT-4o, Anthropic Claude',
-              'Multi-Page Context (up to 10 pages) for long-form mathematics solutions',
-              'Ink-Efficient Black & White Assessment Reports for printing',
-            ];
-          } else if (item.toLowerCase().includes('automark')) {
-            remoteUrl = 'https://github.com/adamzev/AutoMark.git';
-            role = 'Computer Vision math worksheet scanner, perspective warper, QR code detector & cell grader';
-            category = 'Worksheet Scanner & Auto-Grader';
-            branch = 'master';
-            features = [
-              'Automated Math Worksheet Scanning & Perspective Warper (AutoMark/extractor.py)',
-              'QR Code & Form Code Answer Key Mapping (AutoMark/qr.py)',
-              'Cell Border Removal & Digit Segmentation Pipeline (AutoMark/cells.py)',
-              'Color-Coded Visual Marking Overlay (Green = Correct, Red = Wrong, Yellow = Review)',
-            ];
-          } else if (item.toLowerCase().includes('equation') || item.toLowerCase().includes('hand-written')) {
-            role = 'Deep Learning (CNN + RNN) Handwritten Math Symbol Recognizer & Drawing Solver';
-          }
-
-          reposList.push({
-            id: item.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-            name: item,
-            fullName: item.toLowerCase().includes('pix2text')
-              ? 'breezedeus/Pix2Text'
-              : item.toLowerCase().includes('automark')
-              ? 'adamzev/AutoMark'
-              : item.toLowerCase().includes('grader')
-              ? 'bluehawana/AI-Math-Grader-OpenAI'
-              : `ahamdy200/${item}`,
-            description: role,
-            remoteUrl,
-            branch,
-            localPath: `repos/${item}`,
-            isPrimary: false,
-            category,
-            status: 'Connected (repos/' + item + ')',
-            files,
-            hasNotebook,
-            hasApp,
-            hasPredict,
-            features,
-          });
-        }
-      }
-    }
-
-    res.json({
-      success: true,
-      totalCount: reposList.length,
-      repositories: reposList,
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
+    ],
+  });
 });
 
-// AutoMark Form Codes & Curriculum Answer Keys Registry
+// Curriculum Form Codes Registry (Educator Reference)
 app.get('/api/automark/form-codes', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    sourceRepo: 'AutoMark (adamzev/AutoMark)',
     formCodes: [
       {
         formCode: 'IGCSE-BIDMAS-CH1',
@@ -235,408 +134,43 @@ app.get('/api/automark/form-codes', (_req: Request, res: Response) => {
         teacher: 'Mr. Haitham Hussien',
         totalQuestions: 9,
         totalMarks: 10,
-        answerKey: [
-          { q: 1, label: 'Q1', answer: '11', rule: 'Division before addition under BIDMAS: 12 / 4 = 3, 8 + 3 = 11' },
-          { q: 2, label: 'Q2', answer: '30', rule: '5 * (16 + 2 - 12) = 5 * 6 = 30' },
-          { q: 3, label: 'Q3', answer: '36', rule: '25 + 11 = 36' },
-          { q: 4, label: 'Q4', answer: '196', rule: '(23 - 9)^2 = 14^2 = 196' },
-          { q: 5, label: 'Q5a', answer: '22', rule: '4 + 9 * (6 - 4) = 22' },
-          { q: 6, label: 'Q5b', answer: '4', rule: '24 / (12 - 8 + 2) = 4' },
-          { q: 7, label: 'Q6a', answer: '21', rule: '(10 - 4) / 2 + 18 = 21' },
-          { q: 8, label: 'Q6b', answer: '30', rule: '7 * (3 + 1) + 2 = 30' },
-          { q: 9, label: 'Q7', answer: '282', rule: '2 + 8 * 35 = 2 + 280 = 282' },
-        ],
-      },
-      {
-        formCode: 'BCBA8F9752',
-        title: 'AutoMark Standard Math Worksheet (40 Questions)',
-        totalQuestions: 40,
-        totalMarks: 40,
-        answerKeySummary: '40-problem arithmetic worksheet from adamzev/AutoMark',
       },
     ],
   });
 });
 
-// Multi-Provider AI Engine Status (inspired by AI-Math-Grader-OpenAI)
+// Marking Engine Status
 app.get('/api/providers', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    activeProvider: 'gemini',
+    activeProvider: 'marking-assistant',
     providers: [
       {
-        id: 'gemini',
-        name: 'Google Gemini',
-        model: 'gemini-3.6-flash',
-        status: process.env.GEMINI_API_KEY ? 'Active & Configured' : 'No API Key',
-        features: ['Multimodal Vision', '1M Token Context', 'Sub-second Latency'],
+        id: 'marking-assistant',
+        name: 'Mr. Haitham Marking Assistant',
+        status: process.env.GEMINI_API_KEY ? 'Configured' : 'Unavailable',
         isDefault: true,
       },
-      {
-        id: 'openai',
-        name: 'OpenAI',
-        model: 'gpt-4o',
-        status: process.env.OPENAI_API_KEY ? 'Active & Configured' : 'Standby / Optional',
-        features: ['Vision-AI Grading', 'Structured Outputs', 'Function Calling'],
-        isDefault: false,
-      },
-      {
-        id: 'anthropic',
-        name: 'Anthropic Claude',
-        model: 'claude-3-5-sonnet',
-        status: process.env.ANTHROPIC_API_KEY ? 'Active & Configured' : 'Standby / Optional',
-        features: ['Long-form Reasoning', 'Pedagogical Math Explanations'],
-        isDefault: false,
-      },
     ],
-    sourceRepo: 'AI-Math-Grader-OpenAI (bluehawana/AI-Math-Grader-OpenAI)',
   });
 });
 
-// Unified Processing Pool Architecture Endpoint
+// Internal Assessment Status
 app.get('/api/unified-pool/status', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    poolName: 'Unified AI Math Assessment Pool',
+    poolName: 'Mr. Haitham Assessment Pipeline',
     status: 'ONLINE',
-    enginesCount: 5,
-    stages: [
-      {
-        stage: 1,
-        engine: 'AutoMark',
-        repo: 'adamzev/AutoMark',
-        role: 'Ingestion, Perspective Rectification & QR/Form Code Matching',
-        status: 'Active',
-      },
-      {
-        stage: 2,
-        engine: 'Hand-Written-Equation-Solver',
-        repo: 'Sgvkamalakar/Hand-Written-Equation-Solver',
-        role: 'Contour Segmentation, Symbol OCR & Interactive Canvas Solver',
-        status: 'Active',
-      },
-      {
-        stage: 3,
-        engine: 'Pix2Text',
-        repo: 'breezedeus/Pix2Text',
-        role: 'Mathematical Formula Detection (MFD-1.5) & LaTeX Formula Recognition (MFR-1.5)',
-        status: 'Active',
-      },
-      {
-        stage: 4,
-        engine: 'AI-Math-Grader-OpenAI',
-        repo: 'bluehawana/AI-Math-Grader-OpenAI',
-        role: 'Multi-Provider Vision Reasoning & Multi-Page Context',
-        status: 'Active',
-      },
-      {
-        stage: 5,
-        engine: 'HaithamMathIGCSE',
-        repo: 'ahamdy200/HaithamMathIGCSE',
-        role: 'Cambridge BIDMAS Marking Rubric & NotebookLM Diagnostic Reports',
-        status: 'Active',
-      },
-    ],
+    stages: [],
   });
 });
 
-// Pix2Text Mathematical Formula Detection & LaTeX Recognition Endpoint
-app.post('/api/pix2text/ocr', async (req: Request, res: Response) => {
-  try {
-    const { imageBase64 = null, text = '' } = req.body || {};
-
-    // Call optional external Pix2Text microservice if PIX2TEXT_URL is configured
-    if (process.env.PIX2TEXT_URL) {
-      try {
-        const p2tUrl = new URL('pix2text', process.env.PIX2TEXT_URL);
-        const upstream = await fetch(p2tUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, image: imageBase64 }),
-        });
-        if (upstream.ok) {
-          const upData = await upstream.json();
-          return res.json({ success: true, ...upData, source: 'Pix2Text Internal Service (breezedeus/Pix2Text)' });
-        }
-      } catch (e) {
-        console.warn('Pix2Text internal service call failed, using built-in engine:', e);
-      }
-    }
-
-    const inputContent = String(text || '').trim() || '8 + 12 ÷ 4 = 11';
-    const latex = inputContent
-      .replace(/÷/g, '\\div ')
-      .replace(/x|×/gi, '\\times ')
-      .replace(/\^2/g, '^2');
-
-    res.json({
-      success: true,
-      source: 'Pix2Text (breezedeus/Pix2Text)',
-      detectedFormula: `$${latex}$`,
-      latex,
-      markdown: `$$\n${latex}\n$$`,
-      confidence: 0.985,
-      mfdVersion: '1.5',
-      mfrVersion: '1.5',
-      hasImage: Boolean(imageBase64),
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Unified Multi-Repository Pipeline Execution Endpoint (Stages 1 through 5 in one integrated call)
-app.post('/api/unified-pool/process', async (req: Request, res: Response) => {
-  const poolStart = Date.now();
-  try {
-    const {
-      studentName = 'Student Submission',
-      submissionText = '',
-      fileBase64 = null,
-      fileMimeType = null,
-      fileName = null,
-      modelAnswerKey = null,
-      modelAnswerTitle = null,
-      modelKeyFileBase64 = null,
-      formCode = 'IGCSE-DYNAMIC-KEY',
-      provider = 'gemini',
-    } = req.body || {};
-
-    let activeKey = (modelAnswerKey && String(modelAnswerKey).trim()) || currentModelAnswerKey.text;
-    if (modelKeyFileBase64) {
-      const extractedKey = await extractTextFromDocumentBase64(modelKeyFileBase64, 'application/pdf');
-      if (extractedKey && extractedKey.trim().length > 25) {
-        activeKey = extractedKey.trim();
-      }
-    }
-    const activeTitle = (modelAnswerTitle && String(modelAnswerTitle).trim()) || currentModelAnswerKey.title;
-
-    let effectiveStudentText = String(submissionText || '').trim();
-    const isPlaceholder =
-      !effectiveStudentText ||
-      effectiveStudentText.length < 40 ||
-      effectiveStudentText.includes('Evaluated according to Cambridge IGCSE') ||
-      effectiveStudentText.startsWith('Student:');
-
-    if (fileBase64 && isPlaceholder) {
-      const extractedStudent = await extractTextFromDocumentBase64(fileBase64, fileMimeType);
-      if (extractedStudent && extractedStudent.trim().length > 5) {
-        effectiveStudentText = extractedStudent.trim();
-      }
-    }
-
-    const parsedModelQuestions = parseModelKeyQuestions(activeKey);
-    const totalQCount = parsedModelQuestions.length || 20;
-    const studentMap = parseStudentSubmissionQuestions(effectiveStudentText, parsedModelQuestions);
-    const attemptedCells = Object.keys(studentMap).length;
-
-    // Stage 1: AutoMark (adamzev/AutoMark)
-    const stage1Start = Date.now();
-    let stage1LiveResult: any = null;
-    if (process.env.AUTOMARK_URL) {
-      try {
-        const automarkUrl = new URL('api/scan', process.env.AUTOMARK_URL);
-        const automarkRes = await fetch(automarkUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileBase64, formCode }),
-        });
-        if (automarkRes.ok) {
-          stage1LiveResult = await automarkRes.json();
-        }
-      } catch (err) {
-        console.warn('AutoMark internal service call fallback:', err);
-      }
-    }
-
-    const stage1 = {
-      stage: 1,
-      engine: 'AutoMark',
-      repo: 'adamzev/AutoMark',
-      status: 'COMPLETED',
-      serviceStatus: process.env.AUTOMARK_URL ? 'Connected (AUTOMARK_URL)' : 'Embedded Engine',
-      formCodeMatched: formCode,
-      formTitle: activeTitle,
-      totalQuestions: totalQCount,
-      perspectiveRectified: Boolean(fileBase64 || fileName),
-      documentCropped: true,
-      detectedGridCells: totalQCount,
-      attemptedCells,
-      liveResult: stage1LiveResult,
-      durationMs: Date.now() - stage1Start + 35,
-    };
-
-    // Stage 2: Hand-Written-Equation-Solver (Sgvkamalakar/Hand-Written-Equation-Solver)
-    const stage2Start = Date.now();
-    let stage2LiveResult: any = null;
-    if (process.env.HAND_WRITTEN_EQUATION_SOLVER_URL) {
-      try {
-        const solverUrl = new URL('predict', process.env.HAND_WRITTEN_EQUATION_SOLVER_URL);
-        const solverRes = await fetch(solverUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: effectiveStudentText, fileBase64 }),
-        });
-        if (solverRes.ok) {
-          stage2LiveResult = await solverRes.json();
-        }
-      } catch (err) {
-        console.warn('Handwritten equation solver internal service call fallback:', err);
-      }
-    }
-
-    const expressionsFound: Array<{ line: string; symbols: string[]; evaluated?: number | null }> = [];
-    const lines = String(effectiveStudentText || '').split(/\r?\n/).filter(Boolean);
-    for (const rawLine of lines.slice(0, 60)) {
-      const symbols = rawLine.replace(/\s+/g, '').split('').slice(0, 16);
-      let val: number | null = evaluateAlgebraicAtPoint(rawLine, { x: 2, y: 3, a: 2, b: 3, u: 1, v: 5, r: 2, t: 2 });
-      expressionsFound.push({ line: rawLine, symbols, evaluated: val });
-    }
-
-    const stage2 = {
-      stage: 2,
-      engine: 'Hand-Written-Equation-Solver',
-      repo: 'Sgvkamalakar/Hand-Written-Equation-Solver',
-      status: 'COMPLETED',
-      serviceStatus: process.env.HAND_WRITTEN_EQUATION_SOLVER_URL ? 'Connected (HAND_WRITTEN_EQUATION_SOLVER_URL)' : 'Embedded Engine',
-      contourModel: '3-Layer CNN Symbol Classifier (97.57% accuracy)',
-      roisExtracted: Math.max(expressionsFound.length, totalQCount),
-      segmentedExpressions: expressionsFound.slice(0, 30),
-      liveResult: stage2LiveResult,
-      durationMs: Date.now() - stage2Start + 58,
-    };
-
-    // Stage 3: Pix2Text (breezedeus/Pix2Text)
-    const stage3Start = Date.now();
-    let stage3LiveResult: any = null;
-    if (process.env.PIX2TEXT_URL) {
-      try {
-        const p2tUrl = new URL('pix2text', process.env.PIX2TEXT_URL);
-        const p2tRes = await fetch(p2tUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: effectiveStudentText, fileBase64 }),
-        });
-        if (p2tRes.ok) {
-          stage3LiveResult = await p2tRes.json();
-        }
-      } catch (err) {
-        console.warn('Pix2Text internal service call fallback:', err);
-      }
-    }
-
-    const latexExpressions: Array<{ raw: string; latex: string; hasDivision: boolean; hasExponent: boolean }> = [];
-    for (const mq of parsedModelQuestions) {
-      const sAns = studentMap[mq.questionNumber] || mq.finalAnswer;
-      const latex = String(sAns)
-        .replace(/÷/g, '\\div ')
-        .replace(/×/g, '\\times ')
-        .replace(/([a-zA-Z\)])([2-9])\b/g, '$1^$2')
-        .replace(/sqrt|√/gi, '\\sqrt');
-      latexExpressions.push({
-        raw: `Q${mq.questionNumber}: ${sAns}`,
-        latex: `$${latex}$`,
-        hasDivision: sAns.includes('÷') || sAns.includes('/'),
-        hasExponent: sAns.includes('^') || sAns.includes('²') || /[a-z][2-9]/i.test(sAns),
-      });
-    }
-
-    const stage3 = {
-      stage: 3,
-      engine: 'Pix2Text',
-      repo: 'breezedeus/Pix2Text',
-      status: 'COMPLETED',
-      serviceStatus: process.env.PIX2TEXT_URL ? 'Connected (PIX2TEXT_URL)' : 'Embedded Engine',
-      mfdModel: 'MFD-1.5 (YOLO Mathematical Formula Detector)',
-      mfrModel: 'MFR-1.5 (LaTeX Mathematical Formula Recognizer)',
-      layoutEngine: 'DocLayout-YOLO',
-      formulasDetected: Math.max(latexExpressions.length, totalQCount),
-      extractedLatex: latexExpressions,
-      liveResult: stage3LiveResult,
-      durationMs: Date.now() - stage3Start + 45,
-    };
-
-    // Stage 4: AI-Math-Grader-OpenAI (bluehawana/AI-Math-Grader-OpenAI)
-    const stage4Start = Date.now();
-    let stage4LiveResult: any = null;
-    if (process.env.AI_MATH_GRADER_OPENAI_URL) {
-      try {
-        const graderUrl = new URL('api/grade', process.env.AI_MATH_GRADER_OPENAI_URL);
-        const graderRes = await fetch(graderUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentName,
-            submissionText: effectiveStudentText,
-            modelAnswerKey: activeKey,
-            provider,
-          }),
-        });
-        if (graderRes.ok) {
-          stage4LiveResult = await graderRes.json();
-        }
-      } catch (err) {
-        console.warn('AI Math Grader internal service call fallback:', err);
-      }
-    }
-
-    const stage4 = {
-      stage: 4,
-      engine: 'AI-Math-Grader-OpenAI',
-      repo: 'bluehawana/AI-Math-Grader-OpenAI',
-      status: 'COMPLETED',
-      serviceStatus: process.env.AI_MATH_GRADER_OPENAI_URL ? 'Connected (AI_MATH_GRADER_OPENAI_URL)' : 'Embedded Engine',
-      activeProvider: provider,
-      model: provider === 'openai' ? 'gpt-4o' : provider === 'anthropic' ? 'claude-3-5-sonnet' : 'gemini-3.5-flash-lite',
-      multiPageContext: true,
-      questionsAnalyzed: totalQCount,
-      inkEfficientBwReport: true,
-      reasoningDepth: 'Pedagogical step-by-step',
-      liveResult: stage4LiveResult,
-      durationMs: Date.now() - stage4Start + 92,
-    };
-
-    // Stage 5: HaithamMathIGCSE (ahamdy200/HaithamMathIGCSE)
-    const stage5Start = Date.now();
-    const poolReport = gradeWithFiveRepoEnginePool(
-      studentName,
-      activeTitle,
-      activeKey,
-      effectiveStudentText,
-      fileName,
-      poolStart
-    );
-
-    const stage5 = {
-      stage: 5,
-      engine: 'HaithamMathIGCSE',
-      repo: 'ahamdy200/HaithamMathIGCSE',
-      status: 'COMPLETED',
-      syllabus: 'Cambridge & Pearson Edexcel IGCSE Mathematics',
-      curriculumTopic: activeTitle,
-      examinerName: 'Mr. Haitham Hussien',
-      markingScheme: `Method [M1] + Accuracy [A1] (${totalQCount} Questions, ${poolReport.totalMarks} Marks)`,
-      questionsGraded: poolReport.questions.length,
-      notebookLMReportIntegrated: true,
-      durationMs: Date.now() - stage5Start + 64,
-    };
-
-    res.json({
-      success: true,
-      report: poolReport,
-      unifiedPool: {
-        poolName: 'Unified Multi-Repository Assessment Pool',
-        totalEngines: 5,
-        totalQuestionsGraded: poolReport.questions.length,
-        status: 'ALL_5_ENGINES_ACTIVE',
-        totalDurationMs: Date.now() - poolStart,
-        stages: [stage1, stage2, stage3, stage4, stage5],
-      },
-      message: `All 5 repositories processed all ${poolReport.questions.length} questions cohesively in the unified pool.`,
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
+// Legacy multi-repo endpoint disabled — all homework submissions are reviewed through Mr. Haitham's portal
+app.post('/api/unified-pool/process', (_req: Request, res: Response) => {
+  res.status(410).json({
+    success: false,
+    error: 'Direct pipeline endpoint disabled. Please submit homework through the portal for Mr. Haitham to review.',
+  });
 });
 
 // Equation & Expression Solver Endpoint powered by Handwritten Equation Solver logic & BIDMAS
@@ -799,7 +333,15 @@ async function generateWithRetry(
     let attempt = 0;
     while (attempt <= maxRetries) {
       try {
-        const activeParams = { ...params, model: modelCandidate };
+        const clonedConfig = params.config ? { ...params.config } : undefined;
+        if (clonedConfig?.thinkingConfig && modelCandidate.startsWith('gemini-2.5')) {
+          clonedConfig.thinkingConfig = { thinkingBudget: 4096 };
+        }
+        const activeParams = {
+          ...params,
+          ...(clonedConfig ? { config: clonedConfig } : {}),
+          model: modelCandidate,
+        };
         const callPromise = ai.models.generateContent(activeParams);
         callPromise.catch(() => {});
         const timeoutPromise = new Promise((_, reject) =>
@@ -811,30 +353,34 @@ async function generateWithRetry(
         attempt++;
         const msg = String(error?.message || '').toLowerCase();
         const causeMsg = String(error?.cause?.message || error?.cause?.code || '').toLowerCase();
+        const isDailyQuota =
+          (error?.status === 429 || msg.includes('429') || msg.includes('resource_exhausted')) &&
+          (msg.includes('perday') || msg.includes('generate_content_free_tier_requests'));
         const isTransient =
-          error?.status === 503 ||
-          error?.status === 429 ||
-          msg.includes('503') ||
-          msg.includes('high demand') ||
-          msg.includes('overloaded') ||
-          msg.includes('timed out') ||
-          msg.includes('fetch failed') ||
-          msg.includes('econnreset') ||
-          msg.includes('etimedout') ||
-          causeMsg.includes('econnreset') ||
-          causeMsg.includes('etimedout') ||
-          causeMsg.includes('und_err');
+          !isDailyQuota &&
+          (error?.status === 503 ||
+            error?.status === 429 ||
+            msg.includes('503') ||
+            msg.includes('high demand') ||
+            msg.includes('overloaded') ||
+            msg.includes('timed out') ||
+            msg.includes('fetch failed') ||
+            msg.includes('econnreset') ||
+            msg.includes('etimedout') ||
+            causeMsg.includes('econnreset') ||
+            causeMsg.includes('etimedout') ||
+            causeMsg.includes('und_err'));
 
         console.warn(
           `[generateWithRetry] ${modelCandidate} attempt ${attempt}/${maxRetries + 1} error: ${error?.status || ''} ${error?.message} ${error?.cause?.code || ''}`
         );
 
         if (isTransient && attempt <= maxRetries) {
-          const delay = 500 * Math.pow(2, attempt);
+          const delay = 1000 * Math.pow(2, attempt);
           await new Promise((r) => setTimeout(r, delay));
           continue;
         }
-        break; // Break attempt loop to try next candidate model
+        break; // Immediately move to next sibling candidate model on daily quota or persistent error
       }
     }
   }
@@ -1134,11 +680,33 @@ Put one pair of brackets in each statement to make it correct.
 Total Marks: 10 Marks
 `;
 
+const ACTIVE_MODEL_KEY_FILE = path.resolve(__dirname, 'data', 'active-model-key.json');
+
+function loadPersistedModelKey() {
+  try {
+    if (fs.existsSync(ACTIVE_MODEL_KEY_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(ACTIVE_MODEL_KEY_FILE, 'utf-8'));
+      if (parsed?.text) return parsed;
+    }
+  } catch {}
+  return {
+    ...PEARSON_EDEXCEL_EXAM_1_KEY,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function persistActiveModelKey(keyObj: any) {
+  try {
+    const dir = path.dirname(ACTIVE_MODEL_KEY_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(ACTIVE_MODEL_KEY_FILE, JSON.stringify(keyObj, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Model Key] Could not persist active-model-key.json:', err);
+  }
+}
+
 // Active Model Answer Key Store (Defaults to the official Pearson Edexcel 26-Question Exam Key)
-let currentModelAnswerKey = {
-  ...PEARSON_EDEXCEL_EXAM_1_KEY,
-  updatedAt: new Date().toISOString(),
-};
+let currentModelAnswerKey = loadPersistedModelKey();
 
 // GET Active Model Answer Key
 app.get('/api/model-key/active', (_req: Request, res: Response) => {
@@ -1161,15 +729,25 @@ async function extractTextFromDocumentBase64(fileBase64: string, fileMimeType?: 
       const parser = new PDFParse(new Uint8Array(buffer));
       const pdfData = await parser.getText();
       const extracted = typeof pdfData === 'string' ? pdfData : (pdfData?.text || '');
-      if (extracted && extracted.trim().length > 25) {
+      const meaningfulBody = extracted
+        .replace(/Mr\.?\s*Haitham\s+Hussien/gi, '')
+        .replace(/Page\s+\d+\s+of\s+\d+/gi, '')
+        .replace(/--\s*\d+\s*of\s*\d+\s*--/gi, '')
+        .replace(/^\s*\d+\.\s*[A-Za-z.]+\/\d{4}\/[^\n]*$/gim, '')
+        .replace(/\s+/g, '');
+      // Only skip Vision OCR if the PDF genuinely contains digital text beyond headers/page numbers
+      if (extracted && meaningfulBody.length > 260 && extracted.includes('=')) {
         return extracted.trim();
+      }
+      if (extracted && extracted.trim().length > 25) {
+        console.log(`[PDF Extractor] Sparse text (${meaningfulBody.length} body chars) — running Vision OCR for embedded question/solution images...`);
       }
     } catch (pdfErr: any) {
       console.warn('PDFParse extraction notice:', pdfErr?.message);
     }
   }
 
-  // Fallback for scanned image-only PDFs or handwritten image uploads (PNG/JPG)
+  // Fallback for scanned image-only PDFs or PDFs containing embedded images of questions/answers
   try {
     const mime = fileMimeType || 'application/pdf';
     const ocrResolution = mime.includes('pdf')
@@ -1181,7 +759,7 @@ async function extractTextFromDocumentBase64(fileBase64: string, fileMimeType?: 
         contents: [
           createPartFromBase64(cleanBase64, mime, ocrResolution),
           {
-            text: 'Transcribe all questions, numbers, mark scheme rules ([M1]/[A1]), mathematical working steps, and final answers from this document verbatim in sequential order (Question 1, Question 2, etc.). Output plain text only.',
+            text: 'Transcribe EVERY question number, full question statement, diagram details, mark scheme rules ([M1]/[A1]), COMPLETE step-by-step worked solution, and final answer from ALL pages of this PDF verbatim in sequential order. Format cleanly with clear labels like "QUESTION 16 [2 Marks]". Output plain text only.',
           },
         ],
         config: {
@@ -1189,10 +767,10 @@ async function extractTextFromDocumentBase64(fileBase64: string, fileMimeType?: 
         },
       },
       1,
-      45000,
-      []
+      65000,
+      ['gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-3.1-flash-lite']
     );
-    if (ocrResponse?.text && ocrResponse.text.trim().length > 10) {
+    if (ocrResponse?.text && ocrResponse.text.trim().length > 25) {
       return ocrResponse.text.trim();
     }
   } catch (ocrErr: any) {
@@ -1262,7 +840,8 @@ function parseModelKeyQuestions(rawModelKeyText: string): ParsedModelQuestion[] 
   let currentBlock: RawBlock | null = null;
 
   for (const rawLine of lines) {
-    const line = rawLine.trim();
+    // Strip markdown heading prefixes (#) and bold markers (**) before header matching
+    const line = rawLine.trim().replace(/^#{1,4}\s+/, '').replace(/\*\*/g, '').trim();
     if (!line) continue;
 
     const secMatch = line.match(/^SECTION\s+([A-Z0-9]+)\s*[:\-–]?\s*(.*)$/i);
@@ -1277,6 +856,17 @@ function parseModelKeyQuestions(rawModelKeyText: string): ParsedModelQuestion[] 
       line.match(/^Q\.?\s*(\d{1,3}[a-z]?)(?:\s*[\.\)\:\-\[]|\s+\(|\s*$)\s*(.*)$/i);
 
     if (qHeaderMatch) {
+      const restOfHeader = (qHeaderMatch[2] || '').trim();
+      const isContinuation =
+        currentBlock &&
+        currentBlock.rawId.toLowerCase() === qHeaderMatch[1].toLowerCase() &&
+        /\(continued\)/i.test(line);
+
+      if (isContinuation && currentBlock) {
+        if (restOfHeader) currentBlock.bodyLines.push(restOfHeader);
+        continue;
+      }
+
       if (currentBlock) {
         tier1Blocks.push(currentBlock);
       }
@@ -1284,7 +874,7 @@ function parseModelKeyQuestions(rawModelKeyText: string): ParsedModelQuestion[] 
         rawId: qHeaderMatch[1],
         headerLine: line,
         sectionTitle: currentSection,
-        bodyLines: qHeaderMatch[2] ? [qHeaderMatch[2].trim()] : [],
+        bodyLines: restOfHeader ? [restOfHeader] : [],
       };
     } else if (currentBlock) {
       currentBlock.bodyLines.push(line);
@@ -2092,6 +1682,7 @@ app.post('/api/model-key/upload-pdf', async (req: Request, res: Response) => {
       updatedAt: new Date().toISOString(),
     };
 
+    persistActiveModelKey(currentModelAnswerKey);
     console.log(
       `[PDF Model Key Uploaded] "${currentModelAnswerKey.title}" (${currentModelAnswerKey.text.length} chars, ${detectedQuestions} questions parsed, ${detectedMarks} marks) -> ${currentModelAnswerKey.pdfUrl}`
     );
@@ -2133,6 +1724,7 @@ app.post('/api/model-key/active', (req: Request, res: Response) => {
     updatedAt: new Date().toISOString(),
   };
 
+  persistActiveModelKey(currentModelAnswerKey);
   console.log(
     `[Model Key Updated] Active model key: "${currentModelAnswerKey.title}" (${detectedQuestions} questions, ${resolvedMarks} marks)`
   );
@@ -2159,6 +1751,7 @@ app.post('/api/model-key/reset', (req: Request, res: Response) => {
     };
   }
 
+  persistActiveModelKey(currentModelAnswerKey);
   res.json({
     success: true,
     message: `Active model answer key reset to: ${currentModelAnswerKey.title}`,
@@ -2266,8 +1859,79 @@ async function buildStudentMediaParts(params: {
   };
 }
 
-// AI Notebook & 5-Repo Pool Homework Checking Endpoint (Always grades ALL N questions in the Model Answer Key)
-app.post('/api/homework/grade', async (req: Request, res: Response) => {
+function computeGradeForSystem(
+  percentage: number,
+  earnedMarks: number,
+  totalMarks: number,
+  gradingSystem: 'edexcel' | 'ib' | 'marks' = 'edexcel'
+): { grade: string; performanceLevel: string } {
+  if (gradingSystem === 'ib') {
+    const band =
+      percentage >= 88
+        ? 'Band 7 (Excellent)'
+        : percentage >= 75
+        ? 'Band 6 (Very Good)'
+        : percentage >= 62
+        ? 'Band 5 (Good)'
+        : percentage >= 50
+        ? 'Band 4 (Satisfactory)'
+        : percentage >= 38
+        ? 'Band 3 (Mediocre)'
+        : percentage >= 22
+        ? 'Band 2 (Limited)'
+        : 'Band 1 (Minimal)';
+    return {
+      grade: band,
+      performanceLevel: `IB MYP/DP Scale • ${earnedMarks}/${totalMarks} (${percentage}%)`,
+    };
+  }
+  if (gradingSystem === 'marks') {
+    return {
+      grade: `${earnedMarks} / ${totalMarks} Marks (${percentage}%)`,
+      performanceLevel:
+        percentage >= 85
+          ? 'High Mastery'
+          : percentage >= 70
+          ? 'Proficient'
+          : percentage >= 50
+          ? 'Developing'
+          : 'Requires Support',
+    };
+  }
+  const edexcelGrade =
+    percentage >= 90
+      ? 'A* (Level 9 — Outstanding)'
+      : percentage >= 80
+      ? 'A (Level 8 — Excellent)'
+      : percentage >= 70
+      ? 'B (Level 7 — Good)'
+      : percentage >= 60
+      ? 'C (Level 5-6 — Satisfactory)'
+      : percentage >= 50
+      ? 'D (Level 4 — Needs Improvement)'
+      : 'U (Ungraded — Requires Retest)';
+  return {
+    grade: edexcelGrade,
+    performanceLevel: `Edexcel IGCSE Scale • ${earnedMarks}/${totalMarks} (${percentage}%)`,
+  };
+}
+
+async function runHomeworkCorrectionDraft(params: {
+  studentName?: string;
+  assignment?: string;
+  submissionText?: string;
+  modelAnswerKey?: string | null;
+  modelAnswerTitle?: string | null;
+  modelKeyFileBase64?: string | null;
+  customAnswers?: any;
+  fileName?: string | null;
+  fileBase64?: string | null;
+  fileMimeType?: string | null;
+  pageImages?: any;
+  precisionMode?: string;
+  gradingSystem?: 'edexcel' | 'ib' | 'marks';
+  assignmentKind?: 'homework' | 'quiz' | 'essay';
+}): Promise<{ report: any; gradingMeta: any; executionTimeMs: number }> {
   const cleanupFileNames: string[] = [];
   try {
     const {
@@ -2283,23 +1947,48 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
       fileMimeType = null,
       pageImages = null,
       precisionMode = 'deep',
-    } = req.body || {};
+      gradingSystem = 'edexcel',
+      assignmentKind = 'homework',
+    } = params || {};
 
     const startTime = Date.now();
     const safeStudentName = studentName && String(studentName).trim() ? String(studentName).trim() : 'Student Submission';
 
-    // 1. Resolve Model Answer Key (if a new Model Key PDF base64 was passed directly, extract & activate it immediately)
+    // 1. Resolve Model Answer Key (Educator-only)
     let effectiveModelKey = (modelAnswerKey && String(modelAnswerKey).trim()) || currentModelAnswerKey.text;
     if (modelKeyFileBase64) {
       const extractedKeyText = await extractTextFromDocumentBase64(modelKeyFileBase64, 'application/pdf');
       if (extractedKeyText && extractedKeyText.trim().length > 25) {
         effectiveModelKey = extractedKeyText.trim();
       }
+    } else if (!effectiveModelKey.includes('=') && currentModelAnswerKey.fileName) {
+      // Upgrade previously-stored sparse Model Key PDF via Vision OCR if its solution images weren't transcribed yet
+      const localKeyPath = path.resolve(__dirname, 'public', 'assets', 'model-keys', currentModelAnswerKey.fileName);
+      if (fs.existsSync(localKeyPath)) {
+        try {
+          const buf = fs.readFileSync(localKeyPath);
+          const upgradedText = await extractTextFromDocumentBase64(
+            `data:application/pdf;base64,${buf.toString('base64')}`,
+            'application/pdf'
+          );
+          if (upgradedText && upgradedText.includes('=')) {
+            effectiveModelKey = upgradedText;
+            currentModelAnswerKey = {
+              ...currentModelAnswerKey,
+              text: upgradedText,
+              updatedAt: new Date().toISOString(),
+            };
+            persistActiveModelKey(currentModelAnswerKey);
+          }
+        } catch {
+          // keep existing text if fallback fails
+        }
+      }
     }
     const effectiveAssignment =
       (modelAnswerTitle && String(modelAnswerTitle).trim()) || assignment || currentModelAnswerKey.title;
 
-    // 2. Extract Student Submission Text from PDF / Image BEFORE running any grading or prompt construction!
+    // 2. Extract Student Submission Text from PDF / Image BEFORE running any grading or prompt construction
     let effectiveSubmissionText = String(submissionText || '').trim();
     const isPlaceholderText =
       !effectiveSubmissionText ||
@@ -2315,7 +2004,7 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
       effectiveSubmissionText = JSON.stringify(customAnswers);
     }
 
-    // 3. Run the 5-Repo Deterministic Multi-Question Structure Parser FIRST
+    // 3. Deterministic Multi-Question Structure Parser
     const baseReport = gradeWithFiveRepoEnginePool(
       safeStudentName,
       effectiveAssignment,
@@ -2327,8 +2016,11 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
 
     const totalExpectedQuestions = baseReport.questions.length;
     const activeGradingModel = precisionMode === 'max' ? DEEP_REASONING_MODEL : GRADING_MODEL;
-    // Never fall back to flash-lite; if Gemini 4 is chosen ('max') and hits transient quota/load, fall back to Flash
-    const siblingFallbackModels = precisionMode === 'max' ? [GRADING_MODEL] : [];
+    // Sibling fallback chain: full Flash models first, then Flash-Lite models if primary RPD quota is reached
+    const siblingFallbackModels =
+      precisionMode === 'max'
+        ? ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite']
+        : ['gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'];
 
     console.log(
       `[Homework Grader] Grading "${safeStudentName}" (${totalExpectedQuestions} Qs, model=${activeGradingModel}, pageImages=${hasPageImages ? pageImages.length : 0}, rawFile=${Boolean(fileBase64)})`
@@ -2347,14 +2039,14 @@ app.post('/api/homework/grade', async (req: Request, res: Response) => {
         return onServerless ? Math.max(12000, 55000 - elapsed) : 180000;
       };
 
-      // Pass 1 (Visual OCR & Diagram Transcription Only) when visual pages are present and time permits
+      // Pass 1 (Separate OCR pass) only for 'max' Detailed Handwriting Pass — 'deep' runs 1-pass high-res Vision directly (2x faster & halves quota usage)
       let pass1TranscriptionSummary = '';
       let twoPassOcrUsed = false;
       const expectedRefs = baseReport.questions
         .map((q) => `Q${q.questionNumber} (${q.displayLabel}): ${q.prompt.slice(0, 120)}`)
         .join('\n');
 
-      if (hasVisualMedia && (!onServerless || getRemainingBudgetMs() > 32000)) {
+      if (hasVisualMedia && precisionMode === 'max' && (!onServerless || getRemainingBudgetMs() > 32000)) {
         try {
           const ocrPrompt = `You are a specialist IGCSE Mathematics handwriting & diagram transcription reader.
 DO NOT grade or evaluate correctness yet. Your ONLY task is to inspect every attached student page/photo pixel-by-pixel and transcribe ALL visible handwritten work accurately.
@@ -2385,7 +2077,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-          const pass1TimeoutMs = onServerless ? Math.min(22000, Math.floor(getRemainingBudgetMs() * 0.45)) : 75000;
+          const pass1TimeoutMs = onServerless ? Math.min(22000, Math.floor(getRemainingBudgetMs() * 0.45)) : 45000;
           const ocrResponse = await generateWithRetry(
             {
               model: GRADING_MODEL,
@@ -2395,9 +2087,9 @@ Return ONLY valid JSON:
                 thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
               },
             },
-            onServerless ? 0 : 1,
+            0,
             pass1TimeoutMs,
-            []
+            siblingFallbackModels
           );
           const ocrText = String(ocrResponse?.text || '').trim();
           if (ocrText.length > 20) {
@@ -2420,13 +2112,21 @@ Return ONLY valid JSON:
 
       const fullMarkSchemeExcerpt = effectiveModelKey.trim().slice(0, 18000);
 
-      const gradePrompt = `You are Mr. Haitham Hussien's Cambridge & Pearson Edexcel IGCSE Mathematics examiner.
-Grade the student's submission against ALL ${totalExpectedQuestions} questions in the Official Model Answer Key.
+      const gradingRubricLabel =
+        gradingSystem === 'ib'
+          ? 'IB Criteria A (Knowing & Understanding), B (Patterns), C (Communicating), D (Applying Mathematics) — Band 1 to 7'
+          : gradingSystem === 'marks'
+          ? 'Direct Raw Marks & Percentage per step'
+          : 'Pearson Edexcel / Cambridge IGCSE [M1] Method & [A1] Accuracy mark scheme';
+
+      const gradePrompt = `You are Mr. Haitham Hussien's Mathematics examiner (${gradingRubricLabel}).
+Grade the student's ${assignmentKind} submission against ALL ${totalExpectedQuestions} questions in the Official Model Answer Key.
 
 STUDENT NAME: ${safeStudentName}
 ASSIGNMENT: ${effectiveAssignment} (${totalExpectedQuestions} Questions, ${baseReport.totalMarks} Total Marks)
+GRADING SYSTEM: ${gradingSystem.toUpperCase()}
 
-FULL OFFICIAL MODEL ANSWER KEY & MARK SCHEME RULES ([M1] method / [A1] accuracy):
+FULL OFFICIAL MODEL ANSWER KEY & MARK SCHEME RULES:
 ${fullMarkSchemeExcerpt}
 
 STRUCTURED QUESTION INDEX (${totalExpectedQuestions} QUESTIONS — you MUST return one entry per questionNumber 1..${totalExpectedQuestions}):
@@ -2436,33 +2136,36 @@ ${pass1TranscriptionSummary ? `PASS-1 VERBATIM HANDWRITING TRANSCRIPTION (cross-
 ${effectiveSubmissionText ? `ADDITIONAL SUBMITTED TEXT:\n${effectiveSubmissionText}\n` : ''}
 ${hasVisualMedia ? "INSTRUCTIONS FOR ATTACHED IMAGES/PAGES: Re-inspect the original attached student pages directly before assigning each mark. Never invent working you cannot actually see on a page." : ''}
 
-STRICT EXAMINER RULES:
+STRICT 3-PHASE PER-QUESTION PIPELINE RULES:
 1. Evaluate ALL ${totalExpectedQuestions} questions (questionNumber 1 to ${totalExpectedQuestions}). NEVER skip or stop early.
-2. For each question, FIRST locate the page and transcribe what the student wrote in "studentWorkingFound" BEFORE deciding "earnedMarks".
-3. Award full marks if mathematically equivalent (e.g. 0.5 == 1/2, unsimplified vs simplified unless the mark scheme requires simplest form, valid alternative algebraic methods).
-4. Award partial method marks [M1] (1 to maxMarks-1) when correct method/intermediate steps are visible even if the final answer has a slip or follow-through error.
-5. Award 0 marks and set studentWorkingFound to "Not attempted / Left blank" if no working or answer for that question appears on any page.
+2. PHASE 1 (Student Answer Extraction): Transcribe EXACTLY what the student wrote in "phase1Extraction" and "studentWorkingFound" ("What was written"). If blank, state "Not attempted / Left blank".
+3. PHASE 2 (Error Identification): In "phase2ErrorAnalysis" and "errorAnalysis", identify the exact mistake and explain WHY it is mathematically wrong (or state exact method/accuracy credit earned if correct).
+4. PHASE 3 (Solution Resolution): In "phase3Solution", write the COMPLETE, FULL, step-by-step worked mathematical solution and exact final answer from start to finish. NEVER write lazy placeholders such as "Check the textbook" or "Refer to textbook" or "..." — always provide the complete worked steps and answer!
+5. Award full marks if mathematically equivalent and partial method marks when valid intermediate steps are shown.
 
-Return ONLY valid JSON matching this transcribe-first schema:
+Return ONLY valid JSON matching this 3-Phase schema:
 {
   "generalFeedback": "2-sentence summary of student performance across all ${totalExpectedQuestions} questions",
-  "diagnosticReview": "Detailed paragraph analyzing mathematical strengths, OCR-verified working, and specific misconceptions",
+  "diagnosticReview": "Detailed paragraph analyzing mathematical strengths, extracted working, and specific misconceptions",
   "questions": [
     {
       "questionNumber": 1,
       "displayLabel": "Q1",
       "observedPage": 1,
+      "phase1Extraction": "What was written — exact line-by-line working and final answer from the student",
       "studentWorkingFound": "Exact step-by-step handwritten working and final answer read from the page",
       "earnedMarks": 2,
       "status": "correct",
-      "errorAnalysis": "Step-by-step [M1]/[A1] verification or specific arithmetic/algebraic error found",
+      "phase2ErrorAnalysis": "Exact mistake identified & why it is wrong (or Confirmed correct [M1][A1])",
+      "errorAnalysis": "Step-by-step verification or specific arithmetic/algebraic error found",
+      "phase3Solution": "Step-by-step correct working and final answer",
       "teacherFeedback": "Constructive teacher feedback referencing the student's actual steps"
     }
   ]
 }`;
 
       const contents: any = hasVisualMedia ? [...mediaParts, { text: gradePrompt }] : gradePrompt;
-      const gradeTimeoutMs = getRemainingBudgetMs();
+      const gradeTimeoutMs = onServerless ? getRemainingBudgetMs() : 55000;
 
       const response = await generateWithRetry(
         {
@@ -2473,13 +2176,20 @@ Return ONLY valid JSON matching this transcribe-first schema:
             thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
           },
         },
-        onServerless ? 0 : 1,
+        0,
         gradeTimeoutMs,
         siblingFallbackModels
       );
 
       console.log('[Gemini grade raw]', String(response.text || '').slice(0, 1500));
-      const aiParsed = JSON.parse(response.text || '{}');
+      let cleanedJson = String(response.text || '{}').trim();
+      cleanedJson = cleanedJson.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+      const rawParsed = JSON.parse(cleanedJson);
+      const aiParsed = Array.isArray(rawParsed)
+        ? rawParsed.length > 0 && rawParsed[0] && Array.isArray(rawParsed[0].questions)
+          ? rawParsed[0]
+          : { questions: rawParsed }
+        : rawParsed;
       if (aiParsed && Array.isArray(aiParsed.questions) && aiParsed.questions.length > 0) {
         const aiByNum = new Map<number, any>();
         const aiByLabel = new Map<string, any>();
@@ -2514,15 +2224,23 @@ Return ONLY valid JSON matching this transcribe-first schema:
               ? `[Page ${aq.observedPage}] `
               : '';
 
+          const phase1Text = aq.phase1Extraction || aq.studentWorkingFound
+            ? `${pageTag}${aq.phase1Extraction || aq.studentWorkingFound}`
+            : bq.studentWorkingFound;
+          const phase2Text = aq.phase2ErrorAnalysis || aq.errorAnalysis || bq.errorAnalysis;
+          const phase3Text = aq.phase3Solution || bq.modelSolution;
+
           return {
             ...bq,
             earnedMarks: finalEarned,
             status: finalStatus,
             statusLabel: finalStatusLabel,
-            studentWorkingFound: aq.studentWorkingFound
-              ? `${pageTag}${aq.studentWorkingFound}`
-              : bq.studentWorkingFound,
-            errorAnalysis: aq.errorAnalysis || bq.errorAnalysis,
+            studentWorkingFound: phase1Text,
+            phase1Extraction: phase1Text,
+            errorAnalysis: phase2Text,
+            phase2ErrorAnalysis: phase2Text,
+            modelSolution: phase3Text,
+            phase3Solution: phase3Text,
             teacherFeedback: aq.teacherFeedback || bq.teacherFeedback,
           };
         });
@@ -2530,18 +2248,16 @@ Return ONLY valid JSON matching this transcribe-first schema:
         const totalMarks = mergedQuestions.reduce((s, q) => s + q.maxMarks, 0) || baseReport.totalMarks;
         const earnedMarks = mergedQuestions.reduce((s, q) => s + q.earnedMarks, 0);
         const percentage = Math.round((earnedMarks / totalMarks) * 100);
-        const grade =
-          percentage >= 90
-            ? 'A* (Outstanding)'
-            : percentage >= 80
-            ? 'A (Excellent)'
-            : percentage >= 70
-            ? 'B (Good)'
-            : percentage >= 60
-            ? 'C (Satisfactory)'
-            : percentage >= 50
-            ? 'D (Needs Improvement)'
-            : 'U (Ungraded - Requires Retest)';
+        const computedGrade = computeGradeForSystem(percentage, earnedMarks, totalMarks, gradingSystem);
+        const criterionBreakdown =
+          gradingSystem === 'ib'
+            ? [
+                { label: 'Criterion A: Knowing & Understanding', score: `${Math.max(1, Math.min(8, Math.round((percentage / 100) * 8)))}/8` },
+                { label: 'Criterion B: Investigating Patterns', score: `${Math.max(1, Math.min(8, Math.round((percentage / 100) * 8)))}/8` },
+                { label: 'Criterion C: Communicating', score: `${Math.max(1, Math.min(8, Math.round((percentage / 100) * 8)))}/8` },
+                { label: 'Criterion D: Applying Mathematics', score: `${Math.max(1, Math.min(8, Math.round((percentage / 100) * 8)))}/8` },
+              ]
+            : undefined;
 
         const gradingMeta = {
           model: response?.modelVersion || activeGradingModel,
@@ -2557,7 +2273,11 @@ Return ONLY valid JSON matching this transcribe-first schema:
           totalMarks,
           earnedMarks,
           percentage,
-          grade,
+          grade: computedGrade.grade,
+          performanceLevel: computedGrade.performanceLevel,
+          gradingSystem,
+          assignmentKind,
+          criterionBreakdown,
           generalFeedback: aiParsed.generalFeedback || baseReport.generalFeedback,
           diagnosticReview: aiParsed.diagnosticReview || baseReport.diagnosticReview,
           questions: mergedQuestions,
@@ -2565,29 +2285,35 @@ Return ONLY valid JSON matching this transcribe-first schema:
           executionTimeMs: Date.now() - startTime,
         };
 
-        return res.json({
-          success: true,
+        return {
           report: finalReport,
           gradingMeta,
           executionTimeMs: Date.now() - startTime,
-        });
+        };
       }
     } catch (e: any) {
-      console.error('Gemini grading FAILED:', e?.status, e?.message);
+      console.error('Grading draft generation FAILED:', e?.status, e?.message);
       const noKey = !process.env.GEMINI_API_KEY;
-      return res.status(502).json({
-        success: false,
-        error: noKey
-          ? 'GEMINI_API_KEY is not set on the server, so Gemini cannot grade.'
-          : `Gemini could not grade this submission: ${e?.message}`,
-      });
+      const rawMsg = String(e?.message || '');
+      const isQuotaError =
+        e?.status === 429 ||
+        rawMsg.includes('429') ||
+        rawMsg.includes('RESOURCE_EXHAUSTED') ||
+        rawMsg.toLowerCase().includes('quota');
+      const retryMatch = rawMsg.match(/retry in\s+([0-9hms.]+)/i);
+      const cleanMessage = noKey
+        ? 'GEMINI_API_KEY is not set on the server, so the marking assistant cannot generate a draft.'
+        : isQuotaError
+        ? `Daily automated grading quota reached on available free-tier models${retryMatch ? ` (next reset in ${retryMatch[1]})` : ''}. Click "Open Manual Correction Sheet" below to grade manually right now, or update GEMINI_API_KEY in .env.`
+        : `Marking assistant could not process this submission: ${rawMsg.slice(0, 220)}`;
+      const err: any = new Error(cleanMessage);
+      err.statusCode = isQuotaError ? 429 : 502;
+      throw err;
     }
 
-    // Gemini returned no per-question marks: do not show regex engine marks as if they were real
-    return res.status(502).json({ success: false, error: 'Gemini returned no question marks. Please try again.' });
-  } catch (error: any) {
-    console.error('Error grading homework:', error);
-    return res.status(500).json({ error: error.message || 'Failed to grade homework' });
+    const noMarksErr: any = new Error('Marking assistant returned no question marks. Please try again.');
+    noMarksErr.statusCode = 502;
+    throw noMarksErr;
   } finally {
     if (cleanupFileNames.length > 0) {
       for (const name of cleanupFileNames) {
@@ -2595,6 +2321,1927 @@ Return ONLY valid JSON matching this transcribe-first schema:
       }
     }
   }
+}
+
+// Educator Direct Homework Grading Draft Endpoint (teacher-only in UI)
+app.post('/api/homework/grade', async (req: Request, res: Response) => {
+  try {
+    const result = await runHomeworkCorrectionDraft(req.body || {});
+    return res.json({
+      success: true,
+      report: result.report,
+      gradingMeta: result.gradingMeta,
+      executionTimeMs: result.executionTimeMs,
+    });
+  } catch (error: any) {
+    console.error('Error generating grading draft:', error);
+    return res.status(error?.statusCode || 500).json({
+      success: false,
+      error: error?.message || 'Failed to grade homework',
+    });
+  }
+});
+
+// ============================================================================
+// Persistent Course Enrollment & Student Homework Submission Store
+// ============================================================================
+
+interface CourseEnrollment {
+  studentId: number;
+  studentUsername: string;
+  studentName: string;
+  grade?: string;
+  section?: string;
+  courseId: string;
+  courseTitle: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedAt: string;
+  reviewedAt?: string;
+  teacherNote?: string;
+}
+
+interface HomeworkSubmissionRecord {
+  id: string;
+  studentId: number;
+  studentUsername: string;
+  studentName: string;
+  courseId: string;
+  courseTitle: string;
+  assignmentId?: string | null;
+  dueDate?: string | null;
+  assignment: string;
+  assignmentKind?: 'homework' | 'quiz' | 'essay';
+  gradingSystem?: 'edexcel' | 'ib' | 'marks';
+  submissionText: string;
+  fileName?: string | null;
+  fileMimeType?: string | null;
+  pageCount: number;
+  a3SpreadCount?: number;
+  quizQuestions?: any[];
+  quizAnswers?: Record<string, string>;
+  status: 'pending' | 'graded';
+  submittedAt: string;
+  publishedAt?: string;
+  reviewedBy?: string;
+  teacherNote?: string;
+  draftStatus?: 'queued' | 'generating' | 'ready' | 'failed';
+  draftError?: string | null;
+  draftReport?: any | null;
+  publishedReport?: any | null;
+  emailDelivery?: {
+    status: 'sent' | 'logged_locally' | 'failed';
+    to: string;
+    provider: string;
+    resendId?: string;
+    note?: string;
+  } | null;
+}
+
+interface OutboxEmailRecord {
+  id: string;
+  createdAt: string;
+  submissionId: string;
+  studentId: number;
+  studentName: string;
+  parentName?: string;
+  to: string;
+  from: string;
+  subject: string;
+  html: string;
+  provider: 'resend' | 'local-preview';
+  status: 'sent' | 'logged_locally' | 'failed';
+  resendId?: string;
+  note?: string;
+}
+
+interface DirectorySeatUser {
+  id: number;
+  domain: string;
+  username: string;
+  password: string;
+  fullName: string;
+  role: 'student' | 'parent' | 'teacher';
+  grade?: string;
+  section?: string;
+  parentEmail?: string;
+  linkedStudentId?: number;
+  linkedStudentName?: string;
+  createdAt: string;
+}
+
+interface HomeworkAssignmentRecord {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  title: string;
+  instructions: string;
+  dueDate: string;
+  gradingSystem: 'edexcel' | 'ib' | 'marks';
+  createdAt: string;
+  createdBy: string;
+}
+
+interface PortalNotification {
+  id: string;
+  recipientRole: 'student' | 'parent' | 'teacher' | 'all';
+  courseId?: string;
+  studentId?: number;
+  submissionId?: string;
+  title: string;
+  message: string;
+  type: 'assignment' | 'report' | 'submission';
+  dueDate?: string;
+  createdAt: string;
+  readByUserIds: number[];
+}
+
+interface PortalState {
+  enrollments: Record<string, CourseEnrollment>;
+  submissions: HomeworkSubmissionRecord[];
+  assignments: HomeworkAssignmentRecord[];
+  notifications: PortalNotification[];
+  outbox: OutboxEmailRecord[];
+  directoryUsers: DirectorySeatUser[];
+  customVideos: Record<string, any[]>;
+  customMaterials: Record<string, any[]>;
+  customQuizzes: any[];
+  parentEmails: Record<string, string>;
+}
+
+const DATA_DIR = path.resolve(__dirname, 'data');
+const SUBMISSIONS_MEDIA_DIR = path.join(DATA_DIR, 'submissions');
+const COURSE_MATERIALS_DIR = path.join(DATA_DIR, 'course-materials');
+const PORTAL_STATE_FILE = path.join(DATA_DIR, 'portal-state.json');
+
+function ensureDataDirs() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(SUBMISSIONS_MEDIA_DIR)) fs.mkdirSync(SUBMISSIONS_MEDIA_DIR, { recursive: true });
+  if (!fs.existsSync(COURSE_MATERIALS_DIR)) fs.mkdirSync(COURSE_MATERIALS_DIR, { recursive: true });
+}
+
+function loadPortalState(): PortalState {
+  ensureDataDirs();
+  try {
+    if (fs.existsSync(PORTAL_STATE_FILE)) {
+      const raw = fs.readFileSync(PORTAL_STATE_FILE, 'utf-8').replace(/^\uFEFF/, '');
+      const parsed = JSON.parse(raw);
+      return {
+        enrollments: parsed?.enrollments && typeof parsed.enrollments === 'object' ? parsed.enrollments : {},
+        submissions: Array.isArray(parsed?.submissions) ? parsed.submissions : [],
+        assignments: Array.isArray(parsed?.assignments) ? parsed.assignments : [],
+        notifications: Array.isArray(parsed?.notifications) ? parsed.notifications : [],
+        outbox: Array.isArray(parsed?.outbox) ? parsed.outbox : [],
+        directoryUsers: Array.isArray(parsed?.directoryUsers) ? parsed.directoryUsers : [],
+        customVideos: parsed?.customVideos && typeof parsed.customVideos === 'object' ? parsed.customVideos : {},
+        customMaterials: parsed?.customMaterials && typeof parsed.customMaterials === 'object' ? parsed.customMaterials : {},
+        customQuizzes: Array.isArray(parsed?.customQuizzes) ? parsed.customQuizzes : [],
+        parentEmails: parsed?.parentEmails && typeof parsed.parentEmails === 'object' ? parsed.parentEmails : {},
+      };
+    }
+  } catch (err) {
+    console.warn('[Portal State] Failed to load state file, starting fresh:', err);
+  }
+  return {
+    enrollments: {},
+    submissions: [],
+    assignments: [],
+    notifications: [],
+    outbox: [],
+    directoryUsers: [],
+    customVideos: {},
+    customMaterials: {},
+    customQuizzes: [],
+    parentEmails: {},
+  };
+}
+
+function savePortalState(state: PortalState) {
+  ensureDataDirs();
+  fs.writeFileSync(PORTAL_STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
+}
+
+function saveSubmissionMedia(id: string, media: { pageImages?: any[]; fileBase64?: string | null; fileMimeType?: string | null }) {
+  ensureDataDirs();
+  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+  fs.writeFileSync(path.join(SUBMISSIONS_MEDIA_DIR, `${safeId}.json`), JSON.stringify(media), 'utf-8');
+}
+
+function loadSubmissionMedia(id: string): { pageImages?: any[]; fileBase64?: string | null; fileMimeType?: string | null } | null {
+  try {
+    const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+    const p = path.join(SUBMISSIONS_MEDIA_DIR, `${safeId}.json`);
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function deleteSubmissionMedia(id: string) {
+  try {
+    const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+    const p = path.join(SUBMISSIONS_MEDIA_DIR, `${safeId}.json`);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+// Once Mr. Haitham approves & publishes a report, Student & Parent receive all 3 Phases:
+// Phase 1 (Extraction), Phase 2 (Error Analysis), and Phase 3 (Correct Working & Solution).
+// Internal mark-scheme refs and internal execution metadata stay strictly educator-only.
+function sanitizeReportForStudent(report: any): any {
+  if (!report) return null;
+  const cleanedQuestions = Array.isArray(report.questions)
+    ? report.questions.map((q: any) => {
+        const { markSchemeRef, ...rest } = q || {};
+        return {
+          ...rest,
+          phase1Extraction: rest.phase1Extraction || rest.studentWorkingFound || '',
+          phase2ErrorAnalysis: rest.phase2ErrorAnalysis || rest.errorAnalysis || '',
+          phase3Solution: rest.phase3Solution || rest.modelSolution || '',
+          modelSolution: rest.modelSolution || rest.phase3Solution || '',
+        };
+      })
+    : [];
+  const { gradingMeta, executionTimeMs, ...restReport } = report;
+  return {
+    ...restReport,
+    teacherName: 'Mr. Haitham Hussien',
+    questions: cleanedQuestions,
+  };
+}
+
+function sanitizeSubmissionForStudent(sub: HomeworkSubmissionRecord): any {
+  const { draftReport, draftStatus, draftError, quizQuestions, ...rest } = sub;
+  const sanitizedPublished = sub.status === 'graded' ? sanitizeReportForStudent(sub.publishedReport) : null;
+  return {
+    ...rest,
+    reviewedBy: sub.status === 'graded' ? 'Mr. Haitham Hussien' : undefined,
+    publishedReport: sanitizedPublished,
+  };
+}
+
+const inFlightAutoDrafts = new Map<string, Promise<void>>();
+
+async function autoGenerateDraftForSubmission(submissionId: string): Promise<void> {
+  const existing = inFlightAutoDrafts.get(submissionId);
+  if (existing) {
+    return existing;
+  }
+
+  const job = (async () => {
+    try {
+      const startState = loadPortalState();
+      const startIdx = startState.submissions.findIndex((s) => s.id === submissionId);
+      if (startIdx === -1) return;
+      const sub = startState.submissions[startIdx];
+      startState.submissions[startIdx] = {
+        ...sub,
+        draftStatus: 'generating',
+        draftError: null,
+      };
+      savePortalState(startState);
+
+      const media = loadSubmissionMedia(sub.id);
+      const chosenSystem: 'edexcel' | 'ib' | 'marks' = sub.gradingSystem || 'edexcel';
+
+      let generatedReport: any = null;
+      if ((sub.assignmentKind === 'quiz' || sub.assignmentKind === 'essay') && Array.isArray(sub.quizQuestions) && sub.quizQuestions.length > 0) {
+        generatedReport = await runQuizOrEssayGradingDraft(sub, chosenSystem);
+      } else {
+        const result = await runHomeworkCorrectionDraft({
+          studentName: sub.studentName,
+          assignment: sub.assignment,
+          submissionText: sub.submissionText,
+          modelAnswerKey: currentModelAnswerKey.text,
+          modelAnswerTitle: sub.assignment || currentModelAnswerKey.title,
+          fileName: sub.fileName,
+          fileBase64: media?.fileBase64 || null,
+          fileMimeType: media?.fileMimeType || sub.fileMimeType || null,
+          pageImages: media?.pageImages || null,
+          precisionMode: 'deep',
+          gradingSystem: chosenSystem,
+          assignmentKind: sub.assignmentKind || 'homework',
+        });
+        generatedReport = result.report;
+      }
+
+      const doneState = loadPortalState();
+      const doneIdx = doneState.submissions.findIndex((s) => s.id === submissionId);
+      if (doneIdx !== -1) {
+        doneState.submissions[doneIdx] = {
+          ...doneState.submissions[doneIdx],
+          draftStatus: 'ready',
+          draftError: null,
+          draftReport: generatedReport,
+        };
+        savePortalState(doneState);
+        console.log(`[Auto Draft Ready] ${submissionId} -> ${generatedReport?.earnedMarks}/${generatedReport?.totalMarks}`);
+      }
+    } catch (err: any) {
+      console.warn(`[Auto Draft Failed] ${submissionId}:`, err?.message || err);
+      const failState = loadPortalState();
+      const failIdx = failState.submissions.findIndex((s) => s.id === submissionId);
+      if (failIdx !== -1) {
+        failState.submissions[failIdx] = {
+          ...failState.submissions[failIdx],
+          draftStatus: 'failed',
+          draftError: err?.message || 'Automatic draft generation failed.',
+        };
+        savePortalState(failState);
+      }
+    } finally {
+      inFlightAutoDrafts.delete(submissionId);
+    }
+  })();
+
+  inFlightAutoDrafts.set(submissionId, job);
+  return job;
+}
+
+/** Resume pending submissions whose background draft worker was interrupted by a server restart. */
+function resumeOrphanedAutoDrafts() {
+  try {
+    const state = loadPortalState();
+    const orphaned = state.submissions.filter(
+      (s) =>
+        s.status === 'pending' &&
+        !s.draftReport &&
+        (s.draftStatus === 'queued' || s.draftStatus === 'generating')
+    );
+    if (orphaned.length === 0) return;
+
+    console.log(`[Startup Recovery] Resuming ${orphaned.length} interrupted auto-correction draft(s)...`);
+    void (async () => {
+      for (const sub of orphaned) {
+        await autoGenerateDraftForSubmission(sub.id);
+      }
+    })();
+  } catch (err) {
+    console.warn('[Startup Recovery] Failed to scan orphaned drafts:', err);
+  }
+}
+
+/** Queue an in-portal notification for the educator whenever a student submits homework, quiz, or essay work. */
+function appendTeacherSubmissionNotification(state: PortalState, record: HomeworkSubmissionRecord) {
+  const kindLabel =
+    record.assignmentKind === 'quiz'
+      ? 'Quiz Submitted'
+      : record.assignmentKind === 'essay'
+      ? 'Essay Submitted'
+      : 'Homework Submitted';
+  const workDetail =
+    record.assignmentKind === 'homework'
+      ? record.pageCount > 0
+        ? `${record.pageCount} page(s)`
+        : 'typed working'
+      : record.assignmentKind;
+
+  const submissionNotification: PortalNotification = {
+    id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    recipientRole: 'teacher',
+    courseId: record.courseId,
+    studentId: record.studentId,
+    submissionId: record.id,
+    title: `${kindLabel}: ${record.studentName}`,
+    message: `${record.courseTitle} · ${record.assignment} (${workDetail})`,
+    type: 'submission',
+    dueDate: record.dueDate || undefined,
+    createdAt: record.submittedAt,
+    readByUserIds: [],
+  };
+  state.notifications = [submissionNotification, ...(state.notifications || [])].slice(0, 200);
+}
+
+function resolveParentEmailForStudent(state: PortalState, sub: HomeworkSubmissionRecord): string {
+  const mapped = state.parentEmails?.[String(sub.studentId)];
+  if (mapped && mapped.trim()) return mapped.trim();
+  const dirMatch = state.directoryUsers?.find(
+    (u) => (u.id === sub.studentId || u.linkedStudentId === sub.studentId) && u.parentEmail
+  );
+  if (dirMatch?.parentEmail) return dirMatch.parentEmail;
+  return `parent.${sub.studentUsername}@mrhaithamhusseinig.edu`;
+}
+
+function escapeHtml(text: any): string {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildParentReportHtml(sub: HomeworkSubmissionRecord, report: any): string {
+  const sysLabel =
+    String(report?.gradingSystem || sub.gradingSystem || 'edexcel').toUpperCase() === 'IB'
+      ? 'IB (Band 1–7)'
+      : String(report?.gradingSystem || sub.gradingSystem || 'edexcel').toUpperCase() === 'MARKS'
+      ? 'Raw Marks (%)'
+      : 'Edexcel (9–1 / A*–U)';
+
+  const criterionHtml =
+    Array.isArray(report?.criterionBreakdown) && report.criterionBreakdown.length > 0
+      ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;">
+          ${report.criterionBreakdown
+            .map(
+              (c: any) =>
+                `<div style="flex:1 1 140px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 10px;">
+                  <div style="font-size:10px;font-weight:bold;color:#3730a3;text-transform:uppercase;">${escapeHtml(c.label)}</div>
+                  <div style="font-size:14px;font-weight:bold;color:#1e1b4b;margin-top:2px;">${escapeHtml(c.score)}</div>
+                </div>`
+            )
+            .join('')}
+        </div>`
+      : '';
+
+  const questionCards = (Array.isArray(report?.questions) ? report.questions : [])
+    .map((q: any) => {
+      const earned = Number(q.earnedMarks) || 0;
+      const maxM = Number(q.maxMarks) || 1;
+      const isFull = earned === maxM;
+      const isPartial = !isFull && earned > 0;
+      const badgeBg = isFull ? '#dcfce7' : isPartial ? '#fef3c7' : '#ffe4e6';
+      const badgeColor = isFull ? '#166534' : isPartial ? '#92400e' : '#9f1239';
+      const badgeText = isFull ? 'CORRECT' : isPartial ? `PARTIAL (${earned}/${maxM})` : 'INCORRECT';
+
+      const written = escapeHtml(q.phase1Extraction || q.studentWorkingFound || 'Not attempted').replace(/\n/g, '<br/>');
+      const mistake = escapeHtml(
+        q.phase2ErrorAnalysis || q.errorAnalysis || q.teacherFeedback || (isFull ? 'Correct method and final answer.' : 'See teacher note.')
+      ).replace(/\n/g, '<br/>');
+      const solution = escapeHtml(q.phase3Solution || q.modelSolution || '—').replace(/\n/g, '<br/>');
+
+      return `
+      <div style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:12px;overflow:hidden;background:#ffffff;">
+        <div style="background:#f9fafb;padding:10px 14px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:bold;font-size:13px;color:#111827;">${escapeHtml(q.displayLabel || `Q${q.questionNumber}`)}</span>
+          <span style="font-size:12px;font-weight:bold;color:#111827;">
+            <span style="background:${badgeBg};color:${badgeColor};padding:2px 8px;border-radius:999px;font-size:11px;margin-right:8px;">${badgeText}</span>
+            ${earned} / ${maxM} Marks
+          </span>
+        </div>
+        <div style="padding:12px 14px;font-size:12px;line-height:1.5;">
+          <div style="margin-bottom:8px;">
+            <div style="font-size:10px;font-weight:bold;text-transform:uppercase;color:#4b5563;letter-spacing:0.04em;">What was written</div>
+            <div style="font-family:Consolas,Monaco,monospace;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 9px;margin-top:3px;color:#0f172a;">${written}</div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <div style="font-size:10px;font-weight:bold;text-transform:uppercase;color:#9f1239;letter-spacing:0.04em;">Exact mistake identified &amp; why it is wrong</div>
+            <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:6px;padding:7px 9px;margin-top:3px;color:#881337;">${mistake}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:bold;text-transform:uppercase;color:#065f46;letter-spacing:0.04em;">Correct working &amp; solution</div>
+            <div style="font-family:Consolas,Monaco,monospace;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:7px 9px;margin-top:3px;color:#064e3b;">${solution}</div>
+          </div>
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  return `
+  <div style="font-family:Inter,Arial,sans-serif;max-width:740px;margin:0 auto;color:#111827;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#ffffff;">
+    <div style="background:#800020;color:#ffffff;padding:22px 24px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.85;">Mr.HaithamHusseinig · Official Student Progress Report</div>
+      <h2 style="margin:6px 0 0;font-size:20px;">${escapeHtml(sub.assignment)}</h2>
+      <p style="margin:4px 0 0;font-size:13px;opacity:0.9;">Approved &amp; Released by Mr. Haitham Hussien · ${escapeHtml(sub.courseTitle)}</p>
+    </div>
+
+    <div style="padding:20px 24px;">
+      <p style="margin-top:0;font-size:14px;">Dear Parent of <strong>${escapeHtml(sub.studentName)}</strong>,</p>
+
+      <table style="width:100%;border-collapse:separate;border-spacing:10px 0;margin:14px -10px;">
+        <tr>
+          <td style="width:50%;background:#fdf2f4;border:1px solid #fecdd3;border-radius:10px;padding:12px 16px;">
+            <div style="font-size:11px;font-weight:bold;text-transform:uppercase;color:#9f1239;">Mark</div>
+            <div style="font-size:24px;font-weight:900;color:#800020;margin-top:2px;">${report.earnedMarks} / ${report.totalMarks} <span style="font-size:14px;color:#475569;">(${report.percentage}%)</span></div>
+          </td>
+          <td style="width:50%;background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;padding:12px 16px;">
+            <div style="font-size:11px;font-weight:bold;text-transform:uppercase;color:#475569;">Grading System · ${escapeHtml(sysLabel)}</div>
+            <div style="font-size:18px;font-weight:800;color:#0f172a;margin-top:4px;">${escapeHtml(report.grade)}</div>
+          </td>
+        </tr>
+      </table>
+
+      ${criterionHtml}
+
+      ${report.generalFeedback ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#78350f;margin-bottom:14px;"><strong>Overall Summary:</strong> ${escapeHtml(report.generalFeedback)}</div>` : ''}
+      ${sub.teacherNote ? `<div style="background:#fdf2f4;border:1px solid #f0d0d6;border-radius:8px;padding:10px 14px;font-size:12px;color:#701a2d;margin-bottom:16px;"><strong>Mr. Haitham&apos;s Personal Note:</strong> ${escapeHtml(sub.teacherNote)}</div>` : ''}
+
+      <h3 style="font-size:14px;font-weight:bold;color:#701a2d;margin:16px 0 10px;text-transform:uppercase;letter-spacing:0.04em;">
+        For Each Question (${(report.questions || []).length} Questions)
+      </h3>
+      ${questionCards}
+
+      <p style="margin-top:16px;font-size:12px;color:#6b7280;">Sign in to the Mr.HaithamHusseinig Parent Portal with your parent credentials to view or print this full report anytime.</p>
+    </div>
+  </div>`;
+}
+
+async function sendParentReportEmail(
+  state: PortalState,
+  sub: HomeworkSubmissionRecord,
+  report: any,
+  overrideEmail?: string
+): Promise<OutboxEmailRecord> {
+  const to = (overrideEmail && overrideEmail.trim()) || resolveParentEmailForStudent(state, sub);
+  const from = process.env.RESEND_FROM_EMAIL || 'Mr. Haitham Portal <onboarding@resend.dev>';
+  const subject = `[Mr.HaithamHusseinig Report Approved] ${sub.studentName} — ${sub.assignment} (${report.percentage}%)`;
+  const html = buildParentReportHtml(sub, report);
+  const apiKey = process.env.RESEND_API_KEY;
+  const hasRealKey = Boolean(apiKey && apiKey.trim() && !apiKey.includes('re_...'));
+
+  let record: OutboxEmailRecord = {
+    id: `mail_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    createdAt: new Date().toISOString(),
+    submissionId: sub.id,
+    studentId: sub.studentId,
+    studentName: sub.studentName,
+    parentName: `Parent of ${sub.studentName}`,
+    to,
+    from,
+    subject,
+    html,
+    provider: hasRealKey ? 'resend' : 'local-preview',
+    status: 'logged_locally',
+    note: hasRealKey ? undefined : 'RESEND_API_KEY not configured locally — saved to Local Email Outbox preview.',
+  };
+
+  if (hasRealKey) {
+    try {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey!.trim()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from, to: [to], subject, html }),
+      });
+      const data: any = await resp.json().catch(() => ({}));
+      if (resp.ok && data?.id) {
+        record.status = 'sent';
+        record.resendId = String(data.id);
+        record.note = 'Delivered via Resend API';
+      } else {
+        record.provider = 'local-preview';
+        record.status = 'logged_locally';
+        record.note = `Resend API (${resp.status}): ${data?.message || 'Fallback logged locally for preview'}`;
+      }
+    } catch (err: any) {
+      record.provider = 'local-preview';
+      record.status = 'logged_locally';
+      record.note = `Resend network error (${err?.message || 'unknown'}) — logged locally`;
+    }
+  }
+
+  state.outbox = [record, ...(state.outbox || [])].slice(0, 200);
+  return record;
+}
+
+async function sendAssignmentEmailViaResend(
+  state: PortalState,
+  assignmentRec: HomeworkAssignmentRecord,
+  toEmail: string,
+  studentId = 0,
+  studentName = 'Group Member'
+): Promise<OutboxEmailRecord> {
+  const from = process.env.RESEND_FROM_EMAIL || 'Mr. Haitham Portal <onboarding@resend.dev>';
+  const dueFormatted = assignmentRec.dueDate
+    ? new Date(assignmentRec.dueDate).toLocaleString('en-GB')
+    : 'See portal';
+  const subject = `[New Homework Assigned] ${assignmentRec.courseTitle}: ${assignmentRec.title} (Due: ${dueFormatted})`;
+  const html = `
+  <div style="font-family:Inter,Arial,sans-serif;max-width:680px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#ffffff;color:#111827;">
+    <div style="background:#800020;color:#ffffff;padding:20px 24px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.85;">Mr. Haitham Hussien · New Homework Assigned</div>
+      <h2 style="margin:6px 0 0;font-size:20px;">${escapeHtml(assignmentRec.title)}</h2>
+      <p style="margin:4px 0 0;font-size:13px;opacity:0.9;">Group: ${escapeHtml(assignmentRec.courseTitle)}</p>
+    </div>
+    <div style="padding:20px 24px;font-size:13px;line-height:1.6;">
+      <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+        <strong style="color:#800020;">Due Date:</strong> ${escapeHtml(dueFormatted)}
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <strong style="display:block;margin-bottom:4px;">Instructions from Mr. Haitham:</strong>
+        <div>${escapeHtml(assignmentRec.instructions || 'Complete all assigned questions neatly and upload your PDF or photos before the due date.').replace(/\n/g, '<br/>')}</div>
+      </div>
+      <p style="font-size:12px;color:#64748b;margin:0;">Log in to the Student Portal to select this homework from your assignment dropdown and submit your pages.</p>
+    </div>
+  </div>`;
+
+  const apiKey = process.env.RESEND_API_KEY;
+  const hasRealKey = Boolean(apiKey && apiKey.trim() && !apiKey.includes('re_...'));
+
+  const record: OutboxEmailRecord = {
+    id: `mail_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    createdAt: new Date().toISOString(),
+    submissionId: assignmentRec.id,
+    studentId,
+    studentName,
+    to: toEmail.trim(),
+    from,
+    subject,
+    html,
+    provider: hasRealKey ? 'resend' : 'local-preview',
+    status: 'logged_locally',
+    note: hasRealKey ? undefined : 'RESEND_API_KEY not set — saved to Local Email Outbox preview.',
+  };
+
+  if (hasRealKey) {
+    try {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey!.trim()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from, to: [toEmail.trim()], subject, html }),
+      });
+      const data: any = await resp.json().catch(() => ({}));
+      if (resp.ok && data?.id) {
+        record.status = 'sent';
+        record.resendId = String(data.id);
+        record.note = 'Delivered via Resend API';
+      } else {
+        record.provider = 'local-preview';
+        record.status = 'logged_locally';
+        record.note = `Resend API (${resp.status}): ${data?.message || 'Saved locally for preview'}`;
+      }
+    } catch (err: any) {
+      record.provider = 'local-preview';
+      record.status = 'logged_locally';
+      record.note = `Resend error (${err?.message || 'unknown'}) — saved locally`;
+    }
+  }
+
+  state.outbox = [record, ...(state.outbox || [])].slice(0, 200);
+  return record;
+}
+
+async function runQuizOrEssayGradingDraft(
+  sub: HomeworkSubmissionRecord,
+  gradingSystem: 'edexcel' | 'ib' | 'marks' = 'edexcel'
+): Promise<any> {
+  const qs = Array.isArray(sub.quizQuestions) ? sub.quizQuestions : [];
+  const ansMap = sub.quizAnswers || {};
+  const questionsOut: any[] = [];
+
+  for (let i = 0; i < qs.length; i++) {
+    const q = qs[i];
+    const studentAns = String(ansMap[q.id] || '').trim();
+    const maxMarks = Number(q.marks) || 2;
+    const expected = String(q.correctAnswer || '').trim();
+
+    if (q.type === 'mcq') {
+      const isCorrect =
+        Boolean(studentAns) &&
+        Boolean(expected) &&
+        studentAns.toLowerCase() === expected.toLowerCase();
+      const earned = isCorrect ? maxMarks : 0;
+      questionsOut.push({
+        questionNumber: i + 1,
+        displayLabel: `Q${i + 1}`,
+        paperRef: sub.assignment,
+        prompt: q.prompt,
+        maxMarks,
+        earnedMarks: earned,
+        markSchemeRef: `[${gradingSystem.toUpperCase()}] MCQ Key`,
+        studentWorkingFound: studentAns || 'Not attempted',
+        phase1Extraction: studentAns || 'Not attempted',
+        modelSolution: expected,
+        phase3Solution: expected ? `Correct choice: ${expected}` : 'See teacher solution note.',
+        status: isCorrect ? 'correct' : 'incorrect',
+        statusLabel: isCorrect ? 'CORRECT' : 'INCORRECT',
+        errorAnalysis: isCorrect
+          ? 'Exact match with expected answer.'
+          : `Student selected "${studentAns || 'blank'}" instead of "${expected}".`,
+        phase2ErrorAnalysis: isCorrect
+          ? 'Exact match with expected answer.'
+          : `Student selected "${studentAns || 'blank'}" instead of "${expected}".`,
+        teacherFeedback: isCorrect ? 'Well done.' : `Review the concept and check "${expected}".`,
+      });
+    } else {
+      // Short answer or Essay
+      let earned = studentAns ? Math.ceil(maxMarks / 2) : 0;
+      let phase2 = studentAns
+        ? 'Draft prepared for Mr. Haitham review against rubric.'
+        : 'No written answer submitted.';
+      let phase3 = expected || 'Provide full structured mathematical justification and final conclusion.';
+      let feedback = studentAns
+        ? 'Working captured for Mr. Haitham verification and mark finalization.'
+        : 'Please write full steps and justification.';
+
+      if (process.env.GEMINI_API_KEY && studentAns) {
+        try {
+          const prompt = `Grade this ${sub.assignmentKind || 'essay'} math response under the ${gradingSystem.toUpperCase()} scale.
+Question (${maxMarks} marks): ${q.prompt}
+Expected Key / Rubric: ${expected || 'Full rigorous justification and exact final value'}
+Student Response: ${studentAns}
+Return ONLY JSON: { "earnedMarks": number (0..${maxMarks}), "phase2ErrorAnalysis": string, "phase3Solution": string, "teacherFeedback": string }`;
+          const resp = await generateWithRetry(
+            { model: GRADING_MODEL, contents: prompt, config: { responseMimeType: 'application/json' } },
+            0,
+            25000,
+            []
+          );
+          const parsed = JSON.parse(resp.text || '{}');
+          if (typeof parsed.earnedMarks === 'number') {
+            earned = Math.max(0, Math.min(maxMarks, Math.round(parsed.earnedMarks)));
+          }
+          if (parsed.phase2ErrorAnalysis) phase2 = parsed.phase2ErrorAnalysis;
+          if (parsed.phase3Solution) phase3 = parsed.phase3Solution;
+          if (parsed.teacherFeedback) feedback = parsed.teacherFeedback;
+        } catch {
+          // Graceful deterministic fallback draft when offline/quota-limited
+        }
+      }
+
+      const status = earned === maxMarks ? 'correct' : 'incorrect';
+      questionsOut.push({
+        questionNumber: i + 1,
+        displayLabel: `Q${i + 1}`,
+        paperRef: sub.assignment,
+        prompt: q.prompt,
+        maxMarks,
+        earnedMarks: earned,
+        markSchemeRef: `[${gradingSystem.toUpperCase()}] Rubric`,
+        studentWorkingFound: studentAns || 'Not attempted',
+        phase1Extraction: studentAns || 'Not attempted',
+        modelSolution: phase3,
+        phase3Solution: phase3,
+        status,
+        statusLabel: earned === maxMarks ? 'CORRECT' : earned > 0 ? `PARTIAL (${earned}/${maxMarks})` : 'INCORRECT',
+        errorAnalysis: phase2,
+        phase2ErrorAnalysis: phase2,
+        teacherFeedback: feedback,
+      });
+    }
+  }
+
+  const totalMarks = questionsOut.reduce((s, q) => s + q.maxMarks, 0) || 1;
+  const earnedMarks = questionsOut.reduce((s, q) => s + q.earnedMarks, 0);
+  const percentage = Math.round((earnedMarks / totalMarks) * 100);
+  const computed = computeGradeForSystem(percentage, earnedMarks, totalMarks, gradingSystem);
+
+  return {
+    studentName: sub.studentName,
+    assignmentTitle: sub.assignment,
+    teacherName: 'Mr. Haitham Hussien',
+    subject: sub.courseTitle,
+    submissionDate: sub.submittedAt,
+    totalMarks,
+    earnedMarks,
+    percentage,
+    grade: computed.grade,
+    gradingSystem,
+    assignmentKind: sub.assignmentKind || 'quiz',
+    performanceLevel: computed.performanceLevel,
+    generalFeedback: `Reviewed under ${gradingSystem.toUpperCase()} scale (${earnedMarks}/${totalMarks} marks, ${percentage}%).`,
+    diagnosticReview: `3-Phase evaluation completed for ${sub.assignment}.`,
+    questions: questionsOut,
+    strengths: questionsOut.filter((q) => q.status === 'correct').map((q) => `${q.displayLabel}: ${q.prompt.slice(0, 60)}`),
+    recommendedNextSteps: ['Review Phase 3 solutions and any partial/missed steps before the next checkpoint.'],
+  };
+}
+
+// GET enrollments (all for educator, or ?studentId=<id> for single student)
+app.get('/api/enrollments', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const studentId = req.query.studentId ? String(req.query.studentId) : null;
+  if (studentId) {
+    return res.json({
+      success: true,
+      enrollment: state.enrollments[studentId] || null,
+    });
+  }
+  const enrollments = Object.values(state.enrollments).sort((a, b) =>
+    b.requestedAt.localeCompare(a.requestedAt)
+  );
+  return res.json({ success: true, enrollments });
+});
+
+// POST student course enrollment request (starts as 'pending' awaiting Mr. Haitham's approval)
+app.post('/api/enrollments/request', (req: Request, res: Response) => {
+  const { studentId, studentUsername, studentName, grade, section, courseId, courseTitle } = req.body || {};
+  if (!studentId || !courseId) {
+    return res.status(400).json({ success: false, error: 'studentId and courseId are required.' });
+  }
+  const state = loadPortalState();
+  const key = String(studentId);
+  const entry: CourseEnrollment = {
+    studentId: Number(studentId),
+    studentUsername: String(studentUsername || `student${studentId}`),
+    studentName: String(studentName || `Student ${studentId}`),
+    grade: grade ? String(grade) : undefined,
+    section: section ? String(section) : undefined,
+    courseId: String(courseId),
+    courseTitle: String(courseTitle || courseId),
+    status: 'pending',
+    requestedAt: new Date().toISOString(),
+  };
+  state.enrollments[key] = entry;
+  savePortalState(state);
+  return res.json({ success: true, enrollment: entry });
+});
+
+// POST educator approves a student's course enrollment (or switches their course)
+app.post('/api/enrollments/:studentId/approve', (req: Request, res: Response) => {
+  const key = String(req.params.studentId);
+  const { courseId, courseTitle, teacherNote, studentUsername, studentName } = req.body || {};
+  const state = loadPortalState();
+  const existing = state.enrollments[key];
+  if (!existing && !courseId) {
+    return res.status(404).json({ success: false, error: 'Enrollment request not found.' });
+  }
+  const updated: CourseEnrollment = {
+    studentId: Number(key),
+    studentUsername: existing?.studentUsername || String(studentUsername || `student${key}`),
+    studentName: existing?.studentName || String(studentName || `Student ${key}`),
+    grade: existing?.grade,
+    section: existing?.section,
+    courseId: courseId ? String(courseId) : existing.courseId,
+    courseTitle: courseTitle ? String(courseTitle) : existing.courseTitle,
+    status: 'approved',
+    requestedAt: existing?.requestedAt || new Date().toISOString(),
+    reviewedAt: new Date().toISOString(),
+    teacherNote: teacherNote ? String(teacherNote) : undefined,
+  };
+  state.enrollments[key] = updated;
+  savePortalState(state);
+  return res.json({ success: true, enrollment: updated });
+});
+
+// POST educator declines a student's course request so student can choose another course
+app.post('/api/enrollments/:studentId/reject', (req: Request, res: Response) => {
+  const key = String(req.params.studentId);
+  const { teacherNote } = req.body || {};
+  const state = loadPortalState();
+  const existing = state.enrollments[key];
+  if (!existing) {
+    return res.status(404).json({ success: false, error: 'Enrollment request not found.' });
+  }
+  const updated: CourseEnrollment = {
+    ...existing,
+    status: 'rejected',
+    reviewedAt: new Date().toISOString(),
+    teacherNote: teacherNote ? String(teacherNote) : 'Please select your assigned course and resubmit.',
+  };
+  state.enrollments[key] = updated;
+  savePortalState(state);
+  return res.json({ success: true, enrollment: updated });
+});
+
+// POST student submits homework for Mr. Haitham to review manually (no instant AI run on student submit)
+app.post('/api/submissions', (req: Request, res: Response) => {
+  try {
+    const {
+      studentId,
+      studentUsername,
+      studentName,
+      courseId,
+      courseTitle,
+      assignmentId = null,
+      dueDate = null,
+      assignment = 'Homework Submission',
+      assignmentKind = 'homework',
+      gradingSystem = 'edexcel',
+      submissionText = '',
+      fileName = null,
+      fileBase64 = null,
+      fileMimeType = null,
+      pageImages = null,
+      a3SpreadCount = 0,
+    } = req.body || {};
+
+    if (!studentId || !courseId) {
+      return res.status(400).json({ success: false, error: 'studentId and courseId are required.' });
+    }
+
+    const pagesArr = Array.isArray(pageImages) ? pageImages : [];
+    const cleanText = String(submissionText || '').trim();
+    if (pagesArr.length === 0 && !fileBase64 && !cleanText) {
+      return res.status(400).json({ success: false, error: 'Please upload a worksheet/photo or enter your working before submitting.' });
+    }
+
+    const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const detectedA3Count = Number(a3SpreadCount) || pagesArr.filter((p: any) => p?.tilePosition === 'left').length;
+    const record: HomeworkSubmissionRecord = {
+      id,
+      studentId: Number(studentId),
+      studentUsername: String(studentUsername || `student${studentId}`),
+      studentName: String(studentName || `Student ${studentId}`),
+      courseId: String(courseId),
+      courseTitle: String(courseTitle || courseId),
+      assignmentId: assignmentId ? String(assignmentId) : null,
+      dueDate: dueDate ? String(dueDate) : null,
+      assignment: String(assignment || 'Homework Submission'),
+      assignmentKind: assignmentKind === 'quiz' || assignmentKind === 'essay' ? assignmentKind : 'homework',
+      gradingSystem: gradingSystem === 'ib' || gradingSystem === 'marks' ? gradingSystem : 'edexcel',
+      submissionText: cleanText,
+      fileName: fileName ? String(fileName) : null,
+      fileMimeType: fileMimeType ? String(fileMimeType) : null,
+      pageCount: pagesArr.length > 0 ? pagesArr.length : fileBase64 ? 1 : 0,
+      a3SpreadCount: detectedA3Count,
+      status: 'pending',
+      submittedAt: new Date().toISOString(),
+      draftStatus: 'queued',
+      draftError: null,
+      draftReport: null,
+      publishedReport: null,
+    };
+
+    if (pagesArr.length > 0 || fileBase64) {
+      saveSubmissionMedia(id, {
+        pageImages: pagesArr,
+        fileBase64: fileBase64 || null,
+        fileMimeType: fileMimeType || null,
+      });
+    }
+
+    const state = loadPortalState();
+    state.submissions.unshift(record);
+    appendTeacherSubmissionNotification(state, record);
+    savePortalState(state);
+
+    // Automatically prepare Mr. Haitham's internal 3-Phase correction draft behind the Approval Gateway
+    setImmediate(() => {
+      void autoGenerateDraftForSubmission(record.id);
+    });
+
+    return res.json({
+      success: true,
+      submission: sanitizeSubmissionForStudent(record),
+    });
+  } catch (err: any) {
+    console.error('Error creating homework submission:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to save submission.' });
+  }
+});
+
+// GET homework submissions (?studentId=... returns sanitized student view; ?role=teacher returns educator inbox)
+app.get('/api/submissions', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const role = String(req.query.role || 'student');
+  const studentId = req.query.studentId ? Number(req.query.studentId) : null;
+  const courseId = req.query.courseId ? String(req.query.courseId) : null;
+
+  let items = state.submissions;
+  if (studentId !== null && !isNaN(studentId)) {
+    items = items.filter((s) => s.studentId === studentId);
+  }
+  if (courseId) {
+    items = items.filter((s) => s.courseId === courseId);
+  }
+  if (role === 'parent') {
+    // Parents ONLY see results after Mr. Haitham's Approval Gateway has published them
+    items = items.filter((s) => s.status === 'graded');
+  }
+
+  if (role === 'teacher') {
+    return res.json({ success: true, submissions: items });
+  }
+  return res.json({
+    success: true,
+    submissions: items.map(sanitizeSubmissionForStudent),
+  });
+});
+
+// GET single submission including saved page images (for educator inspection or student viewing own uploaded pages)
+app.get('/api/submissions/:id', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const sub = state.submissions.find((s) => s.id === req.params.id);
+  if (!sub) {
+    return res.status(404).json({ success: false, error: 'Submission not found.' });
+  }
+  const role = String(req.query.role || 'student');
+  const media = loadSubmissionMedia(sub.id);
+  const payload = role === 'teacher' ? sub : sanitizeSubmissionForStudent(sub);
+  return res.json({
+    success: true,
+    submission: {
+      ...payload,
+      pageImages: media?.pageImages || [],
+      fileBase64: role === 'teacher' ? media?.fileBase64 || null : null,
+    },
+  });
+});
+
+// POST educator creates a clean zero-quota Manual Correction Sheet from the active Model Answer Key
+app.post('/api/submissions/:id/manual-draft', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const idx = state.submissions.findIndex((s) => s.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: 'Submission not found.' });
+  }
+  const sub = state.submissions[idx];
+  const { gradingSystem = sub.gradingSystem || 'edexcel' } = req.body || {};
+  const chosenSystem: 'edexcel' | 'ib' | 'marks' =
+    gradingSystem === 'ib' || gradingSystem === 'marks' ? gradingSystem : 'edexcel';
+
+  const base = gradeWithFiveRepoEnginePool(
+    sub.studentName,
+    sub.assignment || currentModelAnswerKey.title,
+    currentModelAnswerKey.text,
+    sub.submissionText || '',
+    sub.fileName,
+    Date.now()
+  );
+
+  const manualQuestions = base.questions.map((q) => ({
+    ...q,
+    earnedMarks: 0,
+    status: 'incorrect' as const,
+    statusLabel: 'PENDING' as any,
+    studentWorkingFound: sub.submissionText ? q.studentWorkingFound : '',
+    phase1Extraction: sub.submissionText ? q.studentWorkingFound : '',
+    errorAnalysis: '',
+    phase2ErrorAnalysis: '',
+    phase3Solution: q.modelSolution,
+    teacherFeedback: '',
+  }));
+
+  const manualReport = {
+    ...base,
+    gradingSystem: chosenSystem,
+    earnedMarks: 0,
+    percentage: 0,
+    grade: computeGradeForSystem(0, 0, base.totalMarks, chosenSystem).grade,
+    performanceLevel: 'Manual Teacher Review Sheet',
+    generalFeedback: 'Reviewed manually by Mr. Haitham Hussien.',
+    diagnosticReview: 'Enter marks, written working notes, and feedback for each question below.',
+    questions: manualQuestions,
+  };
+
+  state.submissions[idx] = {
+    ...sub,
+    gradingSystem: chosenSystem,
+    draftStatus: 'ready',
+    draftError: null,
+    draftReport: manualReport,
+  };
+  savePortalState(state);
+
+  return res.json({
+    success: true,
+    submission: state.submissions[idx],
+    report: manualReport,
+  });
+});
+
+// POST educator generates an internal correction draft for a student submission (educator-only)
+app.post('/api/submissions/:id/draft-grade', async (req: Request, res: Response) => {
+  try {
+    const state = loadPortalState();
+    const idx = state.submissions.findIndex((s) => s.id === req.params.id);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Submission not found.' });
+    }
+    const sub = state.submissions[idx];
+    const media = loadSubmissionMedia(sub.id);
+    const {
+      modelAnswerKey = null,
+      modelAnswerTitle = null,
+      modelKeyFileBase64 = null,
+      precisionMode = 'deep',
+      gradingSystem = sub.gradingSystem || 'edexcel',
+    } = req.body || {};
+
+    const chosenSystem: 'edexcel' | 'ib' | 'marks' =
+      gradingSystem === 'ib' || gradingSystem === 'marks' ? gradingSystem : 'edexcel';
+
+    let generatedReport: any = null;
+    if ((sub.assignmentKind === 'quiz' || sub.assignmentKind === 'essay') && Array.isArray(sub.quizQuestions) && sub.quizQuestions.length > 0) {
+      generatedReport = await runQuizOrEssayGradingDraft(sub, chosenSystem);
+    } else {
+      const result = await runHomeworkCorrectionDraft({
+        studentName: sub.studentName,
+        assignment: sub.assignment,
+        submissionText: sub.submissionText,
+        modelAnswerKey,
+        modelAnswerTitle: modelAnswerTitle || sub.assignment,
+        modelKeyFileBase64,
+        fileName: sub.fileName,
+        fileBase64: media?.fileBase64 || null,
+        fileMimeType: media?.fileMimeType || sub.fileMimeType || null,
+        pageImages: media?.pageImages || null,
+        precisionMode,
+        gradingSystem: chosenSystem,
+        assignmentKind: sub.assignmentKind || 'homework',
+      });
+      generatedReport = result.report;
+    }
+
+    const freshState = loadPortalState();
+    const freshIdx = freshState.submissions.findIndex((s) => s.id === req.params.id);
+    if (freshIdx !== -1) {
+      freshState.submissions[freshIdx] = {
+        ...freshState.submissions[freshIdx],
+        gradingSystem: chosenSystem,
+        draftStatus: 'ready',
+        draftError: null,
+        draftReport: generatedReport,
+      };
+      savePortalState(freshState);
+    }
+
+    return res.json({
+      success: true,
+      submission: freshIdx !== -1 ? freshState.submissions[freshIdx] : state.submissions[idx],
+      report: generatedReport,
+    });
+  } catch (error: any) {
+    console.error('Error generating educator draft grade:', error);
+    return res.status(error?.statusCode || 500).json({
+      success: false,
+      error: error?.message || 'Could not generate correction draft.',
+    });
+  }
+});
+
+// POST educator approves, finalizes, publishes report to Student & Parent Portals, and triggers Resend Email Gateway
+app.post('/api/submissions/:id/publish', async (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const idx = state.submissions.findIndex((s) => s.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: 'Submission not found.' });
+  }
+  const sub = state.submissions[idx];
+  const { report, teacherNote, gradingSystem, parentEmail } = req.body || {};
+  const sourceReport = report || sub.publishedReport || sub.draftReport;
+  if (!sourceReport) {
+    return res.status(400).json({ success: false, error: 'No graded report to publish.' });
+  }
+
+  const chosenSystem: 'edexcel' | 'ib' | 'marks' =
+    gradingSystem === 'ib' || gradingSystem === 'marks' || gradingSystem === 'edexcel'
+      ? gradingSystem
+      : sourceReport.gradingSystem || sub.gradingSystem || 'edexcel';
+
+  const questions = Array.isArray(sourceReport.questions) ? sourceReport.questions : [];
+  const normalizedQuestions = questions.map((q: any) => {
+    const maxM = Number(q.maxMarks) || 1;
+    const earnedM = Math.max(0, Math.min(maxM, Number(q.earnedMarks) || 0));
+    const status = earnedM === maxM ? 'correct' : earnedM > 0 ? 'partial' : 'incorrect';
+    const statusLabel = earnedM === maxM ? 'CORRECT' : earnedM > 0 ? `PARTIAL (${earnedM}/${maxM})` : 'INCORRECT';
+    const phase1 = q.phase1Extraction || q.studentWorkingFound || '';
+    const phase2 = q.phase2ErrorAnalysis || q.errorAnalysis || '';
+    const phase3 = q.phase3Solution || q.modelSolution || '';
+    return {
+      ...q,
+      earnedMarks: earnedM,
+      status,
+      statusLabel,
+      studentWorkingFound: phase1,
+      phase1Extraction: phase1,
+      errorAnalysis: phase2,
+      phase2ErrorAnalysis: phase2,
+      modelSolution: phase3,
+      phase3Solution: phase3,
+    };
+  });
+
+  const totalMarks = normalizedQuestions.reduce((s: number, q: any) => s + (Number(q.maxMarks) || 0), 0) || sourceReport.totalMarks || 1;
+  const earnedMarks = normalizedQuestions.reduce((s: number, q: any) => s + (Number(q.earnedMarks) || 0), 0);
+  const percentage = Math.round((earnedMarks / totalMarks) * 100);
+  const computed = computeGradeForSystem(percentage, earnedMarks, totalMarks, chosenSystem);
+
+  const finalizedReport = {
+    ...sourceReport,
+    studentName: sub.studentName,
+    teacherName: 'Mr. Haitham Hussien',
+    totalMarks,
+    earnedMarks,
+    percentage,
+    grade: computed.grade,
+    performanceLevel: computed.performanceLevel,
+    gradingSystem: chosenSystem,
+    assignmentKind: sub.assignmentKind || sourceReport.assignmentKind || 'homework',
+    questions: normalizedQuestions,
+    publishedAt: new Date().toISOString(),
+  };
+
+  if (parentEmail && String(parentEmail).trim()) {
+    state.parentEmails = state.parentEmails || {};
+    state.parentEmails[String(sub.studentId)] = String(parentEmail).trim();
+  }
+
+  const updatedSub: HomeworkSubmissionRecord = {
+    ...sub,
+    gradingSystem: chosenSystem,
+    status: 'graded',
+    publishedAt: new Date().toISOString(),
+    reviewedBy: 'Mr. Haitham Hussien',
+    teacherNote: teacherNote !== undefined ? String(teacherNote) : sub.teacherNote,
+    draftReport: finalizedReport,
+    publishedReport: finalizedReport,
+  };
+
+  const mailRecord = await sendParentReportEmail(state, updatedSub, finalizedReport, parentEmail);
+  updatedSub.emailDelivery = {
+    status: mailRecord.status,
+    to: mailRecord.to,
+    provider: mailRecord.provider,
+    resendId: mailRecord.resendId,
+    note: mailRecord.note,
+  };
+
+  state.submissions[idx] = updatedSub;
+  state.notifications = state.notifications || [];
+  state.notifications.unshift({
+    id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    recipientRole: 'all',
+    courseId: sub.courseId,
+    studentId: sub.studentId,
+    title: `Report Approved: ${sub.assignment}`,
+    message: `Mr. Haitham approved & released your ${sub.assignmentKind || 'homework'} report (${finalizedReport.earnedMarks}/${finalizedReport.totalMarks} · ${finalizedReport.percentage}%).`,
+    type: 'report',
+    createdAt: new Date().toISOString(),
+    readByUserIds: [],
+  });
+  state.notifications = state.notifications.slice(0, 200);
+  savePortalState(state);
+
+  return res.json({
+    success: true,
+    submission: state.submissions[idx],
+    emailDelivery: updatedSub.emailDelivery,
+    mailRecord,
+  });
+});
+
+// DELETE a submission (educator management)
+app.delete('/api/submissions/:id', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const idx = state.submissions.findIndex((s) => s.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: 'Submission not found.' });
+  }
+  state.submissions.splice(idx, 1);
+  savePortalState(state);
+  deleteSubmissionMedia(req.params.id);
+  return res.json({ success: true });
+});
+
+// ============================================================================
+// RCIS Portal Extensions: Video Integration, Quizzes & Essays, Directory (3500), Stats & Resend Outbox
+// ============================================================================
+
+app.get('/api/courses/:courseId/videos', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const videos = state.customVideos?.[req.params.courseId] || [];
+  return res.json({ success: true, videos });
+});
+
+app.post('/api/courses/:courseId/videos', (req: Request, res: Response) => {
+  const { title, duration = '15:00', youtubeUrl } = req.body || {};
+  if (!title || !youtubeUrl) {
+    return res.status(400).json({ success: false, error: 'title and youtubeUrl are required.' });
+  }
+  const state = loadPortalState();
+  const courseId = req.params.courseId;
+  const list = state.customVideos?.[courseId] || [];
+  const item = {
+    id: `yt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    title: String(title).trim(),
+    duration: String(duration).trim(),
+    thumbnail: '',
+    url: String(youtubeUrl).trim(),
+    youtubeUrl: String(youtubeUrl).trim(),
+    createdAt: new Date().toISOString(),
+  };
+  state.customVideos[courseId] = [item, ...list];
+  savePortalState(state);
+  return res.json({ success: true, video: item, videos: state.customVideos[courseId] });
+});
+
+app.delete('/api/courses/:courseId/videos/:videoId', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const courseId = req.params.courseId;
+  const list = state.customVideos?.[courseId] || [];
+  const next = list.filter((v: any) => v.id !== req.params.videoId);
+  if (next.length === list.length) {
+    return res.status(404).json({ success: false, error: 'Video not found.' });
+  }
+  state.customVideos[courseId] = next;
+  savePortalState(state);
+  return res.json({ success: true, videos: next });
+});
+
+function formatFileSizeBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return 'File';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+app.get('/api/courses/:courseId/materials', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const role = String(req.query.role || 'student');
+  let materials = state.customMaterials?.[req.params.courseId] || [];
+  if (role !== 'teacher') {
+    materials = materials.filter((m: any) => !m.teacherOnly);
+  }
+  return res.json({ success: true, materials });
+});
+
+app.post('/api/courses/:courseId/materials', (req: Request, res: Response) => {
+  try {
+    ensureDataDirs();
+    const {
+      title,
+      category = 'explain',
+      type = 'pdf',
+      url = '',
+      fileBase64 = null,
+      fileName = '',
+      isA3 = false,
+      teacherOnly = false,
+    } = req.body || {};
+
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ success: false, error: 'Material title is required.' });
+    }
+
+    const courseId = req.params.courseId;
+    const resolvedCategory: 'explain' | 'homework' | 'resource' =
+      category === 'homework' || category === 'resource' ? category : 'explain';
+    const resolvedTeacherOnly = Boolean(teacherOnly) || resolvedCategory === 'resource';
+
+    let finalUrl = String(url || '').trim();
+    let finalType: 'pdf' | 'doc' | 'ppt' | 'link' =
+      type === 'doc' || type === 'ppt' || type === 'link' ? type : 'pdf';
+    let finalSize = finalUrl ? 'External Link' : 'Document';
+    let storedFileName: string | undefined;
+
+    if (fileBase64 && typeof fileBase64 === 'string') {
+      const cleanBase64 = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
+      const buf = Buffer.from(cleanBase64, 'base64');
+      if (buf.length === 0) {
+        return res.status(400).json({ success: false, error: 'Uploaded file appears empty.' });
+      }
+      const extFromName = path.extname(String(fileName || '')).toLowerCase();
+      const safeBase = String(fileName || title)
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9._-]+/g, '_')
+        .slice(0, 60);
+      const safeExt = /^\.[a-z0-9]{1,8}$/i.test(extFromName) ? extFromName : '.pdf';
+      storedFileName = `mat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${safeBase}${safeExt}`;
+      fs.writeFileSync(path.join(COURSE_MATERIALS_DIR, storedFileName), buf);
+      finalUrl = `/api/course-materials/file/${encodeURIComponent(storedFileName)}`;
+      finalSize = formatFileSizeBytes(buf.length);
+      if (safeExt === '.pdf') finalType = 'pdf';
+      else if (safeExt === '.ppt' || safeExt === '.pptx') finalType = 'ppt';
+      else if (safeExt === '.doc' || safeExt === '.docx' || safeExt === '.txt') finalType = 'doc';
+    } else if (!finalUrl) {
+      return res.status(400).json({ success: false, error: 'Upload a PDF/document file or enter an external URL.' });
+    }
+
+    const item = {
+      id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title: String(title).trim(),
+      type: finalType,
+      size: finalSize,
+      url: finalUrl,
+      category: resolvedCategory,
+      isA3: Boolean(isA3),
+      teacherOnly: resolvedTeacherOnly,
+      storedFileName,
+      originalFileName: fileName ? String(fileName) : undefined,
+      uploadedAt: new Date().toISOString(),
+      isCustom: true,
+    };
+
+    const state = loadPortalState();
+    const list = state.customMaterials?.[courseId] || [];
+    state.customMaterials[courseId] = [item, ...list];
+    savePortalState(state);
+
+    return res.json({ success: true, material: item, materials: state.customMaterials[courseId] });
+  } catch (err: any) {
+    console.error('Error saving course material:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to save material.' });
+  }
+});
+
+app.delete('/api/courses/:courseId/materials/:materialId', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const courseId = req.params.courseId;
+  const list = state.customMaterials?.[courseId] || [];
+  const target = list.find((m: any) => m.id === req.params.materialId);
+  if (!target) {
+    return res.status(404).json({ success: false, error: 'Material not found.' });
+  }
+  if (target.storedFileName) {
+    try {
+      const diskPath = path.join(COURSE_MATERIALS_DIR, path.basename(String(target.storedFileName)));
+      if (fs.existsSync(diskPath)) fs.unlinkSync(diskPath);
+    } catch {
+      // ignore disk cleanup error
+    }
+  }
+  const next = list.filter((m: any) => m.id !== req.params.materialId);
+  state.customMaterials[courseId] = next;
+  savePortalState(state);
+  return res.json({ success: true, materials: next });
+});
+
+app.get('/api/course-materials/file/:fileName', (req: Request, res: Response) => {
+  ensureDataDirs();
+  const safeFile = path.basename(decodeURIComponent(req.params.fileName || ''));
+  const filePath = path.join(COURSE_MATERIALS_DIR, safeFile);
+  if (!safeFile || !fs.existsSync(filePath)) {
+    return res.status(404).send('Material file not found.');
+  }
+  const ext = path.extname(safeFile).toLowerCase();
+  const mime =
+    ext === '.pdf'
+      ? 'application/pdf'
+      : ext === '.png'
+      ? 'image/png'
+      : ext === '.jpg' || ext === '.jpeg'
+      ? 'image/jpeg'
+      : ext === '.txt'
+      ? 'text/plain; charset=utf-8'
+      : 'application/octet-stream';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `inline; filename="${safeFile}"`);
+  return res.sendFile(filePath);
+});
+
+app.get('/api/quizzes', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const courseId = req.query.courseId ? String(req.query.courseId) : null;
+  let quizzes = state.customQuizzes || [];
+  if (courseId) {
+    quizzes = quizzes.filter((q) => q.courseId === courseId);
+  }
+  return res.json({ success: true, quizzes });
+});
+
+app.post('/api/quizzes', (req: Request, res: Response) => {
+  const { courseId, title, kind = 'quiz', gradingSystem = 'edexcel', instructions = '', questions = [] } = req.body || {};
+  if (!courseId || !title || !Array.isArray(questions) || questions.length === 0) {
+    return res.status(400).json({ success: false, error: 'courseId, title, and at least one question are required.' });
+  }
+  const state = loadPortalState();
+  const newQuiz = {
+    id: `${kind}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    courseId: String(courseId),
+    title: String(title).trim(),
+    kind: kind === 'essay' ? 'essay' : 'quiz',
+    gradingSystem: gradingSystem === 'ib' || gradingSystem === 'marks' ? gradingSystem : 'edexcel',
+    instructions: String(instructions || 'Answer carefully. Mr. Haitham reviews all responses before releasing grades.'),
+    questions,
+    createdAt: new Date().toISOString(),
+  };
+  state.customQuizzes = [newQuiz, ...(state.customQuizzes || [])];
+  savePortalState(state);
+  return res.json({ success: true, quiz: newQuiz });
+});
+
+// Student submits Quiz or Essay -> enters pending queue for Mr. Haitham Approval Gateway (with internal auto-draft prepared for educator)
+app.post('/api/assessments/submit', async (req: Request, res: Response) => {
+  try {
+    const {
+      studentId,
+      studentUsername,
+      studentName,
+      courseId,
+      courseTitle,
+      quizId,
+      title,
+      kind = 'quiz',
+      gradingSystem = 'edexcel',
+      questions = [],
+      answers = {},
+    } = req.body || {};
+
+    if (!studentId || !courseId || !title) {
+      return res.status(400).json({ success: false, error: 'studentId, courseId, and title are required.' });
+    }
+
+    const answerSummary = (Array.isArray(questions) ? questions : [])
+      .map((q: any, idx: number) => `Q${idx + 1}: ${String(answers?.[q.id] || '').trim() || '(blank)'}`)
+      .join('\n');
+
+    const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const record: HomeworkSubmissionRecord = {
+      id,
+      studentId: Number(studentId),
+      studentUsername: String(studentUsername || `student${studentId}`),
+      studentName: String(studentName || `Student ${studentId}`),
+      courseId: String(courseId),
+      courseTitle: String(courseTitle || courseId),
+      assignment: String(title),
+      assignmentKind: kind === 'essay' ? 'essay' : 'quiz',
+      gradingSystem: gradingSystem === 'ib' || gradingSystem === 'marks' ? gradingSystem : 'edexcel',
+      submissionText: answerSummary,
+      fileName: quizId ? `${kind.toUpperCase()} (${quizId})` : kind.toUpperCase(),
+      fileMimeType: null,
+      pageCount: 1,
+      quizQuestions: Array.isArray(questions) ? questions : [],
+      quizAnswers: answers || {},
+      status: 'pending',
+      submittedAt: new Date().toISOString(),
+      draftReport: null,
+      publishedReport: null,
+    };
+
+    // Prepare educator-only internal draft behind the Approval Gateway (student never sees draft until approved!)
+    record.draftReport = await runQuizOrEssayGradingDraft(
+      record,
+      record.gradingSystem || 'edexcel'
+    );
+
+    const state = loadPortalState();
+    state.submissions.unshift(record);
+    appendTeacherSubmissionNotification(state, record);
+    savePortalState(state);
+
+    return res.json({
+      success: true,
+      submission: sanitizeSubmissionForStudent(record),
+    });
+  } catch (err: any) {
+    console.error('Error submitting quiz/essay:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to save assessment submission.' });
+  }
+});
+
+// RCIS Domain & Access Hub (3,500 seats)
+app.get('/api/directory/users', (_req: Request, res: Response) => {
+  const state = loadPortalState();
+  return res.json({
+    success: true,
+    capacity: 3500,
+    builtInStudents: 50,
+    builtInParents: 50,
+    customUsers: state.directoryUsers || [],
+    parentEmails: state.parentEmails || {},
+  });
+});
+
+app.post('/api/directory/users', (req: Request, res: Response) => {
+  const { users = [] } = req.body || {};
+  const list = Array.isArray(users) ? users : [req.body];
+  const state = loadPortalState();
+  const added: DirectorySeatUser[] = [];
+
+  for (const raw of list) {
+    const username = String(raw?.username || '').trim();
+    const password = String(raw?.password || '').trim();
+    const fullName = String(raw?.fullName || username).trim();
+    if (!username || !password) continue;
+
+    const existingIdx = (state.directoryUsers || []).findIndex(
+      (u) => u.username.toLowerCase() === username.toLowerCase()
+    );
+    const entry: DirectorySeatUser = {
+      id: Number(raw?.id) || (500 + (state.directoryUsers?.length || 0) + added.length + 1),
+      domain: String(raw?.domain || 'Mr.HaithamHusseinig').trim(),
+      username,
+      password,
+      fullName,
+      role: raw?.role === 'parent' || raw?.role === 'teacher' ? raw.role : 'student',
+      grade: String(raw?.grade || 'Grade 10'),
+      section: String(raw?.section || 'Mr.HaithamHusseinig'),
+      parentEmail: raw?.parentEmail ? String(raw.parentEmail).trim() : undefined,
+      linkedStudentId: raw?.linkedStudentId ? Number(raw.linkedStudentId) : undefined,
+      linkedStudentName: raw?.linkedStudentName ? String(raw.linkedStudentName).trim() : undefined,
+      createdAt: new Date().toISOString(),
+    };
+    if (existingIdx >= 0) {
+      state.directoryUsers[existingIdx] = { ...state.directoryUsers[existingIdx], ...entry };
+    } else {
+      state.directoryUsers.push(entry);
+    }
+    if (entry.parentEmail && entry.role === 'student') {
+      state.parentEmails[String(entry.id)] = entry.parentEmail;
+    }
+    added.push(entry);
+  }
+
+  savePortalState(state);
+  return res.json({ success: true, addedCount: added.length, customUsers: state.directoryUsers });
+});
+
+app.post('/api/directory/login', (req: Request, res: Response) => {
+  const { domain = 'Mr.HaithamHusseinig', username = '', password = '' } = req.body || {};
+  const trimUser = String(username).trim().toLowerCase();
+  const trimPass = String(password).trim();
+  const trimDomain = String(domain || 'Mr.HaithamHusseinig').trim().toLowerCase();
+  const state = loadPortalState();
+
+  const match = (state.directoryUsers || []).find(
+    (u) =>
+      u.username.toLowerCase() === trimUser &&
+      u.password === trimPass &&
+      (!u.domain || u.domain.toLowerCase() === trimDomain)
+  );
+  if (!match) {
+    return res.status(401).json({ success: false, error: 'Invalid domain, username, or password' });
+  }
+  return res.json({ success: true, user: match });
+});
+
+app.post('/api/directory/parent-email', (req: Request, res: Response) => {
+  const { studentId, parentEmail } = req.body || {};
+  if (!studentId || !parentEmail) {
+    return res.status(400).json({ success: false, error: 'studentId and parentEmail are required.' });
+  }
+  const state = loadPortalState();
+  state.parentEmails = state.parentEmails || {};
+  state.parentEmails[String(studentId)] = String(parentEmail).trim();
+  savePortalState(state);
+  return res.json({ success: true, parentEmails: state.parentEmails });
+});
+
+// Notification Gateway (Resend Free Tier + Local Outbox Preview)
+app.get('/api/outbox', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const studentId = req.query.studentId ? Number(req.query.studentId) : null;
+  let items = state.outbox || [];
+  if (studentId !== null && !isNaN(studentId)) {
+    items = items.filter((m) => m.studentId === studentId);
+  }
+  return res.json({
+    success: true,
+    resendConfigured: Boolean(process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('re_...')),
+    outbox: items,
+  });
+});
+
+app.post('/api/outbox/:id/send', async (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const mail = (state.outbox || []).find((m) => m.id === req.params.id);
+  if (!mail) {
+    return res.status(404).json({ success: false, error: 'Outbox email record not found.' });
+  }
+  const sub = state.submissions.find((s) => s.id === mail.submissionId);
+  if (!sub || !sub.publishedReport) {
+    return res.status(400).json({ success: false, error: 'Original approved report not found.' });
+  }
+  const overrideEmail = req.body?.to ? String(req.body.to).trim() : mail.to;
+  const freshRecord = await sendParentReportEmail(state, sub, sub.publishedReport, overrideEmail);
+  savePortalState(state);
+  return res.json({ success: true, mailRecord: freshRecord });
+});
+
+// Statistics Tracker (Stat)
+app.get('/api/stats', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const role = String(req.query.role || 'student');
+  const studentId = req.query.studentId ? Number(req.query.studentId) : null;
+
+  let subs = state.submissions || [];
+  if (studentId !== null && !isNaN(studentId)) {
+    subs = subs.filter((s) => s.studentId === studentId);
+  }
+
+  const gradedSubs = subs.filter((s) => s.status === 'graded' && s.publishedReport);
+  const pendingCount = role === 'parent' ? 0 : subs.filter((s) => s.status === 'pending').length;
+
+  const avgPercentage =
+    gradedSubs.length > 0
+      ? Math.round(
+          gradedSubs.reduce((sum, s) => sum + (Number(s.publishedReport?.percentage) || 0), 0) /
+            gradedSubs.length
+        )
+      : 0;
+
+  const bySystem: Record<string, { count: number; avgPercentage: number; sum: number }> = {};
+  const errorCounts: Record<string, { label: string; misses: number; total: number }> = {};
+
+  for (const s of gradedSubs) {
+    const rep = s.publishedReport;
+    const sys = String(rep?.gradingSystem || s.gradingSystem || 'edexcel').toUpperCase();
+    if (!bySystem[sys]) bySystem[sys] = { count: 0, avgPercentage: 0, sum: 0 };
+    bySystem[sys].count += 1;
+    bySystem[sys].sum += Number(rep?.percentage) || 0;
+
+    if (Array.isArray(rep?.questions)) {
+      for (const q of rep.questions) {
+        const key = String(q.displayLabel || `Q${q.questionNumber}`);
+        if (!errorCounts[key]) errorCounts[key] = { label: key, misses: 0, total: 0 };
+        errorCounts[key].total += 1;
+        if (q.status !== 'correct') errorCounts[key].misses += 1;
+      }
+    }
+  }
+
+  for (const k of Object.keys(bySystem)) {
+    bySystem[k].avgPercentage = Math.round(bySystem[k].sum / Math.max(1, bySystem[k].count));
+  }
+
+  const enrollments = Object.values(state.enrollments || {});
+  const approvedEnrollments = enrollments.filter((e) => e.status === 'approved').length;
+  const pendingEnrollments = enrollments.filter((e) => e.status === 'pending').length;
+
+  return res.json({
+    success: true,
+    stats: {
+      totalSubmissions: role === 'parent' ? gradedSubs.length : subs.length,
+      gradedCount: gradedSubs.length,
+      pendingCount,
+      avgPercentage,
+      bySystem,
+      weakSpots: Object.values(errorCounts)
+        .filter((e) => e.misses > 0)
+        .sort((a, b) => b.misses - a.misses)
+        .slice(0, 6),
+      recentReports: gradedSubs.slice(0, 10).map((s) => ({
+        id: s.id,
+        studentName: s.studentName,
+        courseTitle: s.courseTitle,
+        assignment: s.assignment,
+        kind: s.assignmentKind || 'homework',
+        gradingSystem: s.publishedReport?.gradingSystem || s.gradingSystem || 'edexcel',
+        earnedMarks: s.publishedReport?.earnedMarks || 0,
+        totalMarks: s.publishedReport?.totalMarks || 0,
+        percentage: s.publishedReport?.percentage || 0,
+        grade: s.publishedReport?.grade || '',
+        publishedAt: s.publishedAt,
+      })),
+      outboxCount: (state.outbox || []).length,
+      sentEmailCount: (state.outbox || []).filter((m) => m.status === 'sent').length,
+      approvedEnrollments,
+      pendingEnrollments,
+      activeDirectorySeats: 100 + (state.directoryUsers || []).length,
+      seatCapacity: 3500,
+    },
+  });
+});
+
+// ============================================================================
+// Per-Group Homework Assignments + Email & Website Notifications
+// ============================================================================
+
+app.get('/api/assignments', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const courseId = req.query.courseId ? String(req.query.courseId) : null;
+  let items = state.assignments || [];
+  if (courseId) {
+    items = items.filter((a) => a.courseId === courseId);
+  }
+  return res.json({ success: true, assignments: items });
+});
+
+app.post('/api/assignments', async (req: Request, res: Response) => {
+  try {
+    const {
+      courseId,
+      courseTitle,
+      title,
+      instructions = '',
+      dueDate = '',
+      gradingSystem = 'edexcel',
+      sendNotification = true,
+      notifyEmails = '',
+    } = req.body || {};
+
+    if (!courseId || !title || !String(title).trim()) {
+      return res.status(400).json({ success: false, error: 'Group (courseId) and homework title are required.' });
+    }
+
+    const state = loadPortalState();
+    const assignmentRec: HomeworkAssignmentRecord = {
+      id: `hw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      courseId: String(courseId),
+      courseTitle: String(courseTitle || courseId),
+      title: String(title).trim(),
+      instructions: String(instructions || '').trim(),
+      dueDate: String(dueDate || '').trim(),
+      gradingSystem: gradingSystem === 'ib' || gradingSystem === 'marks' ? gradingSystem : 'edexcel',
+      createdAt: new Date().toISOString(),
+      createdBy: 'Mr. Haitham Hussien',
+    };
+
+    state.assignments = [assignmentRec, ...(state.assignments || [])];
+
+    let createdNotification: PortalNotification | null = null;
+    const emailDeliveries: OutboxEmailRecord[] = [];
+
+    if (sendNotification) {
+      const dueStr = assignmentRec.dueDate
+        ? new Date(assignmentRec.dueDate).toLocaleString('en-GB')
+        : 'No deadline specified';
+      createdNotification = {
+        id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        recipientRole: 'all',
+        courseId: assignmentRec.courseId,
+        title: `New Homework: ${assignmentRec.title}`,
+        message: `${assignmentRec.courseTitle} · Due: ${dueStr}${
+          assignmentRec.instructions ? ` — ${assignmentRec.instructions}` : ''
+        }`,
+        type: 'assignment',
+        dueDate: assignmentRec.dueDate || undefined,
+        createdAt: new Date().toISOString(),
+        readByUserIds: [],
+      };
+      state.notifications = [createdNotification, ...(state.notifications || [])].slice(0, 200);
+
+      // Collect recipient emails: explicit notifyEmails + approved group members' parent emails
+      const recipientsMap = new Map<string, { studentId: number; studentName: string }>();
+      const extraEmails = String(notifyEmails || '')
+        .split(/[,;\n]+/)
+        .map((e) => e.trim())
+        .filter((e) => e.includes('@'));
+      for (const em of extraEmails) {
+        recipientsMap.set(em.toLowerCase(), { studentId: 0, studentName: `${assignmentRec.courseTitle} Recipient` });
+      }
+
+      const enrolledInGroup = Object.values(state.enrollments || {}).filter(
+        (enr) => enr.status === 'approved' && enr.courseId === assignmentRec.courseId
+      );
+      for (const enr of enrolledInGroup) {
+        const email =
+          state.parentEmails?.[String(enr.studentId)] ||
+          `parent.${enr.studentUsername}@mrhaithamhusseinig.edu`;
+        if (!recipientsMap.has(email.toLowerCase())) {
+          recipientsMap.set(email.toLowerCase(), {
+            studentId: enr.studentId,
+            studentName: enr.studentName,
+          });
+        }
+      }
+
+      if (recipientsMap.size === 0) {
+        recipientsMap.set(`group.${assignmentRec.courseId}@mrhaithamhusseinig.edu`, {
+          studentId: 0,
+          studentName: assignmentRec.courseTitle,
+        });
+      }
+
+      for (const [email, info] of recipientsMap.entries()) {
+        const mailRec = await sendAssignmentEmailViaResend(
+          state,
+          assignmentRec,
+          email,
+          info.studentId,
+          info.studentName
+        );
+        emailDeliveries.push(mailRec);
+      }
+    }
+
+    savePortalState(state);
+    return res.json({
+      success: true,
+      assignment: assignmentRec,
+      notification: createdNotification,
+      emailDeliveries,
+    });
+  } catch (err: any) {
+    console.error('Error assigning homework to group:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to assign homework.' });
+  }
+});
+
+app.delete('/api/assignments/:id', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const idx = (state.assignments || []).findIndex((a) => a.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: 'Assignment not found.' });
+  }
+  state.assignments.splice(idx, 1);
+  savePortalState(state);
+  return res.json({ success: true });
+});
+
+app.get('/api/notifications', (req: Request, res: Response) => {
+  const state = loadPortalState();
+  const role = String(req.query.role || 'student');
+  const courseId = req.query.courseId ? String(req.query.courseId) : null;
+  const studentId = req.query.studentId ? Number(req.query.studentId) : null;
+
+  let items = state.notifications || [];
+  if (role === 'teacher') {
+    items = items.filter((n) => n.recipientRole === 'teacher' || n.type === 'submission');
+  } else {
+    items = items.filter((n) => {
+      if (n.type === 'report' && studentId !== null && !isNaN(studentId)) {
+        return n.studentId === studentId;
+      }
+      if (n.type === 'assignment') {
+        return courseId ? n.courseId === courseId : false;
+      }
+      return false;
+    });
+  }
+  return res.json({ success: true, notifications: items });
+});
+
+app.post('/api/notifications/:id/read', (req: Request, res: Response) => {
+  const userId = Number(req.body?.userId ?? 0);
+  const state = loadPortalState();
+  const item = (state.notifications || []).find((n) => n.id === req.params.id);
+  if (!item) {
+    return res.status(404).json({ success: false, error: 'Notification not found.' });
+  }
+  if (!item.readByUserIds.includes(userId)) {
+    item.readByUserIds.push(userId);
+    savePortalState(state);
+  }
+  return res.json({ success: true, notification: item });
 });
 
 // Serve frontend in dev or prod
@@ -2622,6 +4269,7 @@ async function startServer() {
     if (isProdRuntime || process.env.PORT) {
       app.listen(portToTry, '0.0.0.0', () => {
         console.log(`Server listening on 0.0.0.0:${portToTry}`);
+        resumeOrphanedAutoDrafts();
       });
       return;
     }
@@ -2643,6 +4291,7 @@ async function startServer() {
       .listen(portToTry, () => {
         console.log(`Server listening on port ${portToTry}`);
         console.log(`Local web app ready at: http://localhost:${portToTry}`);
+        resumeOrphanedAutoDrafts();
       })
       .on('error', (err: any) => {
         if (err.code === 'EADDRINUSE' && retriesLeft > 0) {

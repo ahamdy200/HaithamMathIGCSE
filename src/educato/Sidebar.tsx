@@ -1,33 +1,45 @@
 import React from 'react';
 import { useAuth } from './AuthContext';
-import { COURSES } from './courses';
+import { Course } from './courses';
 
 interface SidebarProps {
   activeCourseId: string | null;
   activeView: string;
+  visibleCourses: Course[];
+  isApprovedStudent: boolean;
+  unreadNotificationCount?: number;
   onSelectCourse: (courseId: string) => void;
   onSelectView: (view: string) => void;
   collapsed: boolean;
   onToggle: () => void;
 }
 
-const STUDIO_NAV_ITEMS = [
-  { id: 'homework-studio', label: 'AI Homework Checker', badge: 'Gemini', icon: '📝' },
-  { id: 'notebooklm', label: 'NotebookLM Studio', badge: 'Study', icon: '✨' },
-  { id: 'modelkey', label: 'Official Model Key', badge: 'Key', icon: '📘' },
-  { id: 'audio', label: 'Audio Overview', badge: 'TTS', icon: '🎧' },
-  { id: 'notebook', label: 'Colab Code Studio', badge: '.ipynb', icon: '💻' },
-];
-
 export function Sidebar({
   activeCourseId,
   activeView,
+  visibleCourses,
+  isApprovedStudent,
+  unreadNotificationCount = 0,
   onSelectCourse,
   onSelectView,
   collapsed,
   onToggle,
 }: SidebarProps) {
   const { user, logout } = useAuth();
+  const isTeacher = user?.role === 'teacher';
+  const isParent = user?.role === 'parent';
+
+  const navItems = isTeacher
+    ? [
+        { id: 'homework-studio', label: 'Approval & Review Inbox', badge: 'Teacher', icon: '📝' },
+        { id: 'upload-studio', label: 'Upload PDFs & Videos', badge: 'Content', icon: '📤' },
+        { id: 'modelkey', label: 'Official Model Keys', badge: 'Educator', icon: '📘' },
+      ]
+    : isParent
+    ? [{ id: 'homework-studio', label: 'Approved Child Reports', badge: 'Parent', icon: '📄' }]
+    : isApprovedStudent
+    ? [{ id: 'homework-studio', label: 'Homework & Reports', badge: 'Submit', icon: '📝' }]
+    : [];
 
   return (
     <aside
@@ -44,13 +56,14 @@ export function Sidebar({
             </div>
             <div className="min-w-0">
               <span className="font-bold text-gray-900 text-sm block truncate">Mr. Haitham Hub</span>
-              <span className="text-[10px] text-gray-400 block truncate">Educato &amp; AI Studio</span>
+              <span className="text-[10px] text-gray-400 block truncate">IGCSE Mathematics Portal</span>
             </div>
           </div>
         )}
         <button
           onClick={onToggle}
           className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
+          title="Toggle Sidebar"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -91,18 +104,18 @@ export function Sidebar({
               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
             />
           </svg>
-          {!collapsed && 'My Progress'}
+          {!collapsed && (isTeacher ? 'Stats & Outbox' : isParent ? 'Child Statistics' : 'My Statistics')}
         </button>
 
-        {!collapsed && (
+        {navItems.length > 0 && !collapsed && (
           <div className="px-3 pt-4 pb-2">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-[#800020]">
-              AI Studio &amp; Tools
+              {isTeacher ? 'Educator Workspace' : isParent ? 'Parent Portal' : 'Homework & Feedback'}
             </p>
           </div>
         )}
 
-        {STUDIO_NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <button
             key={item.id}
             onClick={() => onSelectView(item.id)}
@@ -117,9 +130,15 @@ export function Sidebar({
             {!collapsed && (
               <>
                 <span className="text-xs flex-1 truncate">{item.label}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">
-                  {item.badge}
-                </span>
+                {item.id === 'homework-studio' && unreadNotificationCount > 0 ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#800020] text-white font-bold">
+                    {unreadNotificationCount} new
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">
+                    {item.badge}
+                  </span>
+                )}
               </>
             )}
           </button>
@@ -128,12 +147,26 @@ export function Sidebar({
         {!collapsed && (
           <div className="px-3 pt-4 pb-2">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              Math Courses ({COURSES.length})
+              {isTeacher
+                ? `Math Courses (${visibleCourses.length})`
+                : isParent
+                ? 'Child Approved Course'
+                : isApprovedStudent
+                ? 'My Approved Course'
+                : 'Course Enrollment'}
             </p>
           </div>
         )}
 
-        {COURSES.map((course) => (
+        {visibleCourses.length === 0 && !isTeacher && !collapsed && (
+          <div className="px-3 py-2 mx-1 rounded-xl bg-amber-50 border border-amber-200/70 text-[11px] text-amber-800">
+            {isParent
+              ? 'Your child will appear here once Mr. Haitham approves their course selection.'
+              : 'Select your course on the Dashboard to unlock lessons & homework.'}
+          </div>
+        )}
+
+        {visibleCourses.map((course) => (
           <button
             key={course.id}
             onClick={() => {
@@ -172,7 +205,11 @@ export function Sidebar({
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-gray-900 truncate">{user.fullName}</p>
               <p className="text-[11px] text-gray-400 truncate">
-                {user.role === 'teacher' ? 'Teacher' : `${user.grade} - ${user.section}`}
+                {user.role === 'teacher'
+                  ? `Educator · ${user.domain || 'Mr.HaithamHusseinig'}`
+                  : user.role === 'parent'
+                  ? `Parent · ${user.linkedStudentName || 'Student'}`
+                  : `${user.domain || 'Mr.HaithamHusseinig'} · ${user.grade} - ${user.section}`}
               </p>
             </div>
           </div>

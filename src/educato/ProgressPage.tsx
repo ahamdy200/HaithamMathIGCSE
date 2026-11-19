@@ -1,108 +1,314 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import { COURSES } from './courses';
+import { Course, CourseEnrollment } from './courses';
+import { apiUrl } from '../utils/apiBase';
+import type { OutboxEmailRecord } from '../types';
 
-interface CourseProgress {
-  courseId: string;
-  videosWatched: number;
-  totalVideos: number;
-  materialsDownloaded: number;
-  totalMaterials: number;
-  homeworkSubmitted: number;
-  totalHomework: number;
-  averageGrade: number | null;
+interface ProgressPageProps {
+  visibleCourses: Course[];
+  enrollment: CourseEnrollment | null;
 }
 
-function generateProgress(studentId: number): CourseProgress[] {
-  const seed = studentId * 7;
-  return COURSES.map((course, i) => {
-    const s = (seed + i * 13) % 100;
-    const totalVideos = course.videos.length;
-    const totalMaterials = course.materials.length;
-    const totalHomework = 3;
-    return {
-      courseId: course.id,
-      videosWatched: Math.min(totalVideos, Math.floor((s % 60 + 40) / 100 * totalVideos + 0.5)),
-      totalVideos,
-      materialsDownloaded: Math.min(totalMaterials, Math.floor((s % 50 + 50) / 100 * totalMaterials + 0.5)),
-      totalMaterials,
-      homeworkSubmitted: Math.min(totalHomework, Math.floor(((s + 20) % 70 + 30) / 100 * totalHomework + 0.5)),
-      totalHomework,
-      averageGrade: s > 30 ? Math.min(100, 55 + (s % 45)) : null,
-    };
-  });
-}
-
-export function ProgressPage() {
+export function ProgressPage({ visibleCourses, enrollment }: ProgressPageProps) {
   const { user } = useAuth();
-  const progress = generateProgress(user?.id || 1);
+  const isTeacher = user?.role === 'teacher';
+  const isParent = user?.role === 'parent';
+  const targetStudentId = isParent ? user?.linkedStudentId : user?.id;
 
-  const overallStats = {
-    totalCourses: COURSES.length,
-    avgGrade: Math.round(
-      progress.filter((p) => p.averageGrade !== null).reduce((sum, p) => sum + (p.averageGrade || 0), 0) /
-      Math.max(1, progress.filter((p) => p.averageGrade !== null).length)
-    ),
-    totalHomework: progress.reduce((s, p) => s + p.homeworkSubmitted, 0),
-    totalVideos: progress.reduce((s, p) => s + p.videosWatched, 0),
+  const [stats, setStats] = useState<any | null>(null);
+  const [outbox, setOutbox] = useState<OutboxEmailRecord[]>([]);
+  const [resendConfigured, setResendConfigured] = useState(false);
+  const [previewMail, setPreviewMail] = useState<OutboxEmailRecord | null>(null);
+  const [resendTo, setResendTo] = useState('');
+  const [resendBusyId, setResendBusyId] = useState<string | null>(null);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+
+  const loadStatsAndOutbox = useCallback(async () => {
+    if (!user) return;
+    const statsUrl = isTeacher
+      ? apiUrl('/api/stats?role=teacher')
+      : apiUrl(`/api/stats?role=${user.role}&studentId=${targetStudentId}`);
+    try {
+      const sRes = await fetch(statsUrl);
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        setStats(sData?.stats || null);
+      }
+      if (isTeacher || isParent) {
+        const oUrl = isTeacher
+          ? apiUrl('/api/outbox')
+          : apiUrl(`/api/outbox?studentId=${targetStudentId}`);
+        const oRes = await fetch(oUrl);
+        if (oRes.ok) {
+          const oData = await oRes.json();
+          setOutbox(Array.isArray(oData?.outbox) ? oData.outbox : []);
+          setResendConfigured(Boolean(oData?.resendConfigured));
+        }
+      }
+    } catch {
+      // ignore transient errors
+    }
+  }, [user, isTeacher, isParent, targetStudentId]);
+
+  useEffect(() => {
+    loadStatsAndOutbox();
+  }, [loadStatsAndOutbox]);
+
+  const handleResendEmail = async (mailId: string) => {
+    setResendBusyId(mailId);
+    setResendMessage(null);
+    try {
+      const res = await fetch(apiUrl(`/api/outbox/${mailId}/send`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: resendTo.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.mailRecord) {
+        setResendMessage(
+          `${data.mailRecord.status === 'sent' ? 'Delivered via Resend' : 'Logged locally'}: ${data.mailRecord.note || data.mailRecord.to}`
+        );
+        await loadStatsAndOutbox();
+      }
+    } finally {
+      setResendBusyId(null);
+    }
   };
 
+  if (!isTeacher && !isParent && (!enrollment || enrollment.status !== 'approved' || visibleCourses.length === 0)) {
+    return (
+      <div className="max-w-3xl mx-auto bg-white rounded-2xl border border-gray-200 p-8 text-center shadow-xs">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-2xl mb-4">
+          ⏳
+        </div>
+        <h1 className="text-xl font-bold text-gray-900">Statistics Tracker Locked</h1>
+        <p className="text-sm text-gray-600 mt-2">
+          {enrollment?.status === 'pending'
+            ? `Your request to join "${enrollment.courseTitle}" is currently awaiting Mr. Haitham Hussien's approval.`
+            : 'Please select your IGCSE Mathematics course on the Dashboard and request Mr. Haitham’s approval first.'}
+        </p>
+      </div>
+    );
+  }
+
+  const gradedCount = stats?.gradedCount ?? 0;
+  const totalCount = stats?.totalSubmissions ?? 0;
+  const avgPct = stats?.avgPercentage ?? 0;
+  const bySystem = stats?.bySystem || {};
+  const weakSpots = Array.isArray(stats?.weakSpots) ? stats.weakSpots : [];
+  const recentReports = Array.isArray(stats?.recentReports) ? stats.recentReports : [];
+
   return (
-    <div className="max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">My Progress</h1>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Enrolled Courses" value={overallStats.totalCourses.toString()} icon="📚" color="blue" />
-        <StatCard label="Average Grade" value={`${overallStats.avgGrade}%`} icon="🎯" color="green" />
-        <StatCard label="Homework Done" value={overallStats.totalHomework.toString()} icon="✅" color="purple" />
-        <StatCard label="Videos Watched" value={overallStats.totalVideos.toString()} icon="🎬" color="orange" />
+    <div className="max-w-6xl mx-auto space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isTeacher
+              ? 'Statistics Tracker (Stat) & Notification Gateway'
+              : isParent
+              ? `Child Statistics — ${user?.linkedStudentName}`
+              : 'My Course Statistics'}
+          </h1>
+          <p className="text-xs text-gray-500 mt-1">
+            {isTeacher
+              ? `Cohort Analytics · ${stats?.activeDirectorySeats || 100} Active Accounts`
+              : 'Only Mr. Haitham-approved final reports are counted here.'}
+          </p>
+        </div>
+        {isTeacher && (
+          <span
+            className={`px-3 py-1.5 rounded-full text-xs font-bold border ${
+              resendConfigured
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-amber-50 text-amber-800 border-amber-200'
+            }`}
+          >
+            {resendConfigured ? 'Resend Live Key Connected' : 'Resend Local Outbox Preview Mode'}
+          </span>
+        )}
       </div>
 
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">Course Progress</h2>
-      <div className="space-y-4">
-        {COURSES.map((course, i) => {
-          const p = progress[i];
-          const videosPct = p.totalVideos > 0 ? Math.round((p.videosWatched / p.totalVideos) * 100) : 0;
-          const hwPct = p.totalHomework > 0 ? Math.round((p.homeworkSubmitted / p.totalHomework) * 100) : 0;
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Approved Reports" value={String(gradedCount)} icon="✅" color="green" />
+        <StatCard label="Approved Average" value={gradedCount > 0 ? `${avgPct}%` : '—'} icon="🎯" color="blue" />
+        <StatCard
+          label={isTeacher ? 'Total Submissions' : isParent ? 'Approved Courses' : 'Total Submissions'}
+          value={String(isParent ? visibleCourses.length : totalCount)}
+          icon="📝"
+          color="purple"
+        />
+        <StatCard
+          label={isTeacher ? 'Emails Logged / Sent' : 'Parent Notifications'}
+          value={String(outbox.length)}
+          icon="✉️"
+          color="orange"
+        />
+      </div>
 
-          return (
-            <div key={course.id} className="bg-white rounded-xl border border-gray-100 p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <span
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-base font-serif font-extrabold shrink-0"
-                  style={{ backgroundColor: `${course.color}18`, color: course.color }}
-                >
-                  {course.icon}
-                </span>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 text-sm">{course.name}</h3>
-                  <p className="text-xs text-gray-400">{course.code} &middot; {course.teacher}</p>
-                </div>
-                {p.averageGrade !== null && (
-                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    p.averageGrade >= 80 ? 'bg-green-100 text-green-700' :
-                    p.averageGrade >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {p.averageGrade}%
+      {/* Grading System Breakdown & Question Weak Spots */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+          <h2 className="text-sm font-bold text-gray-900">Grading Systems Breakdown (Edexcel · IB · Marks)</h2>
+          {Object.keys(bySystem).length === 0 ? (
+            <p className="text-xs text-gray-400 py-4">No approved reports recorded yet.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {Object.entries(bySystem).map(([sys, val]: [string, any]) => (
+                <div key={sys} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
+                  <div>
+                    <span className="text-xs font-bold text-gray-900">{sys}</span>
+                    <p className="text-[11px] text-gray-500">{val.count} approved assessment(s)</p>
                   </div>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <ProgressBar label="Videos" current={p.videosWatched} total={p.totalVideos} pct={videosPct} color="blue" />
-                <ProgressBar label="Materials" current={p.materialsDownloaded} total={p.totalMaterials} pct={p.totalMaterials > 0 ? Math.round((p.materialsDownloaded / p.totalMaterials) * 100) : 0} color="purple" />
-                <ProgressBar label="Homework" current={p.homeworkSubmitted} total={p.totalHomework} pct={hwPct} color="green" />
-              </div>
+                  <span className="text-sm font-extrabold text-[#800020]">{val.avgPercentage}% avg</span>
+                </div>
+              ))}
             </div>
-          );
-        })}
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+          <h2 className="text-sm font-bold text-gray-900">Per-Question Error &amp; Focus Areas</h2>
+          {weakSpots.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4">No recurring question errors found in approved reports yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {weakSpots.map((w: any) => (
+                <div key={w.label} className="flex items-center justify-between p-3 rounded-xl bg-rose-50/60 border border-rose-100">
+                  <span className="text-xs font-bold text-gray-900">{w.label}</span>
+                  <span className="text-xs font-semibold text-rose-700">
+                    {w.misses} missed / {w.total} attempt(s)
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Approved Report History */}
+      {recentReports.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+          <h2 className="text-sm font-bold text-gray-900">Approved Assessment History</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-500">
+                  <th className="py-2 pr-3">Student</th>
+                  <th className="py-2 pr-3">Assessment</th>
+                  <th className="py-2 pr-3">Type</th>
+                  <th className="py-2 pr-3">Scale</th>
+                  <th className="py-2 pr-3">Score</th>
+                  <th className="py-2">Grade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentReports.map((r: any) => (
+                  <tr key={r.id} className="border-b border-gray-50">
+                    <td className="py-2.5 pr-3 font-medium text-gray-900">{r.studentName}</td>
+                    <td className="py-2.5 pr-3 text-gray-700">{r.assignment}</td>
+                    <td className="py-2.5 pr-3 uppercase text-[10px] font-bold text-indigo-700">{r.kind}</td>
+                    <td className="py-2.5 pr-3 uppercase text-[10px] font-bold text-gray-600">{r.gradingSystem}</td>
+                    <td className="py-2.5 pr-3 font-bold text-[#800020]">{r.earnedMarks}/{r.totalMarks} ({r.percentage}%)</td>
+                    <td className="py-2.5 text-gray-700">{r.grade}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Gateway — Resend Email Outbox */}
+      {(isTeacher || isParent) && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Notification Gateway — Resend Parent Email Log</h2>
+              <p className="text-xs text-gray-500">
+                Triggered automatically after Mr. Haitham approves &amp; releases each final report.
+              </p>
+            </div>
+            {isTeacher && (
+              <input
+                type="email"
+                value={resendTo}
+                onChange={(e) => setResendTo(e.target.value)}
+                placeholder="Optional override recipient for Resend test"
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs w-64"
+              />
+            )}
+          </div>
+
+          {resendMessage && (
+            <div className="text-xs bg-blue-50 border border-blue-200 text-blue-900 px-3 py-2 rounded-lg">
+              {resendMessage}
+            </div>
+          )}
+
+          {outbox.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4">No parent notification emails dispatched yet.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {outbox.map((mail) => (
+                <div key={mail.id} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/70 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span
+                        className={`inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded mr-2 ${
+                          mail.status === 'sent'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {mail.status === 'sent' ? 'Sent via Resend' : 'Local Preview'}
+                      </span>
+                      <span className="text-xs font-bold text-gray-900">{mail.subject}</span>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        To: <strong>{mail.to}</strong> · {new Date(mail.createdAt).toLocaleString('en-GB')}
+                        {mail.note ? ` · ${mail.note}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPreviewMail(previewMail?.id === mail.id ? null : mail)}
+                        className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium hover:bg-gray-100"
+                      >
+                        {previewMail?.id === mail.id ? 'Hide Email' : 'Preview HTML'}
+                      </button>
+                      {isTeacher && (
+                        <button
+                          disabled={resendBusyId === mail.id}
+                          onClick={() => handleResendEmail(mail.id)}
+                          className="px-3 py-1.5 rounded-lg bg-[#800020] text-white text-xs font-semibold hover:bg-[#6b1226] disabled:opacity-60"
+                        >
+                          {resendBusyId === mail.id ? 'Sending...' : 'Re-send'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {previewMail?.id === mail.id && (
+                    <div
+                      className="mt-2 bg-white rounded-xl border border-gray-200 p-4 overflow-auto max-h-96"
+                      dangerouslySetInnerHTML={{ __html: mail.html }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 function StatCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
-  const colors: Record<string, string> = { blue: 'bg-blue-50', green: 'bg-green-50', purple: 'bg-purple-50', orange: 'bg-orange-50' };
+  const colors: Record<string, string> = {
+    blue: 'bg-blue-50',
+    green: 'bg-green-50',
+    purple: 'bg-purple-50',
+    orange: 'bg-orange-50',
+  };
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4">
       <div className={`w-10 h-10 ${colors[color] || 'bg-gray-50'} rounded-xl flex items-center justify-center mb-3`}>
@@ -114,17 +320,11 @@ function StatCard({ label, value, icon, color }: { label: string; value: string;
   );
 }
 
-function ProgressBar({ label, current, total, pct, color }: { label: string; current: number; total: number; pct: number; color: string }) {
-  const barColors: Record<string, string> = { blue: 'bg-blue-500', green: 'bg-green-500', purple: 'bg-purple-500' };
+function InfoMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-xs text-gray-500">{label}</span>
-        <span className="text-xs font-medium text-gray-700">{current}/{total}</span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${barColors[color] || 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
-      </div>
+    <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+      <p className="text-[11px] text-gray-500">{label}</p>
+      <p className="text-sm font-semibold text-gray-900 mt-0.5">{value}</p>
     </div>
   );
 }

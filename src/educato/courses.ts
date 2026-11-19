@@ -1,9 +1,26 @@
+import type { QuizDefinition } from '../types';
+
+export interface CourseEnrollment {
+  studentId: number;
+  studentUsername: string;
+  studentName: string;
+  grade?: string;
+  section?: string;
+  courseId: string;
+  courseTitle: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedAt: string;
+  reviewedAt?: string;
+  teacherNote?: string;
+}
+
 export interface CourseVideo {
   id: string;
   title: string;
   duration: string;
   thumbnail: string;
   url: string;
+  youtubeUrl?: string;
 }
 
 export interface CourseMaterial {
@@ -12,6 +29,9 @@ export interface CourseMaterial {
   type: 'pdf' | 'doc' | 'ppt' | 'link';
   size?: string;
   url: string;
+  category?: 'explain' | 'homework' | 'resource';
+  isA3?: boolean;
+  teacherOnly?: boolean;
 }
 
 export interface HomeworkSubmission {
@@ -52,15 +72,16 @@ export const COURSES: Course[] = [
     description:
       'Year 9 Pre-IGCSE Mathematics covering BIDMAS, directed numbers, algebraic manipulation, linear equations, and foundational geometry.',
     videos: [
-      { id: 'y9-v1', title: 'Chapter 1: Order of Operations (BIDMAS) & Number Sense', duration: '42:15', thumbnail: '', url: '#' },
-      { id: 'y9-v2', title: 'Chapter 2: Expanding Brackets & Algebraic Expressions', duration: '38:40', thumbnail: '', url: '#' },
+      { id: 'y9-v1', title: 'Chapter 1: Order of Operations (BIDMAS) & Number Sense', duration: '42:15', thumbnail: '', url: 'https://www.youtube.com/watch?v=dAgfnK528RA', youtubeUrl: 'https://www.youtube.com/watch?v=dAgfnK528RA' },
+      { id: 'y9-v2', title: 'Chapter 2: Expanding Brackets & Algebraic Expressions', duration: '38:40', thumbnail: '', url: 'https://www.youtube.com/watch?v=V3dFHt9p5W8', youtubeUrl: 'https://www.youtube.com/watch?v=V3dFHt9p5W8' },
       { id: 'y9-v3', title: 'Chapter 3: Solving Linear Equations & Inequalities', duration: '46:10', thumbnail: '', url: '#' },
       { id: 'y9-v4', title: 'Chapter 4: Percentages, Ratios & Proportion', duration: '44:25', thumbnail: '', url: '#' },
     ],
     materials: [
-      { id: 'y9-m1', title: 'Year 9 Math Workbook — Term 1', type: 'pdf', size: '2.4 MB', url: '#' },
-      { id: 'y9-m2', title: 'BIDMAS & Algebra Worked Model Key', type: 'pdf', size: '1.1 MB', url: '#' },
-      { id: 'y9-m3', title: 'Formula Sheet & Revision Checklist', type: 'pdf', size: '520 KB', url: '#' },
+      { id: 'y9-m1', title: 'Explain Notes — Ch.1 BIDMAS & Algebraic Manipulation', type: 'pdf', size: '2.4 MB', url: '#', category: 'explain' },
+      { id: 'y9-m4', title: 'HW Sheet 1 — Mixed BIDMAS & Linear Equations (A3 Spread)', type: 'pdf', size: '1.6 MB', url: '#', category: 'homework', isA3: true },
+      { id: 'y9-m2', title: 'BIDMAS & Algebra Worked Model Key', type: 'pdf', size: '1.1 MB', url: '#', category: 'resource', teacherOnly: true },
+      { id: 'y9-m3', title: 'Formula Sheet & Revision Checklist', type: 'pdf', size: '520 KB', url: '#', category: 'explain' },
     ],
   },
   {
@@ -72,7 +93,7 @@ export const COURSES: Course[] = [
     color: '#1d4ed8',
     teacher: 'Mr. Haitham Hussien',
     description:
-      'Pearson Edexcel International GCSE Mathematics A (Modular) — Group 1 covering Unit 1H & Unit 2H higher tier modules with exam-style diagnostics.',
+      'Pearson Edexcel International GCSE Mathematics A (Modular) — Group 1 covering Unit 1H & Unit 2H higher tier modules with exam-style practice.',
     videos: [
       { id: 'eg1-v1', title: 'Unit 1H: Surds, Indices & Fractional Powers', duration: '51:20', thumbnail: '', url: '#' },
       { id: 'eg1-v2', title: 'Unit 1H: Quadratics & Completing the Square', duration: '49:05', thumbnail: '', url: '#' },
@@ -80,9 +101,9 @@ export const COURSES: Course[] = [
       { id: 'eg1-v4', title: 'Unit 2H: Circle Theorems & Vectors', duration: '47:15', thumbnail: '', url: '#' },
     ],
     materials: [
-      { id: 'eg1-m1', title: 'Pearson Edexcel Modular Specification (4XMA1)', type: 'pdf', size: '2.8 MB', url: '#' },
-      { id: 'eg1-m2', title: 'Group 1 Monthly Exam 1 — Official Model Answer Key', type: 'pdf', size: '1.6 MB', url: '#' },
-      { id: 'eg1-m3', title: 'Unit 1H & 2H Past Paper Pack', type: 'pdf', size: '4.1 MB', url: '#' },
+      { id: 'eg1-m1', title: 'Explain Guide — Pearson Edexcel Modular Spec (4XMA1)', type: 'pdf', size: '2.8 MB', url: '#', category: 'explain' },
+      { id: 'eg1-m2', title: 'Group 1 Monthly Exam 1 — Official Model Answer Key', type: 'pdf', size: '1.6 MB', url: '#', category: 'resource', teacherOnly: true },
+      { id: 'eg1-m3', title: 'HW Pack — Unit 1H & 2H Past Paper Practice (A3 Spread)', type: 'pdf', size: '4.1 MB', url: '#', category: 'homework', isA3: true },
     ],
   },
   {
@@ -94,7 +115,7 @@ export const COURSES: Course[] = [
     color: '#4338ca',
     teacher: 'Mr. Haitham Hussien',
     description:
-      'Pearson Edexcel International GCSE Mathematics A (Linear 4MA1) — Full Higher Tier Papers 1H & 2H preparation with step-by-step mark scheme training.',
+      'Pearson Edexcel International GCSE Mathematics A (Linear 4MA1) — Full Higher Tier Papers 1H & 2H preparation with step-by-step worked training.',
     videos: [
       { id: 'el-v1', title: 'Paper 1H Core Algebra & Simultaneous Equations', duration: '48:50', thumbnail: '', url: '#' },
       { id: 'el-v2', title: 'Paper 2H Sequences, Series & Graphs', duration: '52:10', thumbnail: '', url: '#' },
@@ -103,7 +124,7 @@ export const COURSES: Course[] = [
     ],
     materials: [
       { id: 'el-m1', title: 'Edexcel 4MA1 Linear Formula Booklet', type: 'pdf', size: '940 KB', url: '#' },
-      { id: 'el-m2', title: 'Linear Paper 1H & 2H Model Mark Schemes', type: 'pdf', size: '3.2 MB', url: '#' },
+      { id: 'el-m2', title: 'Linear Paper 1H & 2H Model Mark Schemes', type: 'pdf', size: '3.2 MB', url: '#', teacherOnly: true },
       { id: 'el-m3', title: 'High-Frequency Grade 9 Problem Set', type: 'pdf', size: '1.9 MB', url: '#' },
     ],
   },
@@ -116,7 +137,7 @@ export const COURSES: Course[] = [
     color: '#9f1239',
     teacher: 'Mr. Haitham Hussien',
     description:
-      'Cambridge IGCSE Mathematics (0580 / 0980 Extended) covering Papers 2 & 4 with AI-verified method marks, NotebookLM study briefs, and model keys.',
+      'Cambridge IGCSE Mathematics (0580 / 0980 Extended) covering Papers 2 & 4 with step-by-step method feedback and structured homework review.',
     videos: [
       { id: 'oc-v1', title: 'Chapter 1: Order of Operations (BIDMAS) & Number Skills', duration: '45:20', thumbnail: '', url: '#' },
       { id: 'oc-v2', title: 'Chapter 2: Algebraic Fractions & Quadratic Inequalities', duration: '43:15', thumbnail: '', url: '#' },
@@ -124,10 +145,10 @@ export const COURSES: Course[] = [
       { id: 'oc-v4', title: 'Chapter 4: Transformations, Vectors & Mensuration', duration: '46:45', thumbnail: '', url: '#' },
     ],
     materials: [
-      { id: 'oc-m1', title: 'Cambridge 0580 / 0980 Syllabus 2025-2026', type: 'pdf', size: '2.1 MB', url: '#' },
-      { id: 'oc-m2', title: 'Order of Operations — Official Model Answer Key', type: 'pdf', size: '880 KB', url: '#' },
-      { id: 'oc-m3', title: 'Cambridge Paper 2 (Non-Calculator) Specimen Pack', type: 'pdf', size: '2.0 MB', url: '#' },
-      { id: 'oc-m4', title: 'Cambridge Paper 4 Extended Revision Workbook', type: 'pdf', size: '3.5 MB', url: '#' },
+      { id: 'oc-m1', title: 'Explain Notes — Cambridge 0580 / 0980 Core Concepts', type: 'pdf', size: '2.1 MB', url: '#', category: 'explain' },
+      { id: 'oc-m2', title: 'Order of Operations — Official Model Answer Key', type: 'pdf', size: '880 KB', url: '#', category: 'resource', teacherOnly: true },
+      { id: 'oc-m3', title: 'HW Paper 2 (Non-Calculator) Specimen Pack (A3 Spread)', type: 'pdf', size: '2.0 MB', url: '#', category: 'homework', isA3: true },
+      { id: 'oc-m4', title: 'HW Paper 4 Extended Revision Workbook', type: 'pdf', size: '3.5 MB', url: '#', category: 'homework' },
     ],
   },
   {
@@ -148,7 +169,7 @@ export const COURSES: Course[] = [
     ],
     materials: [
       { id: 'y8-m1', title: 'Year 8 Core Practice Pack', type: 'pdf', size: '1.8 MB', url: '#' },
-      { id: 'y8-m2', title: 'BIDMAS Warm-Up Homework & Model Key', type: 'pdf', size: '740 KB', url: '#' },
+      { id: 'y8-m2', title: 'BIDMAS Warm-Up Homework & Model Key', type: 'pdf', size: '740 KB', url: '#', teacherOnly: true },
     ],
   },
   {
@@ -160,7 +181,7 @@ export const COURSES: Course[] = [
     color: '#0369a1',
     teacher: 'Mr. Haitham Hussien',
     description:
-      'Pearson Edexcel International GCSE Mathematics A (Modular) — Group 2 cohort with structured homework checkpoints and AI grading reports.',
+      'Pearson Edexcel International GCSE Mathematics A (Modular) — Group 2 cohort with structured homework checkpoints and teacher-reviewed progress reports.',
     videos: [
       { id: 'eg2-v1', title: 'Unit 1H: Indices, Standard Form & Bounds', duration: '44:15', thumbnail: '', url: '#' },
       { id: 'eg2-v2', title: 'Unit 1H: Inequalities & Linear Programming', duration: '48:00', thumbnail: '', url: '#' },
@@ -188,27 +209,101 @@ export const COURSES: Course[] = [
     ],
     materials: [
       { id: 'eg3-m1', title: 'Group 3 Modular Practice Booklet', type: 'pdf', size: '2.0 MB', url: '#' },
-      { id: 'eg3-m2', title: 'Group 3 Timed Quiz & Model Solutions', type: 'pdf', size: '1.3 MB', url: '#' },
+      { id: 'eg3-m2', title: 'Group 3 Timed Quiz & Model Solutions', type: 'pdf', size: '1.3 MB', url: '#', teacherOnly: true },
     ],
   },
   {
     id: 'ol-edexcel-modular-rcis',
-    name: 'OL Edexcel Modular RCIS',
-    code: '4XMA1 • RCIS',
-    board: 'Pearson Edexcel Modular (RCIS)',
+    name: 'OL Edexcel Modular Mr.HaithamHusseinig',
+    code: '4XMA1 • Mr.HaithamHusseinig',
+    board: 'Pearson Edexcel Modular (Mr.HaithamHusseinig)',
     icon: 'H',
     color: '#b45309',
     teacher: 'Mr. Haitham Hussien',
     description:
-      'Pearson Edexcel International GCSE Mathematics A (Modular) — RCIS cohort featuring tailored assignments, model keys, and NotebookLM feedback.',
+      'Pearson Edexcel International GCSE Mathematics A (Modular) — Mr.HaithamHusseinig cohort featuring tailored assignments and detailed teacher feedback from Mr. Haitham Hussien.',
     videos: [
-      { id: 'rcis-v1', title: 'RCIS Unit 1H: Number, Ratio & Percentages', duration: '45:10', thumbnail: '', url: '#' },
-      { id: 'rcis-v2', title: 'RCIS Unit 1H: Quadratics & Simultaneous Systems', duration: '49:45', thumbnail: '', url: '#' },
-      { id: 'rcis-v3', title: 'RCIS Unit 2H: Vectors, Circle Geometry & Calculus', duration: '54:15', thumbnail: '', url: '#' },
+      { id: 'rcis-v1', title: 'Mr.HaithamHusseinig Unit 1H: Number, Ratio & Percentages', duration: '45:10', thumbnail: '', url: 'https://www.youtube.com/watch?v=dAgfnK528RA', youtubeUrl: 'https://www.youtube.com/watch?v=dAgfnK528RA' },
+      { id: 'rcis-v2', title: 'Mr.HaithamHusseinig Unit 1H: Quadratics & Simultaneous Systems', duration: '49:45', thumbnail: '', url: 'https://www.youtube.com/watch?v=IlNAJl36-10', youtubeUrl: 'https://www.youtube.com/watch?v=IlNAJl36-10' },
+      { id: 'rcis-v3', title: 'Mr.HaithamHusseinig Unit 2H: Vectors, Circle Geometry & Calculus', duration: '54:15', thumbnail: '', url: '#' },
     ],
     materials: [
-      { id: 'rcis-m1', title: 'RCIS Edexcel Modular Course Pack', type: 'pdf', size: '2.6 MB', url: '#' },
-      { id: 'rcis-m2', title: 'RCIS Monthly Exam & Official Model Key', type: 'pdf', size: '1.7 MB', url: '#' },
+      { id: 'rcis-m1', title: 'Explain Booklet — Mr.HaithamHusseinig Edexcel Modular Unit 1H', type: 'pdf', size: '2.6 MB', url: '#', category: 'explain' },
+      { id: 'rcis-m3', title: 'HW Booklet 1 — Unit 1H Quadratics & Surds (A3 Double Spread)', type: 'pdf', size: '1.9 MB', url: '#', category: 'homework', isA3: true },
+      { id: 'rcis-m2', title: 'Mr.HaithamHusseinig Monthly Exam & Official Model Key', type: 'pdf', size: '1.7 MB', url: '#', category: 'resource', teacherOnly: true },
+    ],
+  },
+];
+
+export const DEFAULT_COURSE_QUIZZES: QuizDefinition[] = [
+  {
+    id: 'quiz-rcis-u1',
+    courseId: 'ol-edexcel-modular-rcis',
+    title: 'Unit 1H Checkpoint Quiz — Indices, Surds & Quadratics',
+    kind: 'quiz',
+    gradingSystem: 'edexcel',
+    instructions: 'Answer all questions clearly. Mr. Haitham reviews your answers and releases your official 3-Phase report.',
+    createdAt: '2026-11-01T09:00:00Z',
+    questions: [
+      {
+        id: 'q1',
+        type: 'mcq',
+        prompt: 'Simplify (3x^2)^3 / 9x^4:',
+        options: ['3x^2', '9x^2', '3x^4', '27x^2'],
+        correctAnswer: '3x^2',
+        marks: 2,
+      },
+      {
+        id: 'q2',
+        type: 'short',
+        prompt: 'Solve 2x^2 - 7x + 3 = 0 by factorisation. Show both roots.',
+        correctAnswer: 'x = 0.5, x = 3',
+        marks: 3,
+      },
+    ],
+  },
+  {
+    id: 'essay-rcis-u1',
+    courseId: 'ol-edexcel-modular-rcis',
+    title: 'Structured Proof & Justification Essay — Circle Theorems & Vectors',
+    kind: 'essay',
+    gradingSystem: 'ib',
+    instructions: 'Explain every geometrical step in complete sentences with theorem names before stating your final result.',
+    createdAt: '2026-11-02T09:00:00Z',
+    questions: [
+      {
+        id: 'e1',
+        type: 'short',
+        prompt: 'Prove why the angle subtended by a diameter at the circumference is always 90 degrees, and explain how collinearity is shown using vector multiples.',
+        correctAnswer: 'Isosceles triangle base angles + triangle angle sum = 180 -> 90; parallel vector multiple + common point.',
+        marks: 8,
+      },
+    ],
+  },
+  {
+    id: 'quiz-cambridge-ch1',
+    courseId: 'ol-cambridge',
+    title: 'Cambridge 0580 Quick Quiz — BIDMAS & Standard Form',
+    kind: 'quiz',
+    gradingSystem: 'marks',
+    instructions: 'Evaluate without a calculator and write final answers in standard form where requested.',
+    createdAt: '2026-11-01T09:00:00Z',
+    questions: [
+      {
+        id: 'c1',
+        type: 'mcq',
+        prompt: 'Evaluate 18 - 3 x 4 + 6 / 2:',
+        options: ['9', '63', '33', '12'],
+        correctAnswer: '9',
+        marks: 2,
+      },
+      {
+        id: 'c2',
+        type: 'short',
+        prompt: 'Write 0.000452 in standard form.',
+        correctAnswer: '4.52 x 10^-4',
+        marks: 2,
+      },
     ],
   },
 ];

@@ -223,13 +223,13 @@ export const HandwrittenEquationCanvas: React.FC<HandwrittenEquationCanvasProps>
           </div>
           <div>
             <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2 font-serif">
-              <span>Handwritten Canvas &amp; DL Solver</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#fdf2f4] text-[#800020] border border-[#f0d8dd] font-mono font-semibold">
-                CNN Powered
+              <span>Math Scratchpad Canvas</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#fdf2f4] text-[#800020] border border-[#f0d8dd] font-semibold">
+                Handwritten Working
               </span>
             </h3>
             <p className="text-[11px] text-slate-500">
-              Integrated from connected repo: <code className="text-[#800020] font-semibold">Hand-Written-Equation-Solver</code>
+              Sketch out algebraic steps or check an expression before submitting
             </p>
           </div>
         </div>

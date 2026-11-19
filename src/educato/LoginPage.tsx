@@ -1,17 +1,22 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
+import { DOMAINS } from './students';
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { loginWithDirectory } = useAuth();
+  const [domain, setDomain] = useState<string>(DOMAINS[0]);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const result = login(username, password);
+    setIsSubmitting(true);
+    const result = await loginWithDirectory(username, password, domain);
+    setIsSubmitting(false);
     if (!result.success) {
       setError(result.error || 'Login failed');
     }
@@ -31,7 +36,7 @@ export function LoginPage() {
               H
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Mr. Haitham Math Studio</h1>
-            <p className="text-gray-500 mt-1 text-sm">Educato Portal &amp; IGCSE AI Homework Checker</p>
+            <p className="text-gray-500 mt-1 text-sm">Cambridge &amp; Edexcel IGCSE — Student, Parent &amp; Teacher Portal</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -43,6 +48,26 @@ export function LoginPage() {
                 {error}
               </div>
             )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">School Domain</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" />
+                  </svg>
+                </span>
+                <select
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 bg-gray-50 focus:bg-white font-medium"
+                >
+                  {DOMAINS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
@@ -57,7 +82,7 @@ export function LoginPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition text-gray-900 bg-gray-50 focus:bg-white"
-                  placeholder="e.g. student01"
+                  placeholder="e.g. student01 or parent01"
                   required
                 />
               </div>
@@ -95,15 +120,19 @@ export function LoginPage() {
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-indigo-700 transition shadow-md hover:shadow-lg active:scale-[0.98]"
+              disabled={isSubmitting}
+              className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-indigo-700 transition shadow-md hover:shadow-lg active:scale-[0.98] disabled:opacity-60"
             >
-              Sign In
+              {isSubmitting ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-100">
+          <div className="mt-6 pt-6 border-t border-gray-100 space-y-1.5">
+            <p className="text-xs text-center text-gray-500">
+              Student: <code className="bg-gray-100 px-1 rounded">student01</code> • Parent: <code className="bg-gray-100 px-1 rounded">parent01</code> • Educator: <code className="bg-gray-100 px-1 rounded">teacher</code>
+            </p>
             <p className="text-xs text-center text-gray-400">
-              Contact your teacher if you forgot your credentials
+              Contact Mr. Haitham if you forgot your credentials
             </p>
           </div>
         </div>

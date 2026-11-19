@@ -1,41 +1,329 @@
-import React, { useState } from 'react';
-import { Course } from './courses';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Course, CourseVideo, CourseMaterial, DEFAULT_COURSE_QUIZZES } from './courses';
 import { useAuth } from './AuthContext';
 import { StudentHomeworkPortal } from '../components/StudentHomeworkPortal';
+import { apiUrl } from '../utils/apiBase';
+import type { GradingSystem, QuizDefinition } from '../types';
 
-type CourseTab = 'videos' | 'materials' | 'homework';
+type CourseTab = 'videos' | 'materials' | 'quizzes' | 'homework';
 
 interface CoursePageProps {
   course: Course;
   onOpenModelKey?: () => void;
-  onOpenNotebookLM?: () => void;
-  onOpenNotebook?: () => void;
+  onOpenUploadStudio?: () => void;
 }
 
-export function CoursePage({
-  course,
-  onOpenModelKey,
-  onOpenNotebookLM,
-  onOpenNotebook,
-}: CoursePageProps) {
+function toYouTubeEmbedUrl(url?: string): string | null {
+  if (!url || url === '#') return null;
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('youtu.be')) {
+      const id = u.pathname.replace('/', '').trim();
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+    if (u.hostname.includes('youtube.com')) {
+      if (u.pathname.startsWith('/embed/')) return url;
+      const v = u.searchParams.get('v');
+      return v ? `https://www.youtube.com/embed/${v}` : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function CoursePage({ course, onOpenModelKey, onOpenUploadStudio }: CoursePageProps) {
   const { user } = useAuth();
+  const isTeacher = user?.role === 'teacher';
+  const isParent = user?.role === 'parent';
+  const effectiveStudentId = isParent ? user?.linkedStudentId : user?.id;
   const [activeTab, setActiveTab] = useState<CourseTab>('videos');
+
+  // Video & Materials Integration state
+  const [customVideos, setCustomVideos] = useState<CourseVideo[]>([]);
+  const [customMaterials, setCustomMaterials] = useState<(CourseMaterial & { isCustom?: boolean })[]>([]);
+  const [playingVideo, setPlayingVideo] = useState<CourseVideo | null>(null);
+  const [newVidTitle, setNewVidTitle] = useState('');
+  const [newVidUrl, setNewVidUrl] = useState('');
+  const [newVidDuration, setNewVidDuration] = useState('25:00');
+  const [newMatTitle, setNewMatTitle] = useState('');
+  const [newMatCategory, setNewMatCategory] = useState<'explain' | 'homework' | 'resource'>('explain');
+  const [newMatUrl, setNewMatUrl] = useState('');
+  const [newMatFile, setNewMatFile] = useState<File | null>(null);
+  const [newMatFileBase64, setNewMatFileBase64] = useState<string | null>(null);
+  const [newMatIsA3, setNewMatIsA3] = useState(false);
+  const [uploadingMat, setUploadingMat] = useState(false);
+
+  // Quizzes & Essays Engine state
+  const [customQuizzes, setCustomQuizzes] = useState<QuizDefinition[]>([]);
+  const [selectedQuiz, setSelectedQuiz] = useState<QuizDefinition | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [quizNotice, setQuizNotice] = useState<string | null>(null);
+
+  // Teacher Quiz/Essay Creator state
+  const [newQuizTitle, setNewQuizTitle] = useState('');
+  const [newQuizKind, setNewQuizKind] = useState<'quiz' | 'essay'>('quiz');
+  const [newQuizSystem, setNewQuizSystem] = useState<GradingSystem>('edexcel');
+  const [newQuizPrompt, setNewQuizPrompt] = useState('');
+  const [newQuizExpected, setNewQuizExpected] = useState('');
+  const [newQuizMarks, setNewQuizMarks] = useState(5);
+
+  const loadCourseExtensions = useCallback(async () => {
+    try {
+      const roleParam = encodeURIComponent(user?.role || 'student');
+      const [vRes, qRes, mRes] = await Promise.all([
+        fetch(apiUrl(`/api/courses/${course.id}/videos`)),
+        fetch(apiUrl(`/api/quizzes?courseId=${course.id}`)),
+        fetch(apiUrl(`/api/courses/${course.id}/materials?role=${roleParam}`)),
+      ]);
+      if (vRes.ok) {
+        const vData = await vRes.json();
+        setCustomVideos(Array.isArray(vData?.videos) ? vData.videos : []);
+      }
+      if (qRes.ok) {
+        const qData = await qRes.json();
+        setCustomQuizzes(Array.isArray(qData?.quizzes) ? qData.quizzes : []);
+      }
+      if (mRes.ok) {
+        const mData = await mRes.json();
+        setCustomMaterials(Array.isArray(mData?.materials) ? mData.materials : []);
+      }
+    } catch {
+      // ignore offline transient fetch error
+    }
+  }, [course.id, user?.role]);
+
+  useEffect(() => {
+    loadCourseExtensions();
+    setPlayingVideo(null);
+    setSelectedQuiz(null);
+    setQuizNotice(null);
+  }, [loadCourseExtensions]);
+
+  const allVideos = [...customVideos, ...course.videos];
+  const courseQuizzes: QuizDefinition[] = [
+    ...customQuizzes,
+    ...DEFAULT_COURSE_QUIZZES.filter((q) => q.courseId === course.id),
+  ];
+  const fallbackCourseQuiz: QuizDefinition = {
+    id: `essay-default-${course.id}`,
+    courseId: course.id,
+    title: `${course.name} — Structured Method & Justification Essay`,
+    kind: 'essay',
+    gradingSystem: 'edexcel',
+    instructions: 'Show complete algebraic/geometric reasoning. Mr. Haitham grades and approves your submission.',
+    createdAt: new Date().toISOString(),
+    questions: [
+      {
+        id: 'eq1',
+        type: 'short',
+        prompt: `Write a full step-by-step solution and justification for a core problem from ${course.name}.`,
+        correctAnswer: 'Full logical sequence with intermediate steps and units/conclusions.',
+        marks: 6,
+      },
+    ],
+  };
+  const availableQuizzes = courseQuizzes.length > 0 ? courseQuizzes : [fallbackCourseQuiz];
+
+  const handleAddYouTubeVideo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVidTitle.trim() || !newVidUrl.trim()) return;
+    const res = await fetch(apiUrl(`/api/courses/${course.id}/videos`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: newVidTitle.trim(),
+        youtubeUrl: newVidUrl.trim(),
+        duration: newVidDuration.trim() || '20:00',
+      }),
+    });
+    if (res.ok) {
+      setNewVidTitle('');
+      setNewVidUrl('');
+      await loadCourseExtensions();
+    }
+  };
+
+  const handleCreateQuizOrEssay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newQuizTitle.trim() || !newQuizPrompt.trim()) return;
+    const res = await fetch(apiUrl('/api/quizzes'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseId: course.id,
+        title: newQuizTitle.trim(),
+        kind: newQuizKind,
+        gradingSystem: newQuizSystem,
+        questions: [
+          {
+            id: `q_${Date.now()}`,
+            type: 'short',
+            prompt: newQuizPrompt.trim(),
+            correctAnswer: newQuizExpected.trim() || undefined,
+            marks: Number(newQuizMarks) || 5,
+          },
+        ],
+      }),
+    });
+    if (res.ok) {
+      setNewQuizTitle('');
+      setNewQuizPrompt('');
+      setNewQuizExpected('');
+      await loadCourseExtensions();
+    }
+  };
+
+  const handleSubmitAssessment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !selectedQuiz) return;
+    setQuizSubmitting(true);
+    setQuizNotice(null);
+    try {
+      const res = await fetch(apiUrl('/api/assessments/submit'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: user.id,
+          studentUsername: user.username,
+          studentName: user.fullName,
+          courseId: course.id,
+          courseTitle: course.name,
+          quizId: selectedQuiz.id,
+          title: selectedQuiz.title,
+          kind: selectedQuiz.kind,
+          gradingSystem: selectedQuiz.gradingSystem,
+          questions: selectedQuiz.questions,
+          answers: quizAnswers,
+        }),
+      });
+      if (res.ok) {
+        setQuizNotice(
+          `Your ${selectedQuiz.kind} "${selectedQuiz.title}" has been sent to Mr. Haitham Hussien for review. Your 3-Phase report will appear under Homework & Reports once approved.`
+        );
+        setQuizAnswers({});
+        setSelectedQuiz(null);
+      }
+    } finally {
+      setQuizSubmitting(false);
+    }
+  };
+
+  const handleSelectCourseMaterialFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setNewMatFile(file);
+    if (!newMatTitle.trim()) setNewMatTitle(file.name.replace(/\.[^.]+$/, ''));
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setNewMatFileBase64(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadCourseMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMatTitle.trim() || (!newMatFileBase64 && !newMatUrl.trim())) return;
+    setUploadingMat(true);
+    try {
+      const res = await fetch(apiUrl(`/api/courses/${course.id}/materials`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newMatTitle.trim(),
+          category: newMatCategory,
+          type: newMatFileBase64 ? 'pdf' : 'link',
+          fileBase64: newMatFileBase64,
+          fileName: newMatFile?.name,
+          url: newMatUrl.trim(),
+          isA3: newMatIsA3,
+          teacherOnly: newMatCategory === 'resource',
+        }),
+      });
+      if (res.ok) {
+        setNewMatTitle('');
+        setNewMatUrl('');
+        setNewMatFile(null);
+        setNewMatFileBase64(null);
+        setNewMatIsA3(false);
+        await loadCourseExtensions();
+      }
+    } finally {
+      setUploadingMat(false);
+    }
+  };
+
+  const handleDeleteCourseMaterial = async (matId: string) => {
+    const res = await fetch(apiUrl(`/api/courses/${course.id}/materials/${matId}`), { method: 'DELETE' });
+    if (res.ok) await loadCourseExtensions();
+  };
+
+  const handleDeleteCourseVideo = async (videoId: string) => {
+    const res = await fetch(apiUrl(`/api/courses/${course.id}/videos/${videoId}`), { method: 'DELETE' });
+    if (res.ok) await loadCourseExtensions();
+  };
+
+  const allCourseMaterials = [...customMaterials, ...course.materials];
+  const visibleMaterials = isTeacher
+    ? allCourseMaterials
+    : allCourseMaterials.filter((m) => !m.teacherOnly);
+  const explainMaterials = visibleMaterials.filter((m) => m.category === 'explain' || (!m.category && !m.teacherOnly));
+  const homeworkMaterials = visibleMaterials.filter((m) => m.category === 'homework');
+  const keyMaterials = visibleMaterials.filter((m) => m.teacherOnly);
 
   const tabs: { key: CourseTab; label: string; icon: React.ReactNode }[] = [
     {
       key: 'videos',
-      label: 'Videos',
-      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      label: 'YouTube Videos',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+          />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
     },
     {
       key: 'materials',
-      label: 'Materials',
-      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+      label: 'Explain & HW PDFs',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+      ),
+    },
+    {
+      key: 'quizzes',
+      label: 'Quizzes & Essays',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+      ),
     },
     {
       key: 'homework',
-      label: 'AI Homework Checker',
-      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>,
+      label: isTeacher ? 'Approval & Marking' : isParent ? 'Approved Reports' : 'Homework & Reports',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+          />
+        </svg>
+      ),
     },
   ];
 
@@ -62,7 +350,7 @@ export function CoursePage({
             onClick={() => setActiveTab('homework')}
             className="px-4 py-2 rounded-xl bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold transition shadow-sm"
           >
-            Check Homework with Gemini AI
+            {isTeacher ? 'Open Homework Inbox' : 'Submit Homework to Mr. Haitham'}
           </button>
         </div>
         <p className="text-gray-600 text-sm mt-2">{course.description}</p>
@@ -84,43 +372,458 @@ export function CoursePage({
       </div>
 
       {activeTab === 'videos' && (
-        <div className="space-y-3">
-          {course.videos.length === 0 ? (
+        <div className="space-y-4">
+          {playingVideo && (
+            <div className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-lg">
+              <div className="flex items-center justify-between px-4 py-3 text-white border-b border-slate-800">
+                <div>
+                  <p className="text-sm font-bold">{playingVideo.title}</p>
+                  <p className="text-[11px] text-slate-400">YouTube Lesson Player · {playingVideo.duration}</p>
+                </div>
+                <button
+                  onClick={() => setPlayingVideo(null)}
+                  className="text-xs px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200"
+                >
+                  Close Player
+                </button>
+              </div>
+              {toYouTubeEmbedUrl(playingVideo.youtubeUrl || playingVideo.url) ? (
+                <div className="aspect-video w-full bg-black">
+                  <iframe
+                    className="w-full h-full"
+                    src={toYouTubeEmbedUrl(playingVideo.youtubeUrl || playingVideo.url) || ''}
+                    title={playingVideo.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <div className="p-8 text-center text-slate-300 text-sm">
+                  No YouTube URL attached to this lesson yet. {isTeacher ? 'Use the form below to attach a YouTube link.' : 'Mr. Haitham will upload the lesson link soon.'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {isTeacher && (
+            <form onSubmit={handleAddYouTubeVideo} className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-bold text-[#800020] mr-1">+ Add YouTube Video Link:</span>
+              <input
+                type="text"
+                value={newVidTitle}
+                onChange={(e) => setNewVidTitle(e.target.value)}
+                placeholder="Lesson Title"
+                className="flex-1 min-w-[160px] px-3 py-1.5 rounded-lg border border-gray-200 text-xs"
+                required
+              />
+              <input
+                type="url"
+                value={newVidUrl}
+                onChange={(e) => setNewVidUrl(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="flex-1 min-w-[200px] px-3 py-1.5 rounded-lg border border-gray-200 text-xs"
+                required
+              />
+              <input
+                type="text"
+                value={newVidDuration}
+                onChange={(e) => setNewVidDuration(e.target.value)}
+                placeholder="25:00"
+                className="w-20 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs"
+              />
+              <button type="submit" className="px-3.5 py-1.5 rounded-lg bg-[#800020] text-white text-xs font-semibold hover:bg-[#6b1226]">
+                Save Link
+              </button>
+            </form>
+          )}
+
+          {allVideos.length === 0 ? (
             <EmptyState icon="🎬" text="No videos available yet" />
           ) : (
-            course.videos.map((video, i) => (
-              <div key={video.id} className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition group">
-                <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition flex-shrink-0">
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            allVideos.map((video, i) => {
+              const hasYt = Boolean(toYouTubeEmbedUrl(video.youtubeUrl || video.url));
+              return (
+                <div
+                  key={video.id}
+                  className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition group"
+                >
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition flex-shrink-0 ${hasYt ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{video.title}</p>
+                      {hasYt && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-semibold">
+                          YouTube Ready
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Lesson {i + 1} &middot; {video.duration}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPlayingVideo(video)}
+                      className="px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                    >
+                      Watch
+                    </button>
+                    {isTeacher && video.id.startsWith('yt_') && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCourseVideo(video.id)}
+                        className="px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{video.title}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Lesson {i + 1} &middot; {video.duration}</p>
-                </div>
-                <button className="px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition">Watch</button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
 
       {activeTab === 'materials' && (
-        <div className="space-y-3">
-          {course.materials.length === 0 ? (
-            <EmptyState icon="📄" text="No materials available yet" />
-          ) : (
-            course.materials.map((mat) => (
-              <div key={mat.id} className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition group">
-                <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <span className="text-red-500 font-bold text-xs uppercase">{mat.type}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{mat.title}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{mat.type.toUpperCase()} &middot; {mat.size}</p>
-                </div>
-                <button className="px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition">Download</button>
+        <div className="space-y-6">
+          {isTeacher && (
+            <form onSubmit={handleUploadCourseMaterial} className="bg-white rounded-2xl border border-[#f0d0d6] p-4 space-y-3 shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-[#800020]">
+                  + Upload PDF, Worksheet or Material Link to {course.name}
+                </span>
+                {onOpenUploadStudio && (
+                  <button
+                    type="button"
+                    onClick={onOpenUploadStudio}
+                    className="text-[11px] font-semibold text-indigo-700 hover:underline"
+                  >
+                    Open Multi-Course Upload Studio &rarr;
+                  </button>
+                )}
               </div>
-            ))
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <select
+                  value={newMatCategory}
+                  onChange={(e) => setNewMatCategory(e.target.value as 'explain' | 'homework' | 'resource')}
+                  className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-semibold"
+                >
+                  <option value="explain">Section: Explain Notes</option>
+                  <option value="homework">Section: Homework (HW) PDF</option>
+                  <option value="resource">Section: Educator Model Key</option>
+                </select>
+                <input
+                  type="text"
+                  value={newMatTitle}
+                  onChange={(e) => setNewMatTitle(e.target.value)}
+                  placeholder="PDF or Material Title"
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-xs"
+                  required
+                />
+                <input
+                  type="url"
+                  value={newMatUrl}
+                  onChange={(e) => setNewMatUrl(e.target.value)}
+                  placeholder="Optional External URL (if not uploading file)"
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-xs"
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[#800020] text-xs font-semibold cursor-pointer">
+                    {newMatFile ? `Selected: ${newMatFile.name}` : 'Choose PDF / File'}
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg"
+                      onChange={handleSelectCourseMaterialFile}
+                      className="hidden"
+                    />
+                  </label>
+                  <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newMatIsA3}
+                      onChange={(e) => setNewMatIsA3(e.target.checked)}
+                    />
+                    <span>A3 Spread Ready</span>
+                  </label>
+                </div>
+                <button
+                  type="submit"
+                  disabled={uploadingMat || (!newMatFileBase64 && !newMatUrl.trim())}
+                  className="px-4 py-2 rounded-lg bg-[#800020] hover:bg-[#6b1226] disabled:opacity-50 text-white text-xs font-bold transition"
+                >
+                  {uploadingMat ? 'Uploading...' : 'Publish to Section'}
+                </button>
+              </div>
+            </form>
+          )}
+          {[
+            { title: 'Explain Notes & Study Guides', list: explainMaterials, badge: 'Explain' },
+            { title: 'Homework (HW) & A3 Worksheet Spreads', list: homeworkMaterials, badge: 'Homework (HW)' },
+            ...(isTeacher && keyMaterials.length > 0
+              ? [{ title: 'Official Answer Keys (Educator Only)', list: keyMaterials, badge: 'Educator Key' }]
+              : []),
+          ].map((section) => (
+            <div key={section.title} className="space-y-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+                <span>{section.title}</span>
+                <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-[10px]">{section.list.length}</span>
+              </h3>
+              {section.list.length === 0 ? (
+                <div className="bg-white rounded-xl border border-dashed border-gray-200 p-4 text-xs text-gray-400">
+                  No files in {section.badge} yet.
+                </div>
+              ) : (
+                section.list.map((mat) => (
+                  <div
+                    key={mat.id}
+                    className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition"
+                  >
+                    <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <span className="text-red-500 font-bold text-xs uppercase">{mat.type}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900">{mat.title}</p>
+                        {mat.isA3 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
+                            A3 Size · Auto-Split Ready
+                          </span>
+                        )}
+                        {isTeacher && mat.teacherOnly && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+                            Educator Only
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {section.badge} &middot; {mat.type.toUpperCase()} &middot; {mat.size}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {mat.url && mat.url !== '#' ? (
+                        <a
+                          href={mat.url.startsWith('/api/') ? apiUrl(mat.url) : mat.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                        >
+                          Open PDF / Link
+                        </a>
+                      ) : (
+                        <span className="px-2.5 py-1 text-[11px] font-medium text-gray-400 bg-gray-50 rounded-lg">
+                          Template Item
+                        </span>
+                      )}
+                      {section.badge === 'Homework (HW)' && !isParent && (
+                        <button
+                          onClick={() => setActiveTab('homework')}
+                          className="px-3.5 py-2 text-xs font-semibold text-[#800020] bg-rose-50 hover:bg-rose-100 rounded-lg transition"
+                        >
+                          Submit Solved PDF
+                        </button>
+                      )}
+                      {isTeacher && (mat as any).isCustom && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCourseMaterial(mat.id)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'quizzes' && (
+        <div className="space-y-5">
+          {quizNotice && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-3 rounded-xl text-sm">
+              {quizNotice}
+            </div>
+          )}
+
+          {isTeacher && (
+            <form onSubmit={handleCreateQuizOrEssay} className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-gray-900">Create New Quiz or Essay Assignment</h3>
+                <span className="text-[11px] text-gray-500">Evaluated behind Approval Gateway</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  value={newQuizTitle}
+                  onChange={(e) => setNewQuizTitle(e.target.value)}
+                  placeholder="Assessment Title"
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-xs"
+                  required
+                />
+                <select
+                  value={newQuizKind}
+                  onChange={(e) => setNewQuizKind(e.target.value as 'quiz' | 'essay')}
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+                >
+                  <option value="quiz">Interactive Quiz</option>
+                  <option value="essay">Structured Proof / Essay</option>
+                </select>
+                <select
+                  value={newQuizSystem}
+                  onChange={(e) => setNewQuizSystem(e.target.value as GradingSystem)}
+                  className="px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+                >
+                  <option value="edexcel">Grading: Edexcel</option>
+                  <option value="ib">Grading: IB Criteria (1-7)</option>
+                  <option value="marks">Grading: Raw Marks</option>
+                </select>
+              </div>
+              <textarea
+                rows={2}
+                value={newQuizPrompt}
+                onChange={(e) => setNewQuizPrompt(e.target.value)}
+                placeholder="Question prompt or essay task..."
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs"
+                required
+              />
+              <div className="flex flex-wrap gap-3 items-center">
+                <input
+                  type="text"
+                  value={newQuizExpected}
+                  onChange={(e) => setNewQuizExpected(e.target.value)}
+                  placeholder="Educator-only expected answer / rubric (hidden from students beforehand)"
+                  className="flex-1 min-w-[220px] px-3 py-2 rounded-lg border border-gray-200 text-xs"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={newQuizMarks}
+                  onChange={(e) => setNewQuizMarks(Number(e.target.value))}
+                  className="w-20 px-3 py-2 rounded-lg border border-gray-200 text-xs"
+                />
+                <button type="submit" className="px-4 py-2 rounded-lg bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold">
+                  + Publish to Course
+                </button>
+              </div>
+            </form>
+          )}
+
+          {selectedQuiz && !isParent ? (
+            <form onSubmit={handleSubmitAssessment} className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {selectedQuiz.kind} · {selectedQuiz.gradingSystem.toUpperCase()}
+                  </span>
+                  <h3 className="text-base font-bold text-gray-900 mt-1">{selectedQuiz.title}</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">{selectedQuiz.instructions}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedQuiz(null)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50"
+                >
+                  Back to List
+                </button>
+              </div>
+
+              {selectedQuiz.questions.map((q, idx) => (
+                <div key={q.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-900">
+                      Q{idx + 1}. {q.prompt}
+                    </p>
+                    <span className="text-xs font-bold text-gray-500">{q.marks} Marks</span>
+                  </div>
+                  {q.type === 'mcq' && Array.isArray(q.options) ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {q.options.map((opt) => (
+                        <label
+                          key={opt}
+                          className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${
+                            quizAnswers[q.id] === opt
+                              ? 'border-[#800020] bg-rose-50 text-[#800020] font-semibold'
+                              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`quiz_${q.id}`}
+                            checked={quizAnswers[q.id] === opt}
+                            onChange={() => setQuizAnswers((prev) => ({ ...prev, [q.id]: opt }))}
+                          />
+                          <span>{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <textarea
+                      rows={selectedQuiz.kind === 'essay' ? 5 : 3}
+                      value={quizAnswers[q.id] || ''}
+                      onChange={(e) => setQuizAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                      placeholder="Write your full working and justification clearly..."
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm"
+                      required
+                    />
+                  )}
+                </div>
+              ))}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="submit"
+                  disabled={quizSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold transition shadow-sm disabled:opacity-60"
+                >
+                  {quizSubmitting ? 'Submitting to Mr. Haitham...' : 'Submit for Mr. Haitham Approval'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {availableQuizzes.map((quiz) => (
+                <div key={quiz.id} className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        {quiz.kind}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                        {quiz.gradingSystem}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm">{quiz.title}</h4>
+                    <p className="text-xs text-gray-500 mt-1">{quiz.instructions}</p>
+                    <p className="text-[11px] text-gray-400 mt-2">
+                      {quiz.questions.length} question(s) · {quiz.questions.reduce((s, q) => s + q.marks, 0)} marks
+                    </p>
+                  </div>
+                  {!isParent && !isTeacher && (
+                    <button
+                      onClick={() => {
+                        setSelectedQuiz(quiz);
+                        setQuizAnswers({});
+                        setQuizNotice(null);
+                      }}
+                      className="w-full py-2 rounded-xl bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold transition"
+                    >
+                      Start {quiz.kind === 'essay' ? 'Essay' : 'Quiz'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -129,12 +832,17 @@ export function CoursePage({
         <div className="-mx-4">
           <StudentHomeworkPortal
             key={course.id}
+            courseId={course.id}
             courseTitle={course.name}
             courseCode={course.code}
-            defaultStudentName={user?.role === 'student' ? user.fullName : undefined}
-            onSwitchToModelKey={onOpenModelKey}
-            onSwitchToNotebookLM={onOpenNotebookLM}
-            onSwitchToNotebook={onOpenNotebook}
+            defaultStudentName={
+              isParent ? user?.linkedStudentName : user?.role === 'student' ? user.fullName : undefined
+            }
+            userRole={user?.role}
+            studentId={effectiveStudentId}
+            studentUsername={user?.username}
+            viewerUserId={user?.id}
+            onSwitchToModelKey={isTeacher ? onOpenModelKey : undefined}
           />
         </div>
       )}

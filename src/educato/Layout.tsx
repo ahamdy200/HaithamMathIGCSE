@@ -1,33 +1,120 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './Sidebar';
 import { DashboardPage } from './DashboardPage';
 import { CoursePage } from './CoursePage';
 import { ProgressPage } from './ProgressPage';
-import { ColabStudioPage } from './ColabStudioPage';
-import { COURSES } from './courses';
+import { COURSES, CourseEnrollment } from './courses';
 import { useAuth } from './AuthContext';
 import { StudentHomeworkPortal } from '../components/StudentHomeworkPortal';
-import { NotebookLMView } from '../components/NotebookLMView';
 import { TeacherModelKeyViewer } from '../components/TeacherModelKeyViewer';
-import { AudioOverviewView } from '../components/AudioOverviewView';
-import { INITIAL_SOURCES } from '../data/defaultNotebook';
-import { SourceDocument } from '../types';
+import { CourseMaterialsStudio } from '../components/CourseMaterialsStudio';
+import { apiUrl } from '../utils/apiBase';
+import type { PortalNotification } from '../types';
 
 export function Layout() {
   const { user } = useAuth();
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sources, setSources] = useState<SourceDocument[]>(INITIAL_SOURCES);
 
-  const activeCourse = COURSES.find((c) => c.id === activeCourseId) || null;
+  const [enrollment, setEnrollment] = useState<CourseEnrollment | null>(null);
+  const [enrollmentLoading, setEnrollmentLoading] = useState<boolean>(
+    user?.role === 'student' || user?.role === 'parent'
+  );
+  const [notifications, setNotifications] = useState<PortalNotification[]>([]);
+  const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  const [focusSubmissionId, setFocusSubmissionId] = useState<string | null>(null);
 
-  const handleAddSource = (source: Omit<SourceDocument, 'id'>) => {
-    setSources((prev) => [...prev, { ...source, id: `source-${Date.now()}` }]);
+  const isTeacher = user?.role === 'teacher';
+  const isParent = user?.role === 'parent';
+  const targetStudentId = isParent ? user?.linkedStudentId : user?.role === 'student' ? user.id : null;
+  const isApprovedStudent = user?.role === 'student' && enrollment?.status === 'approved';
+  const isApprovedParent = isParent && enrollment?.status === 'approved';
+
+  const refreshEnrollment = useCallback(async () => {
+    if (!user || (user.role !== 'student' && user.role !== 'parent') || !targetStudentId) {
+      setEnrollment(null);
+      setEnrollmentLoading(false);
+      return;
+    }
+    setEnrollmentLoading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/enrollments?studentId=${targetStudentId}`));
+      if (res.ok) {
+        const data = await res.json();
+        const found: CourseEnrollment | null = data?.enrollment || null;
+        setEnrollment(found);
+        if (found?.status === 'approved' && found.courseId) {
+          setActiveCourseId(found.courseId);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load course enrollment status:', err);
+    } finally {
+      setEnrollmentLoading(false);
+    }
+  }, [user, targetStudentId]);
+
+  useEffect(() => {
+    setActiveView('dashboard');
+    setActiveCourseId(null);
+    refreshEnrollment();
+  }, [refreshEnrollment]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!user) return;
+    try {
+      const courseParam = enrollment?.courseId ? `&courseId=${encodeURIComponent(enrollment.courseId)}` : '';
+      const studentParam = targetStudentId ? `&studentId=${targetStudentId}` : '';
+      const res = await fetch(
+        apiUrl(`/api/notifications?role=${encodeURIComponent(user.role)}${courseParam}${studentParam}`)
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(Array.isArray(data?.notifications) ? data.notifications : []);
+      }
+    } catch {
+      // ignore transient errors
+    }
+  }, [user, enrollment?.courseId, targetStudentId]);
+
+  useEffect(() => {
+    loadNotifications();
+    const timer = setInterval(loadNotifications, 6000);
+    return () => clearInterval(timer);
+  }, [loadNotifications]);
+
+  const handleMarkNotificationRead = async (notifId: string) => {
+    if (!user) return;
+    await fetch(apiUrl(`/api/notifications/${notifId}/read`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id }),
+    }).catch(() => {});
+    await loadNotifications();
   };
 
-  const handleDeleteSource = (id: string) => {
-    setSources((prev) => prev.filter((s) => s.id !== id));
+  const unreadCount = user
+    ? notifications.filter((n) => !n.readByUserIds.includes(user.id)).length
+    : 0;
+
+  const visibleCourses = isTeacher
+    ? COURSES
+    : isApprovedStudent || isApprovedParent
+    ? COURSES.filter((c) => c.id === enrollment?.courseId)
+    : [];
+
+  const activeCourse = visibleCourses.find((c) => c.id === activeCourseId) || null;
+
+  const handleSelectView = (view: string) => {
+    if (!isTeacher) {
+      if (view === 'modelkey' || view === 'upload-studio') return;
+      if (!isApprovedStudent && !isParent && (view === 'homework-studio' || view === 'course')) {
+        setActiveView('dashboard');
+        return;
+      }
+    }
+    setActiveView(view);
   };
 
   return (
@@ -35,43 +122,161 @@ export function Layout() {
       <Sidebar
         activeCourseId={activeCourseId}
         activeView={activeView}
+        visibleCourses={visibleCourses}
+        isApprovedStudent={isApprovedStudent}
+        unreadNotificationCount={unreadCount}
         onSelectCourse={setActiveCourseId}
-        onSelectView={setActiveView}
+        onSelectView={handleSelectView}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
       <main className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-[68px]' : 'ml-64'}`}>
-        <div className="p-6 lg:p-8">
+        {/* Top Notification Header */}
+        <div className="px-6 lg:px-8 pt-4 flex items-center justify-end relative">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowNotificationsMenu((v) => !v)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-gray-200 hover:border-[#800020]/40 shadow-2xs text-xs font-semibold text-gray-700 transition"
+            >
+              <span>🔔</span>
+              <span>Notifications</span>
+              {unreadCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-[#800020] text-white text-[10px] font-bold">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {showNotificationsMenu && (
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-2xl shadow-xl z-40 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                  <span className="text-xs font-bold text-gray-900">Portal Notifications</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowNotificationsMenu(false)}
+                    className="text-xs text-gray-400 hover:text-gray-700"
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                  {notifications.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-gray-400">No notifications yet.</div>
+                  ) : (
+                    notifications.slice(0, 12).map((n) => {
+                      const isUnread = user ? !n.readByUserIds.includes(user.id) : false;
+                      return (
+                        <div
+                          key={n.id}
+                          className={`p-3.5 text-xs space-y-1 ${isUnread ? 'bg-rose-50/40' : 'bg-white'}`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-gray-900">{n.title}</span>
+                            {isUnread && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkNotificationRead(n.id)}
+                                className="text-[10px] font-semibold text-[#800020] hover:underline shrink-0"
+                              >
+                                Mark read
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-gray-600 leading-relaxed">{n.message}</p>
+                          <div className="flex items-center justify-between pt-1 text-[10px] text-gray-400">
+                            <span>{new Date(n.createdAt).toLocaleString('en-GB')}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isUnread) {
+                                  void handleMarkNotificationRead(n.id);
+                                }
+                                if (n.submissionId) {
+                                  setFocusSubmissionId(n.submissionId);
+                                }
+                                setShowNotificationsMenu(false);
+                                if (isTeacher || isApprovedStudent || isParent) {
+                                  handleSelectView('homework-studio');
+                                }
+                              }}
+                              className="text-[#800020] font-semibold hover:underline"
+                            >
+                              {n.type === 'submission'
+                                ? 'Review Paper →'
+                                : n.type === 'assignment'
+                                ? 'Open Homework →'
+                                : 'View Report →'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 lg:p-8 pt-4">
           {activeView === 'dashboard' && (
-            <DashboardPage onSelectCourse={setActiveCourseId} onSelectView={setActiveView} />
+            <DashboardPage
+              enrollment={enrollment}
+              enrollmentLoading={enrollmentLoading}
+              visibleCourses={visibleCourses}
+              notifications={notifications}
+              onMarkNotificationRead={handleMarkNotificationRead}
+              onRefreshEnrollment={refreshEnrollment}
+              onSelectCourse={setActiveCourseId}
+              onSelectView={handleSelectView}
+            />
           )}
           {activeView === 'course' && activeCourse && (
             <CoursePage
               course={activeCourse}
-              onOpenModelKey={() => setActiveView('modelkey')}
-              onOpenNotebookLM={() => setActiveView('notebooklm')}
-              onOpenNotebook={() => setActiveView('notebook')}
+              onOpenModelKey={isTeacher ? () => handleSelectView('modelkey') : undefined}
+              onOpenUploadStudio={isTeacher ? () => handleSelectView('upload-studio') : undefined}
             />
           )}
-          {activeView === 'progress' && <ProgressPage />}
-          {activeView === 'homework-studio' && (
+          {activeView === 'progress' && (
+            <ProgressPage
+              visibleCourses={visibleCourses}
+              enrollment={enrollment}
+            />
+          )}
+          {activeView === 'homework-studio' && (isTeacher || isApprovedStudent || isParent) && (
             <StudentHomeworkPortal
-              defaultStudentName={user?.role === 'student' ? user.fullName : undefined}
-              onSwitchToModelKey={() => setActiveView('modelkey')}
-              onSwitchToNotebookLM={() => setActiveView('notebooklm')}
-              onSwitchToNotebook={() => setActiveView('notebook')}
+              courseId={activeCourse?.id || enrollment?.courseId}
+              courseTitle={activeCourse?.name || enrollment?.courseTitle}
+              courseCode={activeCourse?.code}
+              defaultStudentName={
+                isParent
+                  ? user?.linkedStudentName
+                  : user?.role === 'student'
+                  ? user.fullName
+                  : undefined
+              }
+              userRole={user?.role}
+              studentId={targetStudentId ?? user?.id}
+              studentUsername={user?.username}
+              viewerUserId={user?.id}
+              focusSubmissionId={focusSubmissionId}
+              onClearFocusSubmission={() => setFocusSubmissionId(null)}
+              onNotificationsUpdated={loadNotifications}
+              onSwitchToModelKey={isTeacher ? () => handleSelectView('modelkey') : undefined}
             />
           )}
-          {activeView === 'notebooklm' && (
-            <NotebookLMView
-              sources={sources}
-              onAddSource={handleAddSource}
-              onDeleteSource={handleDeleteSource}
+          {activeView === 'upload-studio' && isTeacher && (
+            <CourseMaterialsStudio
+              initialCourseId={activeCourseId}
+              onOpenCourse={(courseId) => {
+                setActiveCourseId(courseId);
+                handleSelectView('course');
+              }}
             />
           )}
-          {activeView === 'modelkey' && <TeacherModelKeyViewer />}
-          {activeView === 'audio' && <AudioOverviewView sources={sources} />}
-          {activeView === 'notebook' && <ColabStudioPage />}
+          {activeView === 'modelkey' && isTeacher && <TeacherModelKeyViewer />}
         </div>
       </main>
     </div>

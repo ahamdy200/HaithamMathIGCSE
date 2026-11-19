@@ -1,23 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   FileText,
   UploadCloud,
   CheckCircle2,
   AlertCircle,
-  HelpCircle,
-  Sparkles,
   Download,
   Printer,
   ChevronDown,
   ChevronUp,
-  Award,
-  Layers,
   GraduationCap,
-  Eye,
   RotateCcw,
   RotateCw,
   BookOpen,
-  ArrowRight,
   Loader2,
   FileCheck,
   X,
@@ -25,11 +19,23 @@ import {
   UserCheck,
   Table as TableIcon,
   List as ListIcon,
-  ExternalLink,
   PenTool,
+  Send,
+  Inbox,
+  Clock,
+  Trash2,
+  Eye,
   Edit3,
+  Bell,
 } from 'lucide-react';
-import { HomeworkGradingReport } from '../types';
+import {
+  HomeworkGradingReport,
+  QuestionGrading,
+  GradingSystem,
+  HomeworkAssignmentRecord,
+  PortalNotification,
+} from '../types';
+import { COURSES } from '../educato/courses';
 import { HandwrittenEquationCanvas } from './HandwrittenEquationCanvas';
 import { apiUrl, getApiBaseUrl } from '../utils/apiBase';
 import {
@@ -40,97 +46,982 @@ import {
 } from '../utils/pdfPageRenderer';
 import {
   PEARSON_EDEXCEL_EXAM_1_KEY,
-  DEFAULT_CAMBRIDGE_BIDMAS_KEY,
   MODEL_KEY_TEMPLATES,
   ModelAnswerKeyData,
 } from '../data/modelAnswerKey';
 
 interface StudentHomeworkPortalProps {
-  onSwitchToNotebook?: () => void;
-  onSwitchToModelKey?: () => void;
-  onSwitchToNotebookLM?: () => void;
+  courseId?: string;
   courseTitle?: string;
   courseCode?: string;
   defaultStudentName?: string;
+  userRole?: 'student' | 'teacher' | 'parent';
+  studentId?: number;
+  studentUsername?: string;
+  viewerUserId?: number;
+  focusSubmissionId?: string | null;
+  onClearFocusSubmission?: () => void;
+  onNotificationsUpdated?: () => void;
+  onSwitchToModelKey?: () => void;
+}
+
+interface StoredSubmission {
+  id: string;
+  studentId: number;
+  studentUsername: string;
+  studentName: string;
+  courseId: string;
+  courseTitle: string;
+  assignment: string;
+  submissionText: string;
+  fileName?: string | null;
+  fileMimeType?: string | null;
+  pageCount: number;
+  status: 'pending' | 'graded';
+  submittedAt: string;
+  publishedAt?: string;
+  reviewedBy?: string;
+  teacherNote?: string;
+  pageImages?: RenderedPageImage[];
+  draftStatus?: 'queued' | 'generating' | 'ready' | 'failed';
+  draftError?: string | null;
+  draftReport?: HomeworkGradingReport | null;
+  publishedReport?: HomeworkGradingReport | null;
+  emailDelivery?: {
+    status: 'sent' | 'logged_locally' | 'failed';
+    to: string;
+    provider: string;
+    resendId?: string;
+    note?: string;
+  } | null;
+}
+
+function computeGradeLabel(
+  percentage: number,
+  earnedMarks = 0,
+  totalMarks = 1,
+  gradingSystem: GradingSystem = 'edexcel'
+): string {
+  if (gradingSystem === 'ib') {
+    if (percentage >= 88) return 'Band 7 (Excellent)';
+    if (percentage >= 75) return 'Band 6 (Very Good)';
+    if (percentage >= 62) return 'Band 5 (Good)';
+    if (percentage >= 50) return 'Band 4 (Satisfactory)';
+    if (percentage >= 38) return 'Band 3 (Mediocre)';
+    if (percentage >= 22) return 'Band 2 (Limited)';
+    return 'Band 1 (Minimal)';
+  }
+  if (gradingSystem === 'marks') {
+    return `${earnedMarks} / ${totalMarks} Marks (${percentage}%)`;
+  }
+  if (percentage >= 90) return 'A* (Level 9 — Outstanding)';
+  if (percentage >= 80) return 'A (Level 8 — Excellent)';
+  if (percentage >= 70) return 'B (Level 7 — Good)';
+  if (percentage >= 60) return 'C (Level 5-6 — Satisfactory)';
+  if (percentage >= 50) return 'D (Level 4 — Needs Improvement)';
+  return 'U (Ungraded — Requires Retest)';
+}
+
+function recalculateReportTotals(
+  report: HomeworkGradingReport,
+  overrideSystem?: GradingSystem
+): HomeworkGradingReport {
+  const sys: GradingSystem = overrideSystem || report.gradingSystem || 'edexcel';
+  const updatedQuestions = report.questions.map((q) => {
+    const earned = Math.max(0, Math.min(q.maxMarks, Number(q.earnedMarks) || 0));
+    const status: 'correct' | 'incorrect' = earned === q.maxMarks ? 'correct' : 'incorrect';
+    const statusLabel: any =
+      earned === q.maxMarks ? 'CORRECT' : earned > 0 ? `PARTIAL (${earned}/${q.maxMarks})` : 'INCORRECT';
+    return { ...q, earnedMarks: earned, status, statusLabel };
+  });
+  const totalMarks = updatedQuestions.reduce((s, q) => s + q.maxMarks, 0) || report.totalMarks || 1;
+  const earnedMarks = updatedQuestions.reduce((s, q) => s + q.earnedMarks, 0);
+  const percentage = Math.round((earnedMarks / totalMarks) * 100);
+  return {
+    ...report,
+    gradingSystem: sys,
+    totalMarks,
+    earnedMarks,
+    percentage,
+    grade: computeGradeLabel(percentage, earnedMarks, totalMarks, sys),
+    questions: updatedQuestions,
+  };
+}
+
+function downloadReportCsv(report: HomeworkGradingReport) {
+  const headers = [
+    'Question',
+    'Earned Marks',
+    'Max Marks',
+    'Status',
+    'What Was Written (Phase 1)',
+    'Exact Mistake & Why Wrong (Phase 2)',
+    'Correct Working & Solution (Phase 3)',
+  ];
+
+  const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = report.questions.map((q) =>
+    [
+      q.displayLabel || `Q${q.questionNumber}`,
+      q.earnedMarks,
+      q.maxMarks,
+      q.statusLabel,
+      q.phase1Extraction || q.studentWorkingFound,
+      q.phase2ErrorAnalysis || q.errorAnalysis || q.teacherFeedback,
+      q.phase3Solution || q.modelSolution,
+    ]
+      .map(esc)
+      .join(',')
+  );
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(report.studentName || 'Student').replace(/\s+/g, '_')}_Homework_Report.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtmlText(val: any): string {
+  return String(val ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildStandaloneParentReportHtml(
+  report: HomeworkGradingReport,
+  teacherNote?: string,
+  resolvedCourseTitle?: string
+): string {
+  const sysCode = (report.gradingSystem || 'edexcel').toUpperCase();
+  const sysLabel =
+    sysCode === 'IB'
+      ? 'IB (Band 1–7)'
+      : sysCode === 'MARKS'
+      ? 'Raw Marks (%)'
+      : 'Pearson Edexcel (9–1 / A*–U)';
+
+  const correctCount = report.questions.filter((q) => Number(q.earnedMarks) === Number(q.maxMarks)).length;
+  const partialCount = report.questions.filter(
+    (q) => Number(q.earnedMarks) > 0 && Number(q.earnedMarks) < Number(q.maxMarks)
+  ).length;
+  const missedCount = report.questions.length - correctCount - partialCount;
+  const cleanDate = report.submissionDate
+    ? new Date(report.submissionDate).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const cleanBodyNote = (teacherNote || '').trim();
+  const criterionHtml =
+    Array.isArray(report.criterionBreakdown) && report.criterionBreakdown.length > 0
+      ? `<div class="criteria-grid">
+          ${report.criterionBreakdown
+            .map(
+              (c) => `<div class="crit-item"><div class="crit-label">${escapeHtmlText(c.label)}</div><div class="crit-val">${escapeHtmlText(c.score)}</div></div>`
+            )
+            .join('')}
+        </div>`
+      : '';
+
+  const questionBlocks = report.questions
+    .map((q) => {
+      const earned = Number(q.earnedMarks) || 0;
+      const maxM = Number(q.maxMarks) || 1;
+      const isFull = earned === maxM;
+      const isPartial = !isFull && earned > 0;
+      const badgeClass = isFull ? 'badge-ok' : isPartial ? 'badge-part' : 'badge-miss';
+      const badgeLabel = isFull ? 'Full Marks' : isPartial ? 'Partial Credit' : 'Needs Review';
+
+      const written = escapeHtmlText(q.phase1Extraction || q.studentWorkingFound || 'Not attempted').replace(/\n/g, '<br/>');
+      const mistake = escapeHtmlText(
+        q.phase2ErrorAnalysis || q.errorAnalysis || q.teacherFeedback || (isFull ? 'Confirmed accurate method and final answer.' : 'Needs review.')
+      ).replace(/\n/g, '<br/>');
+      const solution = escapeHtmlText(q.phase3Solution || q.modelSolution || '—').replace(/\n/g, '<br/>');
+
+      return `
+      <section class="q-card">
+        <div class="q-head">
+          <div class="q-title">
+            <span class="q-num">${escapeHtmlText(q.displayLabel || `Q${q.questionNumber}`)}</span>
+            <span class="badge ${badgeClass}">${badgeLabel}</span>
+          </div>
+          <div class="q-score">${earned} / ${maxM} marks</div>
+        </div>
+        <div class="q-body">
+          <div class="q-sec">
+            <div class="sec-label lbl-written">1. Student Written Work</div>
+            <div class="sec-box math-box">${written}</div>
+          </div>
+          <div class="q-sec">
+            <div class="sec-label lbl-mistake">2. Mistake Analysis &amp; Teacher Feedback</div>
+            <div class="sec-box mistake-box">${mistake}${
+              q.teacherFeedback && q.teacherFeedback !== (q.phase2ErrorAnalysis || q.errorAnalysis)
+                ? `<div class="feedback-sub">${escapeHtmlText(q.teacherFeedback)}</div>`
+                : ''
+            }</div>
+          </div>
+          <div class="q-sec">
+            <div class="sec-label lbl-sol">3. Complete Worked Solution</div>
+            <div class="sec-box sol-box">${solution}</div>
+          </div>
+        </div>
+      </section>`;
+    })
+    .join('');
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtmlText(report.studentName)} — Progress Report</title>
+<style>
+  @page { size: A4; margin: 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Arial, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .report-shell { max-width: 780px; margin: 0 auto; }
+  .letterhead {
+    background: #800020;
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .lh-eyebrow {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    opacity: 0.85;
+    font-weight: 700;
+  }
+  .lh-title {
+    margin: 6px 0 4px;
+    font-size: 22px;
+    font-weight: 700;
+    font-family: Georgia, "Times New Roman", serif;
+  }
+  .lh-sub { font-size: 12px; opacity: 0.9; margin: 0; }
+  .meta-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+  }
+  .meta-k { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; font-weight: 700; }
+  .meta-v { font-size: 12px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+  .kpi-row {
+    display: grid;
+    grid-template-columns: 1fr 1.25fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .kpi-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 16px;
+    background: #ffffff;
+  }
+  .kpi-card.mark { background: #fdf2f4; border-color: #fecdd3; }
+  .kpi-lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; color: #64748b; }
+  .kpi-card.mark .kpi-lbl { color: #9f1239; }
+  .kpi-big { font-size: 24px; font-weight: 800; color: #800020; margin-top: 3px; }
+  .kpi-big span { font-size: 13px; font-weight: 600; color: #64748b; }
+  .kpi-grade { font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 6px; }
+  .kpi-breakdown { font-size: 11px; color: #334155; line-height: 1.55; margin-top: 4px; }
+  .criteria-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .crit-item { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 8px 10px; }
+  .crit-label { font-size: 9px; font-weight: 700; color: #3730a3; text-transform: uppercase; }
+  .crit-val { font-size: 13px; font-weight: 800; color: #1e1b4b; margin-top: 2px; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  .sum-box {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    background: #fffdfa;
+  }
+  .sum-box.note { background: #fffbeb; border-color: #fde68a; color: #78350f; }
+  .sum-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: #800020; margin-bottom: 5px; }
+  .section-hdr {
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #800020;
+    border-bottom: 1.5px solid #f1d4db;
+    padding-bottom: 5px;
+    margin: 0 0 12px;
+  }
+  .q-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .q-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 8px 14px;
+  }
+  .q-title { display: flex; align-items: center; gap: 8px; }
+  .q-num { font-weight: 800; font-size: 12.5px; color: #0f172a; }
+  .badge { font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .badge-ok { background: #dcfce7; color: #166534; }
+  .badge-part { background: #fef3c7; color: #92400e; }
+  .badge-miss { background: #ffe4e6; color: #9f1239; }
+  .q-score { font-weight: 800; font-size: 12px; color: #0f172a; }
+  .q-body { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .sec-label { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+  .lbl-written { color: #475569; }
+  .lbl-mistake { color: #9f1239; }
+  .lbl-sol { color: #065f46; }
+  .sec-box { font-size: 11.5px; line-height: 1.5; border-radius: 7px; padding: 8px 10px; }
+  .math-box { background: #f8fafc; border: 1px solid #e2e8f0; font-family: "JetBrains Mono", Consolas, monospace; color: #0f172a; }
+  .mistake-box { background: #fff1f2; border: 1px solid #fecdd3; color: #881337; }
+  .feedback-sub { margin-top: 4px; font-style: italic; color: #4c0519; }
+  .sol-box { background: #ecfdf5; border: 1px solid #a7f3d0; font-family: "JetBrains Mono", Consolas, monospace; color: #064e3b; }
+  .doc-foot {
+    margin-top: 16px;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 10px;
+    color: #64748b;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="report-shell">
+    <header class="letterhead">
+      <div class="lh-eyebrow">Official Student Assessment Report</div>
+      <h1 class="lh-title">${escapeHtmlText(report.assignmentTitle || report.topic || 'Mathematics Homework Report')}</h1>
+      <p class="lh-sub">Reviewed &amp; Approved by Mr. Haitham Hussien</p>
+    </header>
+
+    <div class="meta-strip">
+      <div><div class="meta-k">Student</div><div class="meta-v">${escapeHtmlText(report.studentName)}</div></div>
+      <div><div class="meta-k">Subject / Group</div><div class="meta-v">${escapeHtmlText(resolvedCourseTitle || report.subject || 'IGCSE Mathematics')}</div></div>
+      <div><div class="meta-k">Date</div><div class="meta-v">${escapeHtmlText(cleanDate)}</div></div>
+      <div><div class="meta-k">Educator</div><div class="meta-v">Mr. Haitham Hussien</div></div>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi-card mark">
+        <div class="kpi-lbl">Mark Awarded</div>
+        <div class="kpi-big">${report.earnedMarks} <span>/ ${report.totalMarks} (${report.percentage}%)</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-lbl">Grading System &middot; ${escapeHtmlText(sysLabel)}</div>
+        <div class="kpi-grade">${escapeHtmlText(report.grade)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-lbl">Question Summary (${report.questions.length} Qs)</div>
+        <div class="kpi-breakdown">
+          <strong>${correctCount}</strong> Full Marks &middot; <strong>${partialCount}</strong> Partial<br/>
+          <strong>${missedCount}</strong> Needs Review
+        </div>
+      </div>
+    </div>
+
+    ${criterionHtml}
+
+    <div class="summary-grid">
+      <div class="sum-box">
+        <div class="sum-title">Overall Performance Overview</div>
+        <div>${escapeHtmlText(report.generalFeedback || 'Detailed question-by-question evaluation follows below.')}</div>
+      </div>
+      <div class="sum-box note">
+        <div class="sum-title">Mr. Haitham&apos;s Note for Student &amp; Parent</div>
+        <div>${escapeHtmlText(
+          cleanBodyNote ||
+            report.diagnosticReview ||
+            `Well done submitting your work, ${report.studentName}. Please review any missed or partial steps together using the complete solutions below.`
+        )}</div>
+      </div>
+    </div>
+
+    <h2 class="section-hdr">Detailed Question-by-Question Review (${report.questions.length} Questions)</h2>
+    ${questionBlocks}
+
+    <div class="doc-foot">
+      Official Report &middot; Mr. Haitham Hussien Mathematics &middot; Parent &amp; Student Copy
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function printStandaloneParentReport(
+  report: HomeworkGradingReport,
+  teacherNote?: string,
+  resolvedCourseTitle?: string
+) {
+  const html = buildStandaloneParentReportHtml(report, teacherNote, resolvedCourseTitle);
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow?.document;
+  if (!doc || !iframe.contentWindow) {
+    document.body.removeChild(iframe);
+    window.print();
+    return;
+  }
+  doc.open();
+  doc.write(html);
+  doc.close();
+  setTimeout(() => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } finally {
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1500);
+    }
+  }, 250);
 }
 
 export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
-  onSwitchToNotebook,
-  onSwitchToModelKey,
-  onSwitchToNotebookLM,
+  courseId = 'ol-cambridge',
   courseTitle,
   courseCode,
-  defaultStudentName,
+  defaultStudentName = '',
+  userRole = 'student',
+  studentId = 1,
+  studentUsername = 'student01',
+  viewerUserId,
+  focusSubmissionId = null,
+  onClearFocusSubmission,
+  onNotificationsUpdated,
+  onSwitchToModelKey,
 }) => {
-  // Model Answer Key Management State (allows adding ANY model answer, PDF or text)
+  const isTeacher = userRole === 'teacher';
+  const isParent = userRole === 'parent';
+  const effectiveViewerUserId = viewerUserId ?? (isTeacher ? 999 : studentId);
+
+  // Common notifications
+  const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [portalNotifications, setPortalNotifications] = useState<PortalNotification[]>([]);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+
+  // Educator-only tabs & Model Key state
+  const [teacherMode, setTeacherMode] = useState<'inbox' | 'assign' | 'direct'>('inbox');
   const [activeModelKey, setActiveModelKey] = useState<ModelAnswerKeyData>(PEARSON_EDEXCEL_EXAM_1_KEY);
+
+  // Per-Group Assigned Homework state (Teacher Assigns -> Student Dropdown + Email + In-Site Notification)
+  const [groupAssignments, setGroupAssignments] = useState<HomeworkAssignmentRecord[]>([]);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>('');
+  const [assignGroupId, setAssignGroupId] = useState<string>(courseId || COURSES[0]?.id || 'year-9');
+  const [assignTitle, setAssignTitle] = useState<string>('');
+  const [assignDueDate, setAssignDueDate] = useState<string>('');
+  const [assignInstructions, setAssignInstructions] = useState<string>('');
+  const [assignGradingSystem, setAssignGradingSystem] = useState<GradingSystem>('edexcel');
+  const [assignNotifyEmails, setAssignNotifyEmails] = useState<string>('');
+  const [assignSendNotifications, setAssignSendNotifications] = useState<boolean>(true);
+  const [isSavingAssignment, setIsSavingAssignment] = useState<boolean>(false);
+  const [inboxCourseFilter, setInboxCourseFilter] = useState<string>('all');
   const [isModelKeyModalOpen, setIsModelKeyModalOpen] = useState(false);
   const [editingKeyTitle, setEditingKeyTitle] = useState(PEARSON_EDEXCEL_EXAM_1_KEY.title);
   const [editingKeyText, setEditingKeyText] = useState(PEARSON_EDEXCEL_EXAM_1_KEY.text);
-  const [selectedTemplate, setSelectedTemplate] = useState('edexcel_monthly_1');
-  const [showKeyPreview, setShowKeyPreview] = useState(false);
-  const [isUploadingKeyPdf, setIsUploadingKeyPdf] = useState(false);
   const [modelKeyFileBase64, setModelKeyFileBase64] = useState<string | null>(null);
+  const [isUploadingKeyPdf, setIsUploadingKeyPdf] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('edexcel_exam1');
+  const keyFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Portal starts clean for uploading student homework (all test materials wiped)
-  const [studentName, setStudentName] = useState(defaultStudentName || '');
-  const [studentId, setStudentId] = useState(`IGCSE-2026-${Math.floor(100 + Math.random() * 900)}`);
-  const [assignment, setAssignment] = useState(courseTitle ? `${courseTitle} — Homework` : DEFAULT_CAMBRIDGE_BIDMAS_KEY.title);
+  // Shared upload / scratchpad state (Student homework upload OR Teacher direct check upload)
+  const [assignment, setAssignment] = useState(
+    courseTitle ? `${courseTitle} — Homework Assignment` : 'IGCSE Mathematics Homework'
+  );
+  const [studentName, setStudentName] = useState(defaultStudentName);
+  const [inputMode, setInputMode] = useState<'upload' | 'type' | 'canvas'>('upload');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [fileMimeType, setFileMimeType] = useState<string | null>(null);
   const [pageImages, setPageImages] = useState<RenderedPageImage[]>([]);
   const [isRenderingPages, setIsRenderingPages] = useState(false);
-  const [pdfPageInfo, setPdfPageInfo] = useState<{ totalPages: number; truncated: boolean } | null>(null);
+  const [pdfPageInfo, setPdfPageInfo] = useState<{ total: number; rendered: number; a3Spreads?: number } | null>(null);
   const [contrastBoost, setContrastBoost] = useState(false);
-  const [precisionMode, setPrecisionMode] = useState<'deep' | 'max'>('deep');
-  const [customTextWorking, setCustomTextWorking] = useState<string>('');
-  const [inputMode, setInputMode] = useState<'upload' | 'type' | 'draw'>('upload');
-  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
-  const [isGrading, setIsGrading] = useState(false);
-  const [report, setReport] = useState<HomeworkGradingReport | null>(null);
-  const [showPdfModal, setShowPdfModal] = useState(false);
-  const [pdfModalType, setPdfModalType] = useState<'student' | 'model' | 'custom'>('model');
-  const [pdfModalUrl, setPdfModalUrl] = useState<string>('/assets/aistudio/order-of-operations-model-answer-key_202610250939_18187_be349899.pdf');
-  const [viewStyle, setViewStyle] = useState<'notebookTable' | 'detailedCards'>('notebookTable');
-  const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
-  const [questionFilter, setQuestionFilter] = useState<'all' | 'correct' | 'review'>('all');
-  
-  // Unified Multi-Repository Engine Pool & Humane Theme states
-  const [isProcessingPool, setIsProcessingPool] = useState(false);
-  const [poolTelemetry, setPoolTelemetry] = useState<any | null>(null);
-  const [themeMode, setThemeMode] = useState<'slate' | 'paper'>('slate');
-
+  const [a3SplitMode, setA3SplitMode] = useState<'auto' | 'off'>('auto');
+  const [customTextWorking, setCustomTextWorking] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const keyFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch active model key from server on initial mount
+  // Submissions & Reports state
+  const [submissions, setSubmissions] = useState<StoredSubmission[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
+  const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState<StoredSubmission | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [isSubmittingHomework, setIsSubmittingHomework] = useState(false);
+
+  // Student preview toggle for pending submissions
+  const [showStudentUploadedPages, setShowStudentUploadedPages] = useState(false);
+
+  // Educator Inbox editing / marking state
+  const [inboxFilter, setInboxFilter] = useState<'all' | 'pending' | 'graded'>('all');
+  const [precisionMode, setPrecisionMode] = useState<'deep' | 'max'>('deep');
+  const [gradingSystem, setGradingSystem] = useState<GradingSystem>('edexcel');
+  const [publishParentEmail, setPublishParentEmail] = useState('');
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [isPublishingReport, setIsPublishingReport] = useState(false);
+  const [editableReport, setEditableReport] = useState<HomeworkGradingReport | null>(null);
+  const [teacherNoteInput, setTeacherNoteInput] = useState('');
+
+  // Educator Direct Quick Check state
+  const [directReport, setDirectReport] = useState<HomeworkGradingReport | null>(null);
+  const [isDirectGrading, setIsDirectGrading] = useState(false);
+
+  // Report display helpers
+  const [viewStyle, setViewStyle] = useState<'table' | 'cards'>(isParent ? 'cards' : 'table');
+  const [showParentPreview, setShowParentPreview] = useState(false);
+  const [questionFilter, setQuestionFilter] = useState<'all' | 'incorrect' | 'correct'>('all');
+  const [collapsedQuestions, setCollapsedQuestions] = useState<Record<number, boolean>>({});
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+  const showToast = (type: 'success' | 'error' | 'info', text: string, duration = 5000) => {
+    setNotice({ type, text });
+    if (duration > 0) {
+      setTimeout(() => setNotice(null), duration);
+    }
+  };
+
+  // Load Educator-only active model key ONLY when signed in as teacher
   useEffect(() => {
+    if (!isTeacher) return;
     fetch(apiUrl('/api/model-key/active'))
-      .then((res) => {
-        const ct = res.headers.get('content-type') || '';
-        if (res.ok && ct.includes('application/json')) return res.json();
-        return null;
-      })
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && data.success && data.modelKey) {
+        if (data?.success && data.modelKey) {
           setActiveModelKey(data.modelKey);
           setEditingKeyTitle(data.modelKey.title);
           setEditingKeyText(data.modelKey.text);
-          setAssignment(data.modelKey.title);
         }
       })
       .catch(() => {});
-  }, []);
+  }, [isTeacher]);
 
-  // Student question ask state
-  const [studentQuery, setStudentQuery] = useState('');
-  const [tutorReply, setTutorReply] = useState<string | null>(null);
-  const [isAskingTutor, setIsAskingTutor] = useState(false);
+  const loadAssignments = useCallback(async () => {
+    try {
+      const url = isTeacher
+        ? apiUrl('/api/assignments')
+        : apiUrl(`/api/assignments?courseId=${encodeURIComponent(courseId)}`);
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const list: HomeworkAssignmentRecord[] = Array.isArray(data?.assignments) ? data.assignments : [];
+        setGroupAssignments((prev) => {
+          const prevSig = prev.map((a) => `${a.id}:${a.title}:${a.dueDate}`).join('|');
+          const nextSig = list.map((a) => `${a.id}:${a.title}:${a.dueDate}`).join('|');
+          return prevSig === nextSig ? prev : list;
+        });
+        if (!isTeacher && list.length > 0 && !selectedAssignmentId) {
+          setSelectedAssignmentId(list[0].id);
+          setAssignment(list[0].title);
+        }
+      }
+    } catch {
+      // ignore transient errors
+    }
+  }, [isTeacher, courseId, selectedAssignmentId]);
 
-  // Complete portal reset / clear action: deletes all uploaded files and old reports
-  const handleResetPortal = () => {
-    setReport(null);
+  const loadPortalNotifications = useCallback(async () => {
+    try {
+      const roleParam = encodeURIComponent(userRole || 'student');
+      const courseParam = !isTeacher && courseId ? `&courseId=${encodeURIComponent(courseId)}` : '';
+      const studentParam = !isTeacher && studentId ? `&studentId=${studentId}` : '';
+      const res = await fetch(apiUrl(`/api/notifications?role=${roleParam}${courseParam}${studentParam}`));
+      if (res.ok) {
+        const data = await res.json();
+        const items: PortalNotification[] = Array.isArray(data?.notifications) ? data.notifications : [];
+        setPortalNotifications((prev) => {
+          const prevSig = prev.map((n) => `${n.id}:${n.readByUserIds.join(',')}`).join('|');
+          const nextSig = items.map((n) => `${n.id}:${n.readByUserIds.join(',')}`).join('|');
+          return prevSig === nextSig ? prev : items;
+        });
+      }
+    } catch {
+      // ignore transient errors
+    }
+  }, [isTeacher, userRole, courseId, studentId]);
+
+  useEffect(() => {
+    loadAssignments();
+    loadPortalNotifications();
+  }, [loadAssignments, loadPortalNotifications]);
+
+  const handleMarkPortalNotificationRead = async (notifId: string) => {
+    setPortalNotifications((prev) =>
+      prev.map((n) =>
+        n.id === notifId && !n.readByUserIds.includes(effectiveViewerUserId)
+          ? { ...n, readByUserIds: [...n.readByUserIds, effectiveViewerUserId] }
+          : n
+      )
+    );
+    await fetch(apiUrl(`/api/notifications/${notifId}/read`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: effectiveViewerUserId }),
+    }).catch(() => {});
+    onNotificationsUpdated?.();
+  };
+
+  const handleMarkAllPortalNotificationsRead = async () => {
+    const unread = portalNotifications.filter((n) => !n.readByUserIds.includes(effectiveViewerUserId));
+    if (unread.length === 0) return;
+    setPortalNotifications((prev) =>
+      prev.map((n) =>
+        !n.readByUserIds.includes(effectiveViewerUserId)
+          ? { ...n, readByUserIds: [...n.readByUserIds, effectiveViewerUserId] }
+          : n
+      )
+    );
+    await Promise.all(
+      unread.map((n) =>
+        fetch(apiUrl(`/api/notifications/${n.id}/read`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: effectiveViewerUserId }),
+        }).catch(() => {})
+      )
+    );
+    onNotificationsUpdated?.();
+  };
+
+  const handleSelectHomeworkFromNotification = async (notif: PortalNotification) => {
+    const strippedTitle = notif.title.replace(/^New Homework:\s*/i, '').trim().toLowerCase();
+    const matched =
+      groupAssignments.find((a) => a.title.trim().toLowerCase() === strippedTitle) ||
+      groupAssignments.find((a) => notif.dueDate && a.dueDate === notif.dueDate) ||
+      groupAssignments[0];
+    if (matched) {
+      setSelectedAssignmentId(matched.id);
+      setAssignment(matched.title);
+      showToast('info', `Selected homework "${matched.title}" for submission.`);
+    }
+    await handleMarkPortalNotificationRead(notif.id);
+  };
+
+  const handleCreateGroupAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignTitle.trim() || !assignGroupId) return;
+    const courseObj = COURSES.find((c) => c.id === assignGroupId);
+    setIsSavingAssignment(true);
+    try {
+      const res = await fetch(apiUrl('/api/assignments'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: assignGroupId,
+          courseTitle: courseObj?.name || assignGroupId,
+          title: assignTitle.trim(),
+          instructions: assignInstructions.trim(),
+          dueDate: assignDueDate,
+          gradingSystem: assignGradingSystem,
+          sendNotification: assignSendNotifications,
+          notifyEmails: assignNotifyEmails.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Could not assign homework.');
+      }
+      const sentLive = (data?.emailDeliveries || []).filter((d: any) => d.status === 'sent').length;
+      const loggedCount = (data?.emailDeliveries || []).length;
+      showToast(
+        'success',
+        `Homework "${data.assignment.title}" assigned to ${data.assignment.courseTitle}!${
+          assignSendNotifications
+            ? ` Website alert posted + ${sentLive > 0 ? `${sentLive} email(s) sent via Resend` : `${loggedCount} notification(s) logged in Outbox`}.`
+            : ''
+        }`
+      );
+      setAssignTitle('');
+      setAssignDueDate('');
+      setAssignInstructions('');
+      setAssignNotifyEmails('');
+      await loadAssignments();
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to save assignment.');
+    } finally {
+      setIsSavingAssignment(false);
+    }
+  };
+
+  const handleDeleteGroupAssignment = async (id: string) => {
+    const res = await fetch(apiUrl(`/api/assignments/${id}`), { method: 'DELETE' });
+    if (res.ok) {
+      await loadAssignments();
+      showToast('info', 'Assigned homework removed.');
+    }
+  };
+
+  // Load submissions list (teacher sees full inbox; student sees only their own submissions)
+  const loadSubmissions = useCallback(
+    async (selectIdAfter?: string, silent = false) => {
+      if (!silent) setLoadingSubmissions(true);
+      try {
+        const url = isTeacher
+          ? apiUrl('/api/submissions?role=teacher')
+          : isParent
+          ? apiUrl(`/api/submissions?role=parent&studentId=${studentId}`)
+          : apiUrl(`/api/submissions?role=student&studentId=${studentId}&courseId=${encodeURIComponent(courseId)}`);
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          const list: StoredSubmission[] = Array.isArray(data?.submissions) ? data.submissions : [];
+          setSubmissions((prev) => {
+            if (
+              silent &&
+              prev.length === list.length &&
+              prev.every(
+                (p, i) =>
+                  p.id === list[i].id &&
+                  p.status === list[i].status &&
+                  p.draftStatus === list[i].draftStatus &&
+                  Boolean(p.draftReport) === Boolean(list[i].draftReport)
+              )
+            ) {
+              return prev;
+            }
+            return list;
+          });
+          if (selectIdAfter) {
+            setSelectedSubmissionId(selectIdAfter);
+          } else if (list.length > 0 && !selectedSubmissionId) {
+            setSelectedSubmissionId(list[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load submissions:', err);
+      } finally {
+        if (!silent) setLoadingSubmissions(false);
+      }
+    },
+    [isTeacher, isParent, studentId, courseId, selectedSubmissionId]
+  );
+
+  useEffect(() => {
+    loadSubmissions();
+  }, [isTeacher, isParent, studentId, courseId]);
+
+  useEffect(() => {
+    if (!isTeacher || !focusSubmissionId) return;
+    setTeacherMode('inbox');
+    setSelectedSubmissionId(focusSubmissionId);
+    loadSubmissions(focusSubmissionId, true);
+    onClearFocusSubmission?.();
+  }, [isTeacher, focusSubmissionId, loadSubmissions, onClearFocusSubmission]);
+
+  // Silent background refresh for notifications, assignments, and teacher inbox submissions
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadPortalNotifications();
+      if (isTeacher) {
+        loadSubmissions(undefined, true);
+      } else {
+        loadAssignments();
+      }
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [isTeacher, loadAssignments, loadPortalNotifications, loadSubmissions]);
+
+  const handleOpenSubmissionFromNotification = async (notif: PortalNotification) => {
+    if (notif.submissionId) {
+      setTeacherMode('inbox');
+      setInboxCourseFilter('all');
+      setInboxFilter('all');
+      await loadSubmissions(notif.submissionId, true);
+      setSelectedSubmissionId(notif.submissionId);
+    }
+    await handleMarkPortalNotificationRead(notif.id);
+  };
+
+  // Load full details (including pageImages) when a submission is selected
+  const loadSubmissionDetail = useCallback(
+    async (subId: string | null, silent = false) => {
+      if (!subId) {
+        setSelectedSubmissionDetail(null);
+        setEditableReport(null);
+        setTeacherNoteInput('');
+        return;
+      }
+      if (!silent) {
+        setLoadingDetail(true);
+        setShowStudentUploadedPages(false);
+      }
+      try {
+        const roleParam = isTeacher ? 'teacher' : isParent ? 'parent' : 'student';
+        const res = await fetch(apiUrl(`/api/submissions/${subId}?role=${roleParam}`));
+        if (res.ok) {
+          const data = await res.json();
+          const sub: StoredSubmission | null = data?.submission || null;
+          setSelectedSubmissionDetail((prev) => {
+            if (
+              silent &&
+              prev &&
+              sub &&
+              prev.id === sub.id &&
+              prev.status === sub.status &&
+              prev.draftStatus === sub.draftStatus &&
+              prev.draftError === sub.draftError &&
+              Boolean(prev.draftReport) === Boolean(sub.draftReport) &&
+              Boolean(prev.publishedReport) === Boolean(sub.publishedReport)
+            ) {
+              return prev;
+            }
+            return sub;
+          });
+          if (isTeacher && sub) {
+            const seedReport = sub.publishedReport || sub.draftReport || null;
+            if (!silent || seedReport) {
+              setEditableReport((prev) =>
+                silent && prev && prev.questions?.length ? prev : seedReport ? recalculateReportTotals(seedReport) : null
+              );
+            }
+            if (!silent) {
+              setTeacherNoteInput(sub.teacherNote || '');
+              setGradingSystem((seedReport?.gradingSystem as GradingSystem) || (sub as any)?.gradingSystem || 'edexcel');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load submission detail:', err);
+      } finally {
+        if (!silent) setLoadingDetail(false);
+      }
+    },
+    [isTeacher, isParent]
+  );
+
+  useEffect(() => {
+    loadSubmissionDetail(selectedSubmissionId, false);
+  }, [selectedSubmissionId, loadSubmissionDetail]);
+
+  // Silent background poll while auto-correction draft is running (never unmounts UI or flashes thumbnails)
+  const hasGeneratingDraft =
+    isTeacher &&
+    (selectedSubmissionDetail?.draftStatus === 'queued' ||
+      selectedSubmissionDetail?.draftStatus === 'generating' ||
+      submissions.some((s) => s.status === 'pending' && (s.draftStatus === 'queued' || s.draftStatus === 'generating')));
+
+  useEffect(() => {
+    if (!hasGeneratingDraft) return;
+    const timer = setInterval(() => {
+      loadSubmissions(undefined, true);
+      if (selectedSubmissionId) {
+        loadSubmissionDetail(selectedSubmissionId, true);
+      }
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [hasGeneratingDraft, selectedSubmissionId, loadSubmissionDetail, loadSubmissions]);
+
+  // Process uploaded PDF/Image into clean JPEG pages
+  const processUploadedFile = async (file: File, enhanceContrast: boolean) => {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/');
+
+    setIsRenderingPages(true);
+    setPageImages([]);
+    setPdfPageInfo(null);
+
+    try {
+      if (isPdf) {
+        const rendered = await renderPdfPagesToImages(file, {
+          maxPages: 12,
+          quality: 0.9,
+          contrastBoost: enhanceContrast,
+          a3SplitMode,
+        });
+        setPageImages(rendered.pageImages);
+        setPdfPageInfo({
+          total: rendered.totalPages,
+          rendered: rendered.pageImages.length,
+          a3Spreads: rendered.a3SpreadCount || 0,
+        });
+        setFileBase64(null);
+      } else if (isImage) {
+        const page = await loadImageForGrading(file, {
+          maxDimension: 1850,
+          contrastBoost: enhanceContrast,
+          quality: 0.9,
+        });
+        setPageImages([page]);
+        setPdfPageInfo({ total: 1, rendered: 1 });
+        setFileBase64(null);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => setFileBase64((ev.target?.result as string) || null);
+        reader.readAsDataURL(file);
+      }
+    } catch (err: any) {
+      console.error('File processing failed:', err);
+      showToast('error', `Could not read pages from "${file.name}". Try a clearer PDF or image.`);
+    } finally {
+      setIsRenderingPages(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    setFileMimeType(file.type || 'application/pdf');
+    await processUploadedFile(file, contrastBoost);
+  };
+
+  const handleToggleContrastBoost = async () => {
+    const next = !contrastBoost;
+    setContrastBoost(next);
+    if (selectedFile) {
+      await processUploadedFile(selectedFile, next);
+    }
+  };
+
+  const handleRotatePage = async (pageIndex: number) => {
+    const target = pageImages[pageIndex];
+    if (!target) return;
+    try {
+      const rotated = await rotateImageDataUrl(target.dataUrl, 90);
+      setPageImages((prev) =>
+        prev.map((p, idx) =>
+          idx === pageIndex ? { ...p, dataUrl: rotated.dataUrl, width: rotated.width, height: rotated.height } : p
+        )
+      );
+    } catch (err) {
+      console.error('Failed to rotate page:', err);
+    }
+  };
+
+  const handleClearUpload = () => {
     setSelectedFile(null);
     setFileBase64(null);
     setFileMimeType(null);
@@ -138,328 +1029,67 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     setPdfPageInfo(null);
     setContrastBoost(false);
     setCustomTextWorking('');
-    setStudentName(defaultStudentName || '');
-    setStudentId(`IGCSE-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
-    setStudentQuery('');
-    setTutorReply(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    setRefreshNotice('All previous homework cleared! Ready to upload and test new student homework.');
-    setTimeout(() => {
-      setRefreshNotice(null);
-    }, 4500);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Render an uploaded PDF or photo into crisp high-DPI upright JPEG pages for Ultra-High Vision grading
-  const processStudentFile = async (file: File, enhanceContrast: boolean) => {
-    const cleanBaseName = file.name
-      .replace(/\.[^/.]+$/, '')
-      .replace(/[_-]/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-      .trim();
-
-    if (file.type.startsWith('text/') || file.name.endsWith('.txt')) {
-      setPageImages([]);
-      setPdfPageInfo(null);
-      setFileBase64(null);
-      setFileMimeType(null);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        setCustomTextWorking(text || '');
-      };
-      reader.readAsText(file);
+  // Student submits homework -> stored cleanly as 'pending' (no automated grading shown to student)
+  const handleStudentSubmitHomework = async () => {
+    if (pageImages.length === 0 && !fileBase64 && !customTextWorking.trim()) {
+      showToast('error', 'Please upload a PDF/photo or write your working before submitting.');
       return;
     }
 
-    if (file.type.startsWith('image/')) {
-      setIsRenderingPages(true);
-      setPdfPageInfo(null);
-      try {
-        const rendered = await loadImageForGrading(file, {
-          maxDimension: 2200,
-          quality: 0.92,
-          contrastBoost: enhanceContrast,
-        });
-        setPageImages([rendered]);
-        setFileBase64(rendered.dataUrl);
-        setFileMimeType('image/jpeg');
-        setRefreshNotice(`Loaded HD image (${rendered.width}×${rendered.height}px) for ${cleanBaseName || 'Student'}.`);
-      } catch {
-        setRefreshNotice(`Loaded "${file.name}" for ${cleanBaseName || 'Student'}.`);
-      } finally {
-        setIsRenderingPages(false);
-        setTimeout(() => setRefreshNotice(null), 4000);
-      }
-      return;
-    }
-
-    // PDF upload: render every page at high resolution so Gemini sees 2,240 tokens/page (ULTRA_HIGH) instead of 560 tokens/page
-    setIsRenderingPages(true);
-    setPageImages([]);
-    setPdfPageInfo(null);
-    setRefreshNotice(`Rendering HD page images from "${file.name}" for Ultra-High handwriting vision...`);
+    setIsSubmittingHomework(true);
     try {
-      const rendered = await renderPdfPagesToImages(file, {
-        maxPages: 16,
-        quality: 0.91,
-        contrastBoost: enhanceContrast,
-      });
-      setPageImages(rendered.pageImages);
-      setPdfPageInfo({ totalPages: rendered.totalPages, truncated: rendered.truncated });
-      setFileBase64(null);
-      setFileMimeType('application/pdf');
-      setRefreshNotice(
-        `Rendered ${rendered.pageImages.length}${rendered.truncated ? ` of ${rendered.totalPages}` : ''} HD page(s) from "${file.name}" — ready for 2-Pass AI Vision.`
-      );
-      setTimeout(() => setRefreshNotice(null), 5000);
-    } catch (pdfErr) {
-      console.warn('Client PDF page rendering failed, falling back to raw PDF upload:', pdfErr);
-      setPageImages([]);
-      setPdfPageInfo(null);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setFileBase64(base64);
-        setFileMimeType(file.type || 'application/pdf');
-      };
-      reader.readAsDataURL(file);
-      setRefreshNotice(`Loaded "${file.name}" (PDF high-res fallback). Ready for AI checking.`);
-      setTimeout(() => setRefreshNotice(null), 4000);
-    } finally {
-      setIsRenderingPages(false);
-    }
-  };
-
-  // Handle file selection from disk (e.g. adam bardana.pdf)
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setSelectedFile(file);
-    setReport(null); // Clear previous report so fresh check is ready
-
-    const cleanBaseName = file.name
-      .replace(/\.[^/.]+$/, '')
-      .replace(/[_-]/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-      .trim();
-
-    setStudentName(cleanBaseName || 'Student Submission');
-    processStudentFile(file, contrastBoost);
-  };
-
-  // Rotate one rendered page (or all pages) 90 deg clockwise so sideways scans are upright before Gemini reads them
-  const handleRotatePage = async (pageIndex: number) => {
-    const target = pageImages[pageIndex];
-    if (!target) return;
-    try {
-      const rotated = await rotateImageDataUrl(target.dataUrl, 90, 0.92);
-      setPageImages((prev) =>
-        prev.map((p, idx) =>
-          idx === pageIndex
-            ? {
-                ...p,
-                dataUrl: rotated.dataUrl,
-                width: rotated.width,
-                height: rotated.height,
-                rotation: (p.rotation + 90) % 360,
-              }
-            : p
-        )
-      );
-    } catch (err) {
-      console.error('Rotate page failed:', err);
-    }
-  };
-
-  const handleRotateAllPages = async () => {
-    if (pageImages.length === 0) return;
-    const updated = await Promise.all(
-      pageImages.map(async (p) => {
-        const rotated = await rotateImageDataUrl(p.dataUrl, 90, 0.92);
-        return {
-          ...p,
-          dataUrl: rotated.dataUrl,
-          width: rotated.width,
-          height: rotated.height,
-          rotation: (p.rotation + 90) % 360,
-        };
-      })
-    );
-    setPageImages(updated);
-  };
-
-  const handleToggleContrastBoost = () => {
-    const next = !contrastBoost;
-    setContrastBoost(next);
-    if (selectedFile && (selectedFile.type.startsWith('image/') || selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf'))) {
-      processStudentFile(selectedFile, next);
-    }
-  };
-
-  // Remove uploaded file
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
-    setFileBase64(null);
-    setFileMimeType(null);
-    setPageImages([]);
-    setPdfPageInfo(null);
-    setCustomTextWorking('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    setReport(null);
-    setRefreshNotice('Uploaded file removed.');
-    setTimeout(() => setRefreshNotice(null), 3000);
-  };
-
-  // Run homework grading for whatever student file or typed answers are submitted
-  const handleCheckHomeworkForStudent = async (
-    overrideStudentName?: string,
-    overrideFileName?: string,
-    overrideScenario?: string,
-    overrideSubmissionText?: string
-  ) => {
-    setIsGrading(true);
-    setTutorReply(null);
-
-    try {
-      const cleanFileBase = selectedFile
-        ? selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
-        : '';
-      const targetStudentName = (overrideStudentName || studentName).trim() || cleanFileBase || 'Student Submission';
-      const targetFileName =
-        overrideFileName ||
-        selectedFile?.name ||
-        (customTextWorking.trim() ? 'Student_Typed_Answers.txt' : 'homework_submission.pdf');
-
-      const submissionText =
-        overrideSubmissionText ||
-        customTextWorking ||
-        `Student: ${targetStudentName}\nUploaded Homework Worksheet: ${targetFileName}\nEvaluated according to Cambridge IGCSE BIDMAS Mark Scheme standards.`;
-
-      const scenario = overrideScenario || 'custom';
-
-      // Grading is done by Gemini Flash on the server. Never fall back to the
-      // in-browser regex "5-repo" engine: it cannot read handwriting and shows fake marks.
-      const res = await fetch(apiUrl('/api/homework/grade'), {
+      const selectedHw = groupAssignments.find((a) => a.id === selectedAssignmentId) || null;
+      const res = await fetch(apiUrl('/api/submissions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          studentName: targetStudentName,
-          assignment: activeModelKey.title,
-          submissionText,
-          modelAnswerKey: activeModelKey.text,
-          modelAnswerTitle: activeModelKey.title,
-          // The key PDF was already extracted into activeModelKey.text on upload; only resend it if that failed.
-          modelKeyFileBase64: activeModelKey.text?.trim() ? null : modelKeyFileBase64 || null,
-          useSampleSubmission: false,
-          scenario,
-          fileName: targetFileName,
-          fileBase64: pageImages.length > 0 ? null : fileBase64 || null,
+          studentId,
+          studentUsername,
+          studentName: studentName.trim() || defaultStudentName || 'Student',
+          courseId,
+          courseTitle: courseTitle || 'IGCSE Mathematics',
+          assignmentId: selectedHw?.id || null,
+          dueDate: selectedHw?.dueDate || null,
+          gradingSystem: selectedHw?.gradingSystem || 'edexcel',
+          assignment: assignment.trim() || selectedHw?.title || 'Homework Submission',
+          submissionText: customTextWorking.trim(),
+          fileName: selectedFile?.name || (customTextWorking.trim() ? 'Typed_Working.txt' : null),
+          fileBase64: pageImages.length > 0 ? null : fileBase64,
           fileMimeType: fileMimeType || null,
-          pageImages:
-            pageImages.length > 0
-              ? pageImages.map((p) => ({
-                  pageNumber: p.pageNumber,
-                  dataUrl: p.dataUrl,
-                  mimeType: p.mimeType,
-                }))
-              : null,
-          precisionMode,
+          a3SpreadCount: pdfPageInfo?.a3Spreads || 0,
+          pageImages: pageImages.map((p) => ({
+            pageNumber: p.pageNumber,
+            sourcePageNumber: p.sourcePageNumber,
+            tilePosition: p.tilePosition,
+            pageFormat: p.pageFormat,
+            dataUrl: p.dataUrl,
+            mimeType: p.mimeType,
+          })),
         }),
       });
 
-      const contentType = res.headers.get('content-type') || '';
-      const data = contentType.includes('application/json') ? await res.json() : null;
-      if (!res.ok || !data || data.error || !data.report) {
-        setReport(null);
-        let reason = data?.error || `server returned ${res.status}`;
-        if ((res.status === 404 || res.status === 405) && !getApiBaseUrl()) {
-          reason = 'no grading backend URL is configured for this static site (set VITE_API_BASE_URL to your Railway/Render server).';
-        }
-        if (res.status === 413) reason = 'the uploaded file is too large (max ~4 MB). Please upload a smaller photo or PDF.';
-        if (res.status === 502 || res.status === 504) reason = data?.error || 'Gemini took too long to respond. Please try again.';
-        setRefreshNotice(`❌ Grading failed: ${reason}`);
-        return false;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success || !data.submission) {
+        throw new Error(data?.error || `Server error (${res.status})`);
       }
 
-      setReport(data.report);
-      if (data.report.pdfUrl) {
-        setPdfModalUrl(data.report.pdfUrl);
-        setPdfModalType('model');
-      }
-      return true;
-    } catch (e: any) {
-      console.error('Grading execution error:', e);
-      setReport(null);
-      setRefreshNotice(`❌ Grading failed: could not reach the grading server (${e?.message || e}).`);
-      return false;
-    } finally {
-      setIsGrading(false);
-    }
-  };
-
-  const handleCheckHomework = () => {
-    return handleCheckHomeworkForStudent();
-  };
-
-  // Run all 5 integrated repositories in a single combined pool pipeline
-  const handleRunUnifiedPool = async () => {
-    setIsProcessingPool(true);
-    setRefreshNotice('Initializing Unified Multi-Repository Engine Pool: [1. AutoMark CV] → [2. CNN Equation Solver] → [3. Pix2Text OCR] → [4. Vision AI] → [5. Cambridge Rubric]...');
-    try {
-      const cleanFileBase = selectedFile
-        ? selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
-        : '';
-      const targetStudentName = (studentName || cleanFileBase || 'Student Submission').trim();
-      const targetFileName = selectedFile?.name || (customTextWorking.trim() ? 'Student_Typed_Answers.txt' : 'homework_submission.pdf');
-      const submissionText = customTextWorking || `Student: ${targetStudentName}\nUploaded Homework Worksheet: ${targetFileName}\nAssignment: ${activeModelKey.title}`;
-
-      try {
-        const res = await fetch(apiUrl('/api/unified-pool/process'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentName: targetStudentName,
-            submissionText,
-            fileBase64: fileBase64 || null,
-            fileMimeType: fileMimeType || null,
-            fileName: targetFileName,
-            modelAnswerKey: activeModelKey.text,
-            modelAnswerTitle: activeModelKey.title,
-            modelKeyFileBase64: modelKeyFileBase64 || null,
-            formCode: 'CUSTOM-OR-BIDMAS',
-            provider: 'gemini',
-          }),
-        });
-
-        const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data.unifiedPool) {
-            setPoolTelemetry(data.unifiedPool);
-          }
-        }
-      } catch (poolErr) {
-        console.warn('Unified pool endpoint unreachable, continuing to grading evaluation:', poolErr);
-      }
-
-      const graded = await handleCheckHomeworkForStudent(targetStudentName, targetFileName, 'custom', submissionText);
-      if (graded) {
-        setRefreshNotice(`Graded by Gemini Flash.`);
-      }
+      handleClearUpload();
+      showToast(
+        'success',
+        'Your homework has been sent to Mr. Haitham Hussien! Check back under Reports once it is corrected.'
+      );
+      await loadSubmissions(data.submission.id);
     } catch (err: any) {
-      console.error(err);
-      await handleCheckHomework();
+      showToast('error', err?.message || 'Could not submit homework. Please try again.');
     } finally {
-      setIsProcessingPool(false);
+      setIsSubmittingHomework(false);
     }
   };
 
-  // Model Answer Key Management (Save, Reset, Import, Templates)
+  // Educator Model Key handlers
   const handleSaveModelKey = async (title: string, text: string) => {
     if (!text.trim()) return;
     try {
@@ -471,10 +1101,8 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       const data = await res.json();
       if (data.success && data.modelKey) {
         setActiveModelKey(data.modelKey);
-        setAssignment(data.modelKey.title);
         setIsModelKeyModalOpen(false);
-        setRefreshNotice(`Active Model Answer Key set to: "${data.modelKey.title}"`);
-        setTimeout(() => setRefreshNotice(null), 4000);
+        showToast('success', `Active Answer Key set to "${data.modelKey.title}".`);
       }
     } catch (err) {
       console.error(err);
@@ -489,74 +1117,52 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
         setActiveModelKey(data.modelKey);
         setEditingKeyTitle(data.modelKey.title);
         setEditingKeyText(data.modelKey.text);
-        setAssignment(data.modelKey.title);
-        setSelectedTemplate('bidmas');
+        setSelectedTemplate('edexcel_exam1');
         setIsModelKeyModalOpen(false);
-        setRefreshNotice('Reset to default Cambridge BIDMAS Model Key');
-        setTimeout(() => setRefreshNotice(null), 3000);
+        showToast('info', 'Reset to default Model Answer Key.');
       }
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleSelectTemplate = (templateId: string) => {
-    setSelectedTemplate(templateId);
-    const tmpl = MODEL_KEY_TEMPLATES[templateId];
-    if (tmpl) {
-      setEditingKeyTitle(tmpl.title);
-      setEditingKeyText(tmpl.text);
-    }
-  };
-
   const handleUploadKeyFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const cleanTitle = file.name
       .replace(/\.[^/.]+$/, '')
       .replace(/[_-]/g, ' ')
       .replace(/\b\w/g, (c) => c.toUpperCase())
       .trim();
 
-    setEditingKeyTitle(cleanTitle || 'Imported Model Answer Key');
-
     if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
       setIsUploadingKeyPdf(true);
-      setRefreshNotice(`Extracting worked solutions & mark schemes from "${file.name}"...`);
-
       const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
+      reader.onload = async (ev) => {
+        const base64 = ev.target?.result as string;
         setModelKeyFileBase64(base64);
         try {
           const res = await fetch(apiUrl('/api/model-key/upload-pdf'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileBase64: base64,
-              fileName: file.name,
-              title: cleanTitle,
-            }),
+            body: JSON.stringify({ fileBase64: base64, fileName: file.name, title: cleanTitle }),
           });
           const data = await res.json();
           if (data.success && data.modelKey) {
             setActiveModelKey(data.modelKey);
-            setModelKeyFileBase64(null); // extracted text is now the key; don't resend the PDF on every grade
+            setModelKeyFileBase64(null);
             setEditingKeyTitle(data.modelKey.title);
             setEditingKeyText(data.modelKey.text);
-            setAssignment(data.modelKey.title);
-            setSelectedTemplate('custom');
             setIsModelKeyModalOpen(false);
-            setReport(null);
-            setRefreshNotice(`✓ PDF Model Answer Key active: "${data.modelKey.title}" — ${data.modelKey.questionCount || 20} Questions (${data.modelKey.totalMarks || 75} Marks) ready for grading!`);
-            setTimeout(() => setRefreshNotice(null), 6000);
+            showToast(
+              'success',
+              `Model Answer Key "${data.modelKey.title}" loaded (${data.modelKey.questionCount} questions, ${data.modelKey.totalMarks} marks).`
+            );
           } else {
-            setRefreshNotice(data.error || 'Failed to extract text from PDF.');
+            showToast('error', data.error || 'Could not parse Answer Key PDF.');
           }
-        } catch (err: any) {
-          console.error(err);
-          setRefreshNotice('Failed to upload and parse model answer PDF.');
+        } catch {
+          showToast('error', 'Failed to upload Answer Key PDF.');
         } finally {
           setIsUploadingKeyPdf(false);
         }
@@ -564,9 +1170,10 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
       reader.readAsDataURL(file);
     } else {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
+      reader.onload = (ev) => {
+        const content = ev.target?.result as string;
         if (content) {
+          setEditingKeyTitle(cleanTitle || 'Imported Model Key');
           setEditingKeyText(content);
           setSelectedTemplate('custom');
         }
@@ -575,40 +1182,488 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
     }
   };
 
-  const handleAskTutor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!studentQuery.trim() || isAskingTutor) return;
-
-    setIsAskingTutor(true);
+  const handleCreateManualDraft = async () => {
+    if (!selectedSubmissionDetail) return;
+    setIsGeneratingDraft(true);
     try {
-      const res = await fetch(apiUrl('/api/gemini/grounded-chat'), {
+      const res = await fetch(apiUrl(`/api/submissions/${selectedSubmissionDetail.id}/manual-draft`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `Student question on IGCSE Math Order of Operations (BIDMAS): "${studentQuery}". Explain gently as teacher Mr. Haitham Hussien with step-by-step mathematical reasoning.`,
-          sources: [
-            {
-              id: 1,
-              title: 'Mr. Haitham Hussien BIDMAS Model Key',
-              content: 'Order of Operations: 1. Brackets, 2. Indices, 3. Division & Multiplication, 4. Addition & Subtraction.',
-            },
-          ],
-        }),
+        body: JSON.stringify({ gradingSystem }),
       });
-      const data = await res.json();
-      setTutorReply(data.reply || 'Please review the BIDMAS hierarchy: Brackets first, then Powers, then Multiplication/Division, then Addition/Subtraction.');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success || !data.report) {
+        throw new Error(data?.error || 'Could not create manual correction sheet.');
+      }
+      setEditableReport(recalculateReportTotals(data.report, gradingSystem));
+      showToast('info', 'Manual correction sheet ready! Fill in marks & notes and click Approve & Send.');
+      await loadSubmissions(selectedSubmissionDetail.id);
+      await loadSubmissionDetail(selectedSubmissionDetail.id);
     } catch (err: any) {
-      setTutorReply(`Tutor guidance: Remember that according to BIDMAS, brackets always take the highest priority, followed by powers (indices).`);
+      showToast('error', err?.message || 'Could not create manual sheet.');
     } finally {
-      setIsAskingTutor(false);
+      setIsGeneratingDraft(false);
     }
   };
 
+  // Educator Inbox: Generate Marking Draft behind the scenes
+  const handleGenerateSubmissionDraft = async () => {
+    if (!selectedSubmissionDetail) return;
+    setIsGeneratingDraft(true);
+    try {
+      const res = await fetch(apiUrl(`/api/submissions/${selectedSubmissionDetail.id}/draft-grade`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelAnswerKey: activeModelKey.text,
+          modelAnswerTitle: activeModelKey.title,
+          modelKeyFileBase64: activeModelKey.text?.trim() ? null : modelKeyFileBase64,
+          precisionMode,
+          gradingSystem,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success || !data.report) {
+        throw new Error(data?.error || `Server returned ${res.status}`);
+      }
+      setEditableReport(recalculateReportTotals(data.report, gradingSystem));
+      showToast('success', 'Correction draft prepared! Review or adjust marks below before sending to the student.');
+      await loadSubmissions(selectedSubmissionDetail.id, true);
+      await loadSubmissionDetail(selectedSubmissionDetail.id, true);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Could not generate correction draft.');
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  };
+
+  const handleUpdateEditableQuestion = (index: number, patch: Partial<QuestionGrading>) => {
+    setEditableReport((prev) => {
+      if (!prev) return prev;
+      const updated = prev.questions.map((q, idx) => (idx === index ? { ...q, ...patch } : q));
+      return recalculateReportTotals({ ...prev, questions: updated }, gradingSystem);
+    });
+  };
+
+  const handleAddEditableQuestion = () => {
+    setEditableReport((prev) => {
+      if (!prev) return prev;
+      const nextNum = prev.questions.length + 1;
+      const added: QuestionGrading = {
+        questionNumber: nextNum,
+        displayLabel: `Q${nextNum}`,
+        paperRef: prev.assignmentTitle || 'Homework',
+        prompt: `Question ${nextNum}`,
+        maxMarks: 2,
+        earnedMarks: 0,
+        markSchemeRef: '',
+        studentWorkingFound: '',
+        phase1Extraction: '',
+        errorAnalysis: '',
+        phase2ErrorAnalysis: '',
+        modelSolution: '',
+        phase3Solution: '',
+        status: 'incorrect',
+        statusLabel: 'INCORRECT',
+        teacherFeedback: '',
+      };
+      return recalculateReportTotals({ ...prev, questions: [...prev.questions, added] }, gradingSystem);
+    });
+  };
+
+  const handleRemoveEditableQuestion = (index: number) => {
+    setEditableReport((prev) => {
+      if (!prev || prev.questions.length <= 1) return prev;
+      const filtered = prev.questions
+        .filter((_, idx) => idx !== index)
+        .map((q, idx) => ({ ...q, questionNumber: idx + 1 }));
+      return recalculateReportTotals({ ...prev, questions: filtered }, gradingSystem);
+    });
+  };
+
+  // Educator Inbox: Publish finalized report to student
+  const handlePublishToStudent = async () => {
+    if (!selectedSubmissionDetail || !editableReport) return;
+    setIsPublishingReport(true);
+    try {
+      const finalized = recalculateReportTotals(editableReport, gradingSystem);
+      const res = await fetch(apiUrl(`/api/submissions/${selectedSubmissionDetail.id}/publish`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          report: finalized,
+          teacherNote: teacherNoteInput.trim(),
+          gradingSystem,
+          parentEmail: publishParentEmail.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Could not publish report.');
+      }
+      const mailNote =
+        data?.emailDelivery?.status === 'sent'
+          ? `Parent email delivered via Resend to ${data.emailDelivery.to}.`
+          : data?.emailDelivery?.to
+          ? `Report published & parent email logged for ${data.emailDelivery.to}.`
+          : '';
+      showToast('success', `Report approved for ${selectedSubmissionDetail.studentName}! ${mailNote}`);
+      setPublishParentEmail('');
+      await loadSubmissions(selectedSubmissionDetail.id);
+      await loadSubmissionDetail(selectedSubmissionDetail.id);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to publish report.');
+    } finally {
+      setIsPublishingReport(false);
+    }
+  };
+
+  const handleDeleteSubmission = async (id: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/submissions/${id}`), { method: 'DELETE' });
+      if (res.ok) {
+        if (selectedSubmissionId === id) {
+          setSelectedSubmissionId(null);
+          setSelectedSubmissionDetail(null);
+          setEditableReport(null);
+        }
+        await loadSubmissions();
+        showToast('info', 'Submission removed.');
+      }
+    } catch {
+      showToast('error', 'Failed to delete submission.');
+    }
+  };
+
+  // Educator Direct Quick Check
+  const handleDirectCheck = async () => {
+    if (pageImages.length === 0 && !fileBase64 && !customTextWorking.trim()) {
+      showToast('error', 'Upload a worksheet or enter working to evaluate.');
+      return;
+    }
+    setIsDirectGrading(true);
+    try {
+      const res = await fetch(apiUrl('/api/homework/grade'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: studentName.trim() || 'Student Sheet',
+          assignment: activeModelKey.title,
+          submissionText: customTextWorking.trim(),
+          modelAnswerKey: activeModelKey.text,
+          modelAnswerTitle: activeModelKey.title,
+          modelKeyFileBase64: activeModelKey.text?.trim() ? null : modelKeyFileBase64,
+          fileName: selectedFile?.name || 'direct_sheet.pdf',
+          fileBase64: pageImages.length > 0 ? null : fileBase64,
+          fileMimeType: fileMimeType || null,
+          pageImages: pageImages.map((p) => ({
+            pageNumber: p.pageNumber,
+            dataUrl: p.dataUrl,
+            mimeType: p.mimeType,
+          })),
+          precisionMode,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.report) {
+        let reason = data?.error || `server returned ${res.status}`;
+        if ((res.status === 404 || res.status === 405) && !getApiBaseUrl()) {
+          reason = 'no grading backend URL is configured.';
+        }
+        throw new Error(reason);
+      }
+      setDirectReport(recalculateReportTotals(data.report));
+    } catch (err: any) {
+      showToast('error', err?.message || 'Could not evaluate worksheet.');
+    } finally {
+      setIsDirectGrading(false);
+    }
+  };
+
+  // Reusable Report View (strictly hides Model Answer / Mark Scheme Ref when !isTeacher)
+  const renderReportCard = (report: HomeworkGradingReport, teacherNote?: string) => {
+    const filteredQuestions = report.questions.filter((q) => {
+      if (questionFilter === 'incorrect') return q.status !== 'correct';
+      if (questionFilter === 'correct') return q.status === 'correct';
+      return true;
+    });
+
+    return (
+      <div className="bg-white border border-[#f0d0d6] rounded-2xl shadow-sm overflow-hidden space-y-5 pb-4">
+        {/* Report Header */}
+        <div className="bg-gradient-to-r from-[#6b1226] via-[#800020] to-[#590e1f] text-white p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-white/15 border border-white/25 font-semibold">
+                  Corrected by Mr. Haitham Hussien ✓
+                </span>
+                <span className="text-[11px] text-rose-100">{report.submissionDate}</span>
+              </div>
+              <h2 className="text-xl font-bold mt-2 font-serif">
+                {report.assignmentTitle || report.topic || 'Homework Evaluation Report'}
+              </h2>
+              <p className="text-xs text-rose-100 mt-0.5">
+                Student: <strong>{report.studentName}</strong> &middot; {courseTitle || report.subject || 'IGCSE Mathematics'}
+              </p>
+            </div>
+
+            <div className="bg-white text-slate-900 rounded-xl px-4 py-2.5 shadow-md min-w-[200px] grid grid-cols-2 gap-3 divide-x divide-slate-200">
+              <div className="text-center pr-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mark</div>
+                <div className="text-2xl font-black text-[#800020] leading-tight">
+                  {report.earnedMarks}{' '}
+                  <span className="text-xs font-semibold text-slate-400">/ {report.totalMarks}</span>
+                </div>
+                <div className="text-[11px] font-bold text-slate-600">{report.percentage}%</div>
+              </div>
+              <div className="text-center pl-3 flex flex-col justify-center">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Grading System · {(report.gradingSystem || 'edexcel').toUpperCase()}
+                </div>
+                <div className="text-sm font-black text-slate-900 mt-0.5 leading-snug">{report.grade}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-white/20">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setViewStyle('cards')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                  viewStyle === 'cards' ? 'bg-white text-[#800020]' : 'bg-white/15 text-white hover:bg-white/25'
+                }`}
+              >
+                <ListIcon className="w-3.5 h-3.5" /> Report Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewStyle('table')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                  viewStyle === 'table' ? 'bg-white text-[#800020]' : 'bg-white/15 text-white hover:bg-white/25'
+                }`}
+              >
+                <TableIcon className="w-3.5 h-3.5" /> Table
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => downloadReportCsv(report)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition"
+              >
+                <Download className="w-3.5 h-3.5" /> CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => printStandaloneParentReport(report, teacherNote, courseTitle)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition"
+              >
+                <Printer className="w-3.5 h-3.5" /> Clean PDF Report
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Bar */}
+        <div className="px-5 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-slate-600 font-medium">
+            Showing {filteredQuestions.length} of {report.questions.length} question(s)
+          </p>
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs">
+            {(['all', 'incorrect', 'correct'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setQuestionFilter(f)}
+                className={`px-2.5 py-1 rounded-md font-semibold capitalize transition ${
+                  questionFilter === f ? 'bg-white text-[#800020] shadow-2xs' : 'text-slate-600'
+                }`}
+              >
+                {f === 'all' ? 'All' : f === 'incorrect' ? 'Needs Review' : 'Full Marks'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* IB Criterion Breakdown when gradingSystem === 'ib' */}
+        {Array.isArray(report.criterionBreakdown) && report.criterionBreakdown.length > 0 && (
+          <div className="px-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {report.criterionBreakdown.map((c) => (
+              <div key={c.label} className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-2.5 text-xs">
+                <p className="text-[10px] font-bold text-indigo-800 uppercase">{c.label}</p>
+                <p className="text-sm font-black text-indigo-950 mt-0.5">{c.score}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Question Table / Cards (3-Phase Pipeline: Phase 1 Extracted, Phase 2 Error, Phase 3 Correct Solution) */}
+        <div className="px-5">
+          {viewStyle === 'table' ? (
+            <div className="overflow-x-auto border border-[#f5e1e5] rounded-xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#fdf2f4] text-[#701a2d] uppercase text-[10px] font-bold">
+                  <tr>
+                    <th className="p-3">Q</th>
+                    <th className="p-3">Phase 1 · What Was Written</th>
+                    <th className="p-3">Phase 2 · Error &amp; Feedback</th>
+                    <th className="p-3">Phase 3 · Correct Solution</th>
+                    <th className="p-3 text-right">Marks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f5e1e5]">
+                  {filteredQuestions.map((q) => {
+                    const p1 = q.phase1Extraction || q.studentWorkingFound || '—';
+                    const p2 = q.phase2ErrorAnalysis || q.teacherFeedback || q.errorAnalysis || '—';
+                    const p3 = q.phase3Solution || q.modelSolution || '—';
+                    return (
+                      <tr key={q.questionNumber} className="hover:bg-[#fffafb] align-top">
+                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
+                          {q.displayLabel || `Q${q.questionNumber}`}
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-700 max-w-[180px] whitespace-pre-wrap">
+                          {p1}
+                        </td>
+                        <td className="p-3 text-slate-700 leading-relaxed max-w-[220px] whitespace-pre-wrap">
+                          {p2}
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-emerald-900 bg-emerald-50/30 max-w-[200px] whitespace-pre-wrap">
+                          {p3}
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full font-bold text-[11px] ${
+                              q.status === 'correct'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : q.earnedMarks > 0
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}
+                          >
+                            {q.earnedMarks}/{q.maxMarks}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredQuestions.map((q) => {
+                const isOpen = !collapsedQuestions[q.questionNumber];
+                const p1 = q.phase1Extraction || q.studentWorkingFound || '—';
+                const p2 = q.phase2ErrorAnalysis || q.errorAnalysis || q.teacherFeedback || '—';
+                const p3 = q.phase3Solution || q.modelSolution || '—';
+                return (
+                  <div key={q.questionNumber} className="border border-[#f5e1e5] rounded-xl overflow-hidden shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCollapsedQuestions((prev) => ({
+                          ...prev,
+                          [q.questionNumber]: !prev[q.questionNumber],
+                        }))
+                      }
+                      className="w-full flex items-center justify-between p-3.5 bg-[#fffcfd] hover:bg-[#fff5f7] text-left transition"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-bold text-xs text-slate-900">
+                          {q.displayLabel || `Q${q.questionNumber}`}
+                        </span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            q.status === 'correct'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : q.earnedMarks > 0
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          }`}
+                        >
+                          {q.earnedMarks}/{q.maxMarks} marks &middot; {q.statusLabel || q.status.toUpperCase()}
+                        </span>
+                      </div>
+                      {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                    </button>
+                    {isOpen && (
+                      <div className="p-3.5 border-t border-[#f5e1e5] space-y-2.5 text-xs bg-white">
+                        <div className="bg-slate-50 border border-slate-200/80 p-2.5 rounded-lg">
+                          <span className="text-[10px] font-bold uppercase text-slate-600 block">
+                            1. What Was Written:
+                          </span>
+                          <p className="font-mono text-slate-800 mt-1 whitespace-pre-wrap">{p1}</p>
+                        </div>
+                        <div className="bg-[#fff1f2] border border-[#fecdd3] p-2.5 rounded-lg text-[#701a2d]">
+                          <span className="text-[10px] font-bold uppercase block">
+                            2. Exact Mistake Identified &amp; Why It Is Wrong:
+                          </span>
+                          <p className="mt-1 whitespace-pre-wrap">{p2}</p>
+                          {q.teacherFeedback && q.teacherFeedback !== p2 && (
+                            <p className="mt-1 italic">{q.teacherFeedback}</p>
+                          )}
+                        </div>
+                        <div className="bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-lg text-emerald-950">
+                          <span className="text-[10px] font-bold uppercase text-emerald-800 block">
+                            3. Correct Working &amp; Solution:
+                          </span>
+                          <p className="font-mono mt-1 whitespace-pre-wrap">{p3}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Summary & Feedback */}
+        <div className="px-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-[#fffcfd] border border-[#f5e1e5] rounded-xl p-4 space-y-1.5">
+            <h3 className="font-bold text-[#701a2d] text-xs uppercase tracking-wider">Overall Feedback</h3>
+            <p className="text-xs text-slate-700 leading-relaxed">{report.generalFeedback}</p>
+          </div>
+          <div className="bg-[#fffcfd] border border-[#f5e1e5] rounded-xl p-4 space-y-1.5">
+            <h3 className="font-bold text-[#701a2d] text-xs uppercase tracking-wider">Detailed Review</h3>
+            <p className="text-xs text-slate-700 leading-relaxed">{report.diagnosticReview}</p>
+          </div>
+        </div>
+
+        {/* Mr. Haitham Personal Note */}
+        <div className="px-5">
+          <div className="bg-gradient-to-br from-[#fffdfa] via-[#fffbf2] to-[#fffdfa] border border-[#eedac5] rounded-xl p-4 space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-[#701a2d]">
+              <span>✍️ Mr. Haitham&apos;s Note to {report.studentName}</span>
+              <span className="text-[10px] text-[#800020] font-normal">IGCSE Mathematics</span>
+            </div>
+            <p className="text-sm text-[#701a2d] italic leading-relaxed">
+              &ldquo;
+              {teacherNote?.trim()
+                ? teacherNote
+                : `Well done submitting your work, ${report.studentName}. Review any partial or missed questions above carefully — showing clear intermediate steps helps secure every method mark.`}
+              &rdquo;
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Filtered teacher inbox list (status + separate group filter)
+  const filteredInboxSubmissions = submissions.filter((s) => {
+    const statusOk = inboxFilter === 'all' ? true : s.status === inboxFilter;
+    const courseOk = inboxCourseFilter === 'all' ? true : s.courseId === inboxCourseFilter;
+    return statusOk && courseOk;
+  });
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6 text-slate-800">
-      {/* Cambridge Academic Banner in Regal Burgundy */}
+      {/* Header Banner */}
       <div className="bg-gradient-to-r from-[#6b1226] via-[#800020] to-[#590e1f] text-white rounded-2xl p-6 shadow-xl relative overflow-hidden border border-[#9f1239]">
-        {/* Subtle Mathematical Watermark Background */}
         <div className="absolute right-4 top-2 text-white/10 text-6xl md:text-8xl font-serif select-none pointer-events-none font-bold tracking-widest">
           ∑ ∫ π √x ±
         </div>
@@ -621,583 +1676,650 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-rose-100 font-semibold uppercase tracking-wider border border-white/20">
-                  {courseTitle ? `${courseTitle}${courseCode ? ` (${courseCode})` : ''}` : 'Cambridge IGCSE (0580 / 0980)'}
+                  {courseTitle ? `${courseTitle}${courseCode ? ` (${courseCode})` : ''}` : 'IGCSE Mathematics'}
                 </span>
-                <span className="text-xs text-amber-200 font-medium flex items-center gap-1">
-                  • Instructor: Mr. Haitham Hussien
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/15 text-rose-100 font-mono border border-white/20">
-                  Form Code: IGCSE-BIDMAS-CH1
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/15 text-rose-100 font-mono border border-white/20 font-bold">
-                  5-Repo Unified Pool
+                <span className="text-xs text-amber-200 font-medium">
+                  &bull; Instructor: Mr. Haitham Hussien
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1 math-serif tracking-tight">
-                {courseTitle ? `${courseTitle} — AI Homework Checker & Diagnostic Studio` : 'Cambridge IGCSE Mathematics — Homework & Diagnostic Studio'}
+                {isTeacher
+                  ? 'Educator Homework Review & Marking Studio'
+                  : `${courseTitle ? `${courseTitle} — ` : ''}Homework & Teacher Reports`}
               </h1>
-              <p className="text-xs text-rose-100 mt-1 max-w-2xl leading-relaxed italic teacher-handwriting text-base text-amber-200">
-                &ldquo;Mathematics is not about memorizing numbers, equations, or algorithms: it is about understanding patterns and learning from every step.&rdquo; — Mr. Haitham Hussien
+              <p className="text-xs text-rose-100 mt-1 max-w-2xl">
+                {isTeacher
+                  ? 'Review student homework submissions, verify steps against your Model Answer Key, and send corrected reports.'
+                  : 'Upload your completed homework for Mr. Haitham Hussien to mark, then open your corrected reports below.'}
               </p>
             </div>
           </div>
 
-          {/* Action Toolbar */}
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            <button
-              onClick={() => {
-                setEditingKeyTitle(activeModelKey.title);
-                setEditingKeyText(activeModelKey.text);
-                setIsModelKeyModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold transition shadow-sm border border-white"
-              title="Add or edit custom model answer key & mark scheme"
-            >
-              <FileCheck className="w-4 h-4 text-[#800020]" />
-              <span>Model Answer Key ({activeModelKey.isCustom ? 'Custom' : 'Active'})</span>
-            </button>
-
-            <button
-              onClick={handleResetPortal}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
-              title="Clear old submissions and start fresh"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset</span>
-            </button>
-
-            {onSwitchToModelKey && (
+          {isTeacher && (
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
               <button
-                onClick={onSwitchToModelKey}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
-                title="View Cambridge Rubric in Teacher View"
+                type="button"
+                onClick={() => {
+                  setEditingKeyTitle(activeModelKey.title);
+                  setEditingKeyText(activeModelKey.text);
+                  setIsModelKeyModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold transition shadow-sm"
               >
-                <BookOpen className="w-3.5 h-3.5 text-amber-300" />
-                <span>Rubric Viewer</span>
+                <FileCheck className="w-4 h-4" />
+                <span>Model Answer Key ({activeModelKey.isCustom ? 'Custom' : 'Active'})</span>
               </button>
-            )}
 
-            {onSwitchToNotebookLM && (
-              <button
-                onClick={onSwitchToNotebookLM}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition shadow-sm"
-                title="Open NotebookLM Studio"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>NotebookLM Studio</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Mathematical BIDMAS Formula Ribbon */}
-        <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs text-rose-100 flex-wrap gap-2">
-          <div className="flex items-center gap-2 flex-wrap font-mono text-[11px]">
-            <span className="text-amber-300 font-bold uppercase tracking-wider font-sans">BIDMAS Law:</span>
-            <span className="px-2 py-0.5 rounded bg-white/15 border border-white/20 text-white font-semibold">
-              (B) Brackets
-            </span>
-            <span className="text-white/60">→</span>
-            <span className="px-2 py-0.5 rounded bg-white/15 border border-white/20 text-white font-semibold">
-              (I) Indices (x²)
-            </span>
-            <span className="text-white/60">→</span>
-            <span className="px-2 py-0.5 rounded bg-white/15 border border-white/20 text-white font-semibold">
-              (D/M) Division ÷ &amp; Multiplication ×
-            </span>
-            <span className="text-white/60">→</span>
-            <span className="px-2 py-0.5 rounded bg-white/15 border border-white/20 text-white font-semibold">
-              (A/S) Addition + &amp; Subtraction −
-            </span>
-          </div>
-
-          <div className="text-[11px] text-amber-200 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-            <span>Cambridge Standard Method [M1] &amp; Accuracy [A1]</span>
-          </div>
+              {onSwitchToModelKey && (
+                <button
+                  type="button"
+                  onClick={onSwitchToModelKey}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/30 transition"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-amber-300" />
+                  <span>All Answer Keys</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* UNIFIED MULTI-REPOSITORY PROCESSING ENGINE POOL CARD (WHITE & BURGUNDY) */}
-      <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-3 border-b border-[#f5e1e5]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center font-bold font-mono text-sm">
-              5x
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-[#701a2d] tracking-wide">
-                  Unified Multi-Repository Processing Engine Pool
-                </h2>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-mono font-bold border border-[#fecdd3]">
-                  ALL 5 REPOSITORIES INTEGRATED
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                Synchronous multi-engine pipeline: AutoMark CV → DL Contour Symbol Solver → Pix2Text Math LaTeX OCR → Multimodal Vision AI → Haitham Cambridge Rubric.
-              </p>
-            </div>
-          </div>
-
-          {/* Master Unified Pool Action Button */}
-          <button
-            onClick={handleRunUnifiedPool}
-            disabled={isProcessingPool || isGrading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold shadow-md shadow-rose-950/20 transition disabled:opacity-50 shrink-0"
-          >
-            {isProcessingPool ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-white" />
-                <span>Executing 5-Stage Engine Pool...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>⚡ Run Unified 5-Engine Pipeline</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* 5 Connected Pipeline Stages in Responsive Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 mt-3">
-          {/* Stage 1: AutoMark */}
-          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold">
-                STAGE 1
-              </span>
-              <span className="text-[10px] text-emerald-700 font-mono font-semibold">Active</span>
-            </div>
-            <h3 className="text-xs font-bold text-[#701a2d]">AutoMark</h3>
-            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">adamzev/AutoMark</p>
-            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
-              Worksheet scanning, perspective rectification &amp; Form Code <code className="text-[#800020] font-semibold">IGCSE-BIDMAS-CH1</code>.
-            </p>
-            {poolTelemetry?.stages?.[0] && (
-              <div className="mt-2 text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                ✓ {poolTelemetry.stages[0].totalQuestions || activeModelKey.questionCount || 20} Qs in {poolTelemetry.stages[0].durationMs}ms
-              </div>
-            )}
-          </div>
-
-          {/* Stage 2: Hand-Written-Equation-Solver */}
-          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold">
-                STAGE 2
-              </span>
-              <span className="text-[10px] text-emerald-700 font-mono font-semibold">Active</span>
-            </div>
-            <h3 className="text-xs font-bold text-[#701a2d]">Equation Solver</h3>
-            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Sgvkamalakar/DL-Solver</p>
-            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
-              Contour symbol segmentation (32×32 ROIs) &amp; CNN recognition (97.57% accuracy).
-            </p>
-            {poolTelemetry?.stages?.[1] && (
-              <div className="mt-2 text-[10px] font-mono text-[#800020] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                ✓ {poolTelemetry.stages[1].roisExtracted} ROIs in {poolTelemetry.stages[1].durationMs}ms
-              </div>
-            )}
-          </div>
-
-          {/* Stage 3: Pix2Text (New!) */}
-          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#800020] text-white font-bold">
-                STAGE 3
-              </span>
-              <span className="text-[10px] text-emerald-700 font-mono font-semibold">Active</span>
-            </div>
-            <h3 className="text-xs font-bold text-[#701a2d]">Pix2Text OCR</h3>
-            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">breezedeus/Pix2Text</p>
-            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
-              Formula Detection (MFD-1.5) &amp; Mathematical Formula Recognition to standard LaTeX.
-            </p>
-            {poolTelemetry?.stages?.[2] && (
-              <div className="mt-2 text-[10px] font-mono text-[#800020] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                ✓ {poolTelemetry.stages[2].formulasDetected} Formulas in {poolTelemetry.stages[2].durationMs}ms
-              </div>
-            )}
-          </div>
-
-          {/* Stage 4: AI-Math-Grader-OpenAI */}
-          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold">
-                STAGE 4
-              </span>
-              <span className="text-[10px] text-emerald-700 font-mono font-semibold">Active</span>
-            </div>
-            <h3 className="text-xs font-bold text-[#701a2d]">Vision AI Grader</h3>
-            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">bluehawana/AI-Grader</p>
-            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
-              Multi-provider handwriting reasoning (Gemini, GPT-4o, Claude) &amp; ink-efficient layouts.
-            </p>
-            {poolTelemetry?.stages?.[3] && (
-              <div className="mt-2 text-[10px] font-mono text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">
-                ✓ {poolTelemetry.stages[3].model} in {poolTelemetry.stages[3].durationMs}ms
-              </div>
-            )}
-          </div>
-
-          {/* Stage 5: HaithamMathIGCSE */}
-          <div className="bg-[#fffcfd] border border-[#f5e1e5] hover:border-[#800020]/40 p-3 rounded-xl transition shadow-xs">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold">
-                STAGE 5
-              </span>
-              <span className="text-[10px] text-[#800020] font-mono font-bold">Curriculum Lead</span>
-            </div>
-            <h3 className="text-xs font-bold text-[#701a2d]">HaithamMath</h3>
-            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">ahamdy200/HaithamMath</p>
-            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
-              Cambridge BIDMAS rubric, method marks [M1]/[A1], and NotebookLM diagnostic reports.
-            </p>
-            {poolTelemetry?.stages?.[4] && (
-              <div className="mt-2 text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                ✓ {poolTelemetry.stages[4].questionsGraded || activeModelKey.questionCount || 20} Qs Graded ({poolTelemetry.stages[4].durationMs}ms)
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Refresh / Toast Notice in Soft Rose/Burgundy */}
-      {refreshNotice && (
-        <div className="bg-[#fff1f2] border border-[#fecdd3] text-[#881337] px-4 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-xs animate-in fade-in">
+      {/* Toast Notification */}
+      {notice && (
+        <div
+          className={`px-4 py-3 rounded-xl text-xs flex items-center justify-between shadow-xs border ${
+            notice.type === 'error'
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : notice.type === 'info'
+              ? 'bg-blue-50 border-blue-200 text-blue-800'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-[#be123c] shrink-0" />
-            <span className="font-medium">{refreshNotice}</span>
+            {notice.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            )}
+            <span className="font-medium">{notice.text}</span>
           </div>
-          <button onClick={() => setRefreshNotice(null)} className="text-[#be123c] hover:text-[#881337]">
+          <button type="button" onClick={() => setNotice(null)} className="opacity-70 hover:opacity-100">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Active Model Answer Key & Marking Scheme Card */}
-      <div className="bg-white border-2 border-[#800020]/25 hover:border-[#800020]/50 rounded-2xl p-4 sm:p-5 shadow-sm transition">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center font-bold text-lg shrink-0 mt-0.5 shadow-2xs">
-              <FileCheck className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs uppercase font-extrabold tracking-wider text-[#800020]">
-                  Active Model Answer Key
-                </span>
-                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                  activeModelKey.pdfUrl
-                    ? 'bg-rose-100 text-[#800020] border border-[#fecdd3]'
-                    : activeModelKey.isCustom
-                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                    : 'bg-[#fff1f2] text-[#881337] border border-[#fecdd3]'
-                }`}>
-                  {activeModelKey.pdfUrl ? '📄 PDF Key Active' : activeModelKey.isCustom ? '★ Custom Key Active' : 'Cambridge Default'}
-                </span>
-                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                  {activeModelKey.questionCount || 26} Questions • {activeModelKey.totalMarks || 75} Marks
-                </span>
+      {/* =================================================================== */}
+      {/* STUDENT & PARENT PORTAL VIEW (Zero AI indicators, Approved Results)  */}
+      {/* =================================================================== */}
+      {!isTeacher && (
+        <div className="space-y-5">
+          {/* Student / Parent Inline Homework & Report Notifications */}
+          {(() => {
+            const unreadNotifications = portalNotifications.filter(
+              (n) => !n.readByUserIds.includes(effectiveViewerUserId)
+            );
+            const displayedNotifications =
+              showAllNotifications || unreadNotifications.length === 0
+                ? portalNotifications.slice(0, 6)
+                : unreadNotifications;
+
+            if (portalNotifications.length === 0) return null;
+
+            return (
+              <div
+                className={`rounded-2xl border p-4 shadow-xs transition ${
+                  unreadNotifications.length > 0
+                    ? 'bg-gradient-to-r from-[#fff5f7] via-white to-amber-50/50 border-[#e9b3be]'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
+                        unreadNotifications.length > 0
+                          ? 'bg-[#800020] text-white border-[#800020]'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-xs sm:text-sm font-bold text-[#701a2d]">
+                          Homework &amp; Teacher Notifications
+                        </h3>
+                        {unreadNotifications.length > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-[#800020] text-white text-[10px] font-bold">
+                            {unreadNotifications.length} New
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
+                            All read ({portalNotifications.length})
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {unreadNotifications.length > 0
+                          ? 'Mr. Haitham posted new updates for your group.'
+                          : 'All assigned homework alerts and report notifications are up to date.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {unreadNotifications.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllPortalNotificationsRead}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#e5c1c9] hover:bg-[#fff1f2] text-[11px] font-semibold text-[#800020] transition"
+                      >
+                        Mark All Read
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowAllNotifications((v) => !v)}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-[11px] font-semibold text-slate-600 transition"
+                    >
+                      {showAllNotifications || (unreadNotifications.length === 0 && showAllNotifications)
+                        ? 'Hide'
+                        : unreadNotifications.length === 0
+                        ? `Show Recent (${portalNotifications.length})`
+                        : `Show All (${portalNotifications.length})`}
+                    </button>
+                  </div>
+                </div>
+
+                {(unreadNotifications.length > 0 || showAllNotifications) && (
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {displayedNotifications.map((notif) => {
+                      const isUnread = !notif.readByUserIds.includes(effectiveViewerUserId);
+                      return (
+                        <div
+                          key={notif.id}
+                          className={`rounded-xl border p-3 text-xs space-y-1.5 transition ${
+                            isUnread
+                              ? 'bg-white border-[#800020]/35 shadow-2xs'
+                              : 'bg-slate-50/70 border-slate-200 opacity-85'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isUnread && (
+                                <span className="px-1.5 py-0.5 rounded bg-[#800020] text-white text-[9px] font-extrabold uppercase tracking-wider">
+                                  New
+                                </span>
+                              )}
+                              <span className="font-bold text-slate-900">{notif.title}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 shrink-0">
+                              {new Date(notif.createdAt).toLocaleString('en-GB')}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                            {notif.message}
+                          </p>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                            {notif.dueDate ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                                Due: {new Date(notif.dueDate).toLocaleString('en-GB')}
+                              </span>
+                            ) : (
+                              <span />
+                            )}
+                            <div className="flex items-center gap-2">
+                              {notif.type === 'assignment' && !isParent && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectHomeworkFromNotification(notif)}
+                                  className="px-2.5 py-1 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-[11px] font-bold transition"
+                                >
+                                  Select Homework &rarr;
+                                </button>
+                              )}
+                              {isUnread && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkPortalNotificationRead(notif.id)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-600 transition"
+                                >
+                                  Mark Read
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 mt-1">
-                {activeModelKey.title}
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {activeModelKey.fileName ? `Source: ${activeModelKey.fileName}` : 'Full worked solutions & method marks [M1]/[A1] active for grading'}
-              </p>
-            </div>
-          </div>
+            );
+          })()}
 
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
-            {/* Primary Action: Upload Model Answer PDF */}
-            <input
-              ref={keyFileInputRef}
-              type="file"
-              accept=".pdf,.txt,.md"
-              onChange={handleUploadKeyFile}
-              className="hidden"
-              id="model-answer-pdf-file-input"
-            />
-            <button
-              type="button"
-              onClick={() => keyFileInputRef.current?.click()}
-              disabled={isUploadingKeyPdf}
-              className="px-3.5 py-2 rounded-xl bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
-              title="Upload official Exam or Solution PDF"
-            >
-              {isUploadingKeyPdf ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                  <span>Extracting PDF...</span>
-                </>
-              ) : (
-                <>
-                  <FileUp className="w-3.5 h-3.5 text-rose-200" />
-                  <span>Upload Model Answer PDF</span>
-                </>
-              )}
-            </button>
-
-            {/* View PDF Button */}
-            {activeModelKey.pdfUrl && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPdfModalType('model');
-                  setPdfModalUrl(activeModelKey.pdfUrl || '/assets/model-keys/pearson-edexcel-igcse-monthly-exam-1-model-answers.pdf');
-                  setShowPdfModal(true);
-                }}
-                className="px-3 py-2 rounded-xl bg-white hover:bg-[#fff5f6] text-[#800020] border border-[#fecdd3] text-xs font-bold transition shadow-2xs flex items-center gap-1.5"
-                title="Preview the active Model Answer PDF"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>View Key PDF</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setShowKeyPreview(!showKeyPreview)}
-              className="px-2.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition flex items-center gap-1 shadow-2xs"
-            >
-              {showKeyPreview ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              <span>{showKeyPreview ? 'Hide Text' : 'Preview Text'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setEditingKeyTitle(activeModelKey.title);
-                setEditingKeyText(activeModelKey.text);
-                setIsModelKeyModalOpen(true);
-              }}
-              className="px-3 py-2 rounded-xl bg-[#fff8f9] hover:bg-[#ffeef1] text-[#800020] border border-[#fecdd3] text-xs font-bold transition shadow-2xs flex items-center gap-1.5"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>Edit / Templates</span>
-            </button>
-
-            {activeModelKey.isCustom && (
-              <button
-                type="button"
-                onClick={handleResetModelKey}
-                className="px-2.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-500 transition"
-                title="Reset to default Cambridge BIDMAS model key"
-              >
-                Reset Default
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Collapsible Key Preview */}
-        {showKeyPreview && (
-          <div className="mt-3.5 pt-3.5 border-t border-[#f5e1e5] animate-in fade-in space-y-2">
-            <div className="flex items-center justify-between text-xs text-slate-600">
-              <span className="font-semibold text-[#701a2d]">Parsed Solution &amp; Mark Scheme Text ({activeModelKey.text.length} characters):</span>
-              <span className="text-[11px] text-slate-400">Used by Gemini AI for student step evaluation</span>
-            </div>
-            <pre className="text-xs font-mono bg-[#fffcfd] border border-[#fecdd3] p-3 rounded-xl text-slate-700 max-h-56 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
-              {activeModelKey.text}
-            </pre>
-          </div>
-        )}
-      </div>
-
-      {/* Main Upload / Test Control Panel (White & Burgundy Theme) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: File Upload & Student Details (5 cols) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm space-y-4 text-slate-800">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Submit Homework (Students only; Parents see Approved Reports full width) */}
+          {!isParent && (
+            <div className="lg:col-span-5 bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-[#f5e1e5] pb-3">
-              <h2 className="text-sm font-bold text-[#701a2d] flex items-center gap-2">
-                <UploadCloud className="w-4 h-4 text-[#800020]" />
-                Student Homework Submission
-              </h2>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#fff1f2] text-[#800020] flex items-center justify-center border border-[#fecdd3]">
+                  <UserCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-[#701a2d]">Submit Homework to Mr. Haitham</h2>
+                  <p className="text-[11px] text-slate-500">Upload photos or PDF pages of your working</p>
+                </div>
+              </div>
               <button
-                onClick={handleResetPortal}
-                className="text-[11px] text-slate-500 hover:text-[#800020] flex items-center gap-1 transition"
-                title="Clear all uploaded files and old reports"
+                type="button"
+                onClick={handleClearUpload}
+                className="text-[11px] text-slate-400 hover:text-slate-600 flex items-center gap-1"
               >
-                <RotateCcw className="w-3 h-3" />
-                <span>Reset &amp; Start Fresh</span>
+                <RotateCcw className="w-3 h-3" /> Clear
               </button>
             </div>
 
-            {/* Submission Mode Tabs */}
-            <div className="flex rounded-xl bg-[#fcf5f7] p-1 border border-[#f5dbe1] gap-1">
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Student Name</label>
+                  <input
+                    type="text"
+                    value={studentName}
+                    onChange={(e) => setStudentName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-[#e5d0d4] text-xs outline-none focus:border-[#800020]"
+                    placeholder="Your full name"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                    Assigned Homework ({courseTitle || 'Your Group'})
+                  </label>
+                  <select
+                    value={selectedAssignmentId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedAssignmentId(val);
+                      const picked = groupAssignments.find((a) => a.id === val);
+                      if (picked) {
+                        setAssignment(picked.title);
+                      } else if (val === '__custom__') {
+                        setAssignment(courseTitle ? `${courseTitle} — Homework Assignment` : 'IGCSE Mathematics Homework');
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-[#e5d0d4] bg-white text-xs font-semibold outline-none focus:border-[#800020]"
+                  >
+                    {groupAssignments.length === 0 ? (
+                      <option value="">General Homework Submission</option>
+                    ) : (
+                      <>
+                        {groupAssignments.map((hw) => (
+                          <option key={hw.id} value={hw.id}>
+                            {hw.title}{hw.dueDate ? ` (Due ${new Date(hw.dueDate).toLocaleDateString('en-GB')})` : ''}
+                          </option>
+                        ))}
+                        <option value="__custom__">Other / Custom Homework Title...</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {(() => {
+                const activeHw = groupAssignments.find((a) => a.id === selectedAssignmentId);
+                if (activeHw) {
+                  return (
+                    <div className="rounded-xl border border-rose-200 bg-[#fff5f7] p-3 text-xs space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-[#800020]">{activeHw.title}</span>
+                        {activeHw.dueDate && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                            Due Date: {new Date(activeHw.dueDate).toLocaleString('en-GB')}
+                          </span>
+                        )}
+                      </div>
+                      {activeHw.instructions && (
+                        <p className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                          <strong>Instructions:</strong> {activeHw.instructions}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Homework / Sheet Title</label>
+                    <input
+                      type="text"
+                      value={assignment}
+                      onChange={(e) => setAssignment(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-[#e5d0d4] text-xs outline-none focus:border-[#800020]"
+                      placeholder="e.g. Week 3 Algebra Sheet"
+                    />
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Input Tabs */}
+            <div className="grid grid-cols-3 bg-[#fdf5f7] p-1 rounded-xl border border-[#f5e1e5] gap-1">
               <button
                 type="button"
                 onClick={() => setInputMode('upload')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                  inputMode === 'upload'
-                    ? 'bg-[#800020] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
+                className={`py-2 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition ${
+                  inputMode === 'upload' ? 'bg-[#800020] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
-                <FileUp className="w-3.5 h-3.5" />
-                <span>Upload PDF / Image</span>
+                <UploadCloud className="w-3.5 h-3.5" /> PDF / Photo
               </button>
               <button
                 type="button"
                 onClick={() => setInputMode('type')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                  inputMode === 'type'
-                    ? 'bg-[#800020] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
+                className={`py-2 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition ${
+                  inputMode === 'type' ? 'bg-[#800020] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Type Answers</span>
+                <Edit3 className="w-3.5 h-3.5" /> Type Answers
               </button>
               <button
                 type="button"
-                onClick={() => setInputMode('draw')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                  inputMode === 'draw'
-                    ? 'bg-[#800020] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-[#800020] hover:bg-[#fff1f2]'
+                onClick={() => setInputMode('canvas')}
+                className={`py-2 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition ${
+                  inputMode === 'canvas' ? 'bg-[#800020] text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
-                <PenTool className="w-3.5 h-3.5" />
-                <span>Draw on Canvas</span>
+                <PenTool className="w-3.5 h-3.5" /> Scratchpad
               </button>
             </div>
 
-            {/* Tab 1: File Upload Zone */}
             {inputMode === 'upload' && (
-              <div className="space-y-2">
+              <div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,image/*,.txt"
-                  onChange={handleFileChange}
+                  accept=".pdf,image/*"
+                  onChange={handleFileUpload}
                   className="hidden"
-                  id="homework-file-upload"
+                  id="student-hw-file"
                 />
+                <label
+                  htmlFor="student-hw-file"
+                  className="flex flex-col items-center justify-center border-2 border-dashed border-[#e5c1c9] hover:border-[#800020] rounded-xl p-5 cursor-pointer bg-[#fffcfd] hover:bg-[#fff5f7] transition text-center"
+                >
+                  {isRenderingPages ? (
+                    <>
+                      <Loader2 className="w-7 h-7 animate-spin text-[#800020] mb-2" />
+                      <p className="text-xs font-semibold text-[#800020]">Preparing your pages...</p>
+                    </>
+                  ) : selectedFile ? (
+                    <>
+                      <FileText className="w-7 h-7 text-[#800020] mb-2" />
+                      <p className="text-xs font-bold text-slate-900">{selectedFile.name}</p>
+                      <p className="text-[11px] text-emerald-700 mt-1 font-medium">
+                        {pdfPageInfo
+                          ? `${pdfPageInfo.rendered} page(s) attached and ready for Mr. Haitham`
+                          : 'File attached and ready'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-7 h-7 text-[#800020] mb-2" />
+                      <p className="text-xs font-bold text-slate-800">Click to select your Homework PDF or Photo</p>
+                      <p className="text-[11px] text-slate-500 mt-1">PDF, JPG, or PNG accepted</p>
+                    </>
+                  )}
+                </label>
 
-                {!selectedFile ? (
-                  <label
-                    htmlFor="homework-file-upload"
-                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#fecdd3] hover:border-[#800020] rounded-xl cursor-pointer bg-[#fffcfd] hover:bg-[#fff7f8] transition text-center group shadow-xs"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-[#fff1f2] text-[#800020] flex items-center justify-center mb-2 group-hover:scale-105 transition-transform border border-[#fecdd3]">
-                      <FileUp className="w-6 h-6" />
-                    </div>
-                    <span className="text-xs text-slate-800 font-bold">Choose student file or drag &amp; drop</span>
-                    <span className="text-[11px] text-slate-500 mt-1">
-                      Upload student worksheet (PDF, JPG, PNG, or TXT)
-                    </span>
-                    <span className="mt-2.5 text-[10px] text-[#800020] font-semibold bg-[#fff1f2] px-2.5 py-0.5 rounded-full border border-[#fecdd3]">
-                      Graded dynamically against active Model Answer Key
-                    </span>
-                  </label>
-                ) : (
-                  <div className="bg-[#fff8f9] border border-[#fecdd3] p-3.5 rounded-xl space-y-2 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5 overflow-hidden">
-                        <div className="w-9 h-9 rounded-lg bg-[#fff1f2] text-[#800020] flex items-center justify-center shrink-0 border border-[#fecdd3]">
-                          <FileText className="w-5 h-5" />
-                        </div>
-                        <div className="truncate">
-                          <p className="text-xs font-bold text-[#701a2d] truncate">{selectedFile.name}</p>
-                          <p className="text-[10px] text-emerald-700 font-medium">
-                            {(selectedFile.size / 1024).toFixed(1)} KB • Ready for AI Checking
-                          </p>
-                        </div>
+                {pageImages.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <span className="font-semibold text-slate-600">
+                        Preview ({pageImages.length} page(s){pdfPageInfo?.a3Spreads ? ` · ${pdfPageInfo.a3Spreads} A3 Spread Split` : ''}):
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const nextMode = a3SplitMode === 'auto' ? 'off' : 'auto';
+                            setA3SplitMode(nextMode);
+                            if (selectedFile && (selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf'))) {
+                              const rendered = await renderPdfPagesToImages(selectedFile, {
+                                maxPages: 12,
+                                quality: 0.9,
+                                contrastBoost,
+                                a3SplitMode: nextMode,
+                              });
+                              setPageImages(rendered.pageImages);
+                              setPdfPageInfo({
+                                total: rendered.totalPages,
+                                rendered: rendered.pageImages.length,
+                                a3Spreads: rendered.a3SpreadCount || 0,
+                              });
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded border text-[10px] font-semibold transition ${
+                            a3SplitMode === 'auto'
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-slate-600 border-slate-300'
+                          }`}
+                        >
+                          {a3SplitMode === 'auto' ? '✓ A3 Auto-Split' : 'A3 Split Off'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleToggleContrastBoost}
+                          className={`px-2 py-0.5 rounded border text-[10px] font-semibold transition ${
+                            contrastBoost
+                              ? 'bg-[#800020] text-white border-[#800020]'
+                              : 'bg-white text-slate-600 border-slate-300'
+                          }`}
+                        >
+                          {contrastBoost ? '✓ Clear Contrast On' : 'Enhance Pencil'}
+                        </button>
                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {pageImages.map((pg, idx) => (
+                        <div key={pg.pageNumber} className="relative rounded-lg border border-slate-200 bg-slate-50 p-1 group">
+                          <img
+                            src={pg.dataUrl}
+                            alt={`Page ${pg.pageNumber}`}
+                            onClick={() => setLightboxImage(pg.dataUrl)}
+                            className="w-full h-24 object-cover rounded cursor-zoom-in"
+                          />
+                          <div className="flex items-center justify-between mt-1 px-1">
+                            <span className="text-[10px] font-bold text-slate-600">
+                              P{pg.pageNumber}
+                              {pg.tilePosition && pg.tilePosition !== 'full' ? ` (${pg.tilePosition === 'left' ? 'A3-L' : 'A3-R'})` : ''}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRotatePage(idx)}
+                              title="Rotate 90°"
+                              className="p-0.5 text-slate-500 hover:text-[#800020]"
+                            >
+                              <RotateCw className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {inputMode === 'type' && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                  Write your answers or notes for Mr. Haitham
+                </label>
+                <textarea
+                  value={customTextWorking}
+                  onChange={(e) => setCustomTextWorking(e.target.value)}
+                  rows={6}
+                  className="w-full p-3 rounded-xl border border-[#e5d0d4] text-xs font-mono outline-none focus:border-[#800020]"
+                  placeholder={'Q1: 8 + 12 / 4 = 8 + 3 = 11\nQ2: 5 * (16 + 2 - 12) = 30'}
+                />
+              </div>
+            )}
+
+            {inputMode === 'canvas' && (
+              <HandwrittenEquationCanvas
+                onInsertAnswer={(expr: string) => {
+                  setCustomTextWorking((prev) => (prev ? `${prev}\n${expr}` : expr));
+                  showToast('info', 'Added scratchpad working to your submission notes.');
+                }}
+              />
+            )}
+
+            <button
+              type="button"
+              onClick={handleStudentSubmitHomework}
+              disabled={isSubmittingHomework || isRenderingPages}
+              className="w-full py-3.5 bg-gradient-to-r from-[#800020] via-[#9f1239] to-[#800020] hover:from-[#66001a] hover:to-[#800020] text-white rounded-xl text-xs sm:text-sm font-bold shadow-md flex items-center justify-center gap-2 transition disabled:opacity-50"
+            >
+              {isSubmittingHomework ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Sending Homework to Mr. Haitham...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>Submit Homework to Mr. Haitham</span>
+                </>
+              )}
+            </button>
+            </div>
+          )}
+
+          {/* Right Column: Student / Parent Submissions & Corrected Reports */}
+          <div className={`${isParent ? 'lg:col-span-12' : 'lg:col-span-7'} space-y-4`}>
+            <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-[#f5e1e5] pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-[#701a2d]">
+                    {isParent
+                      ? `Approved 3-Phase Reports for ${defaultStudentName || 'Student'}`
+                      : 'My Submissions & Corrected Reports'}
+                  </h2>
+                  <p className="text-[11px] text-slate-500">
+                    {isParent
+                      ? 'Parent Portal — Only reports finalized and released by Mr. Haitham Hussien appear here'
+                      : 'Track submitted work and view 3-Phase reports once Mr. Haitham approves marking'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadSubmissions(selectedSubmissionId || undefined)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-600"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {loadingSubmissions ? (
+                <div className="py-8 text-center text-xs text-slate-500">Loading your submissions...</div>
+              ) : submissions.length === 0 ? (
+                <div className="py-10 text-center space-y-2">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-[#fff1f2] text-[#800020] flex items-center justify-center">
+                    <Inbox className="w-6 h-6" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-800">No homework submitted yet</p>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Upload your homework sheet on the left. Once submitted, Mr. Haitham Hussien will correct it and return your marked report here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {submissions.map((sub) => {
+                    const active = selectedSubmissionId === sub.id;
+                    return (
                       <button
                         type="button"
-                        onClick={handleRemoveFile}
-                        className="p-1.5 rounded-lg bg-white hover:bg-rose-100 text-slate-400 hover:text-rose-700 transition border border-[#fecdd3]"
-                        title="Remove this file"
+                        key={sub.id}
+                        onClick={() => setSelectedSubmissionId(sub.id)}
+                        className={`w-full text-left p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
+                          active
+                            ? 'bg-[#fdf2f4] border-[#800020] shadow-2xs'
+                            : 'bg-white border-slate-200 hover:border-[#fecdd3]'
+                        }`}
                       >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between pt-1 text-[11px] border-t border-[#f8e1e5] gap-2 flex-wrap">
-                      <span className="text-slate-600 font-medium">
-                        {isRenderingPages ? (
-                          <span className="inline-flex items-center gap-1 text-[#800020] font-semibold">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Rendering HD pages...
-                          </span>
-                        ) : pageImages.length > 0 ? (
-                          `${pageImages.length}${pdfPageInfo?.truncated ? ` / ${pdfPageInfo.totalPages}` : ''} HD page(s) • Ultra-High Vision`
-                        ) : (
-                          'Status: Attached & Validated'
-                        )}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {pageImages.length > 0 && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={handleToggleContrastBoost}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
-                                contrastBoost
-                                  ? 'bg-[#800020] text-white border-[#800020]'
-                                  : 'bg-white text-slate-600 border-[#fecdd3] hover:text-[#800020]'
-                              }`}
-                              title="Boost contrast for faint pencil scans"
-                            >
-                              {contrastBoost ? '✓ Contrast Boost' : 'Enhance Pencil'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleRotateAllPages}
-                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-white text-[#800020] border border-[#fecdd3] hover:bg-[#fff1f2] inline-flex items-center gap-1 transition"
-                              title="Rotate all pages 90 degrees clockwise"
-                            >
-                              <RotateCw className="w-2.5 h-2.5" />
-                              Rotate All
-                            </button>
-                          </>
-                        )}
-                        <label
-                          htmlFor="homework-file-upload"
-                          className="text-[#800020] hover:text-[#5c0017] cursor-pointer font-bold"
-                        >
-                          Change File
-                        </label>
-                      </div>
-                    </div>
-
-                    {pageImages.length > 0 && (
-                      <div className="pt-2 border-t border-[#f8e1e5]">
-                        <p className="text-[10px] text-slate-500 mb-1.5">
-                          Preview &amp; orientation check (rotate sideways pages before grading):
-                        </p>
-                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
-                          {pageImages.map((page, idx) => (
-                            <div
-                              key={`${page.pageNumber}-${idx}`}
-                              className="relative bg-white border border-[#fecdd3] rounded-lg p-1 shadow-2xs group"
-                            >
-                              <img
-                                src={page.dataUrl}
-                                alt={`Page ${page.pageNumber}`}
-                                className="w-full h-20 object-contain rounded bg-slate-50"
-                              />
-                              <div className="flex items-center justify-between mt-1 px-0.5">
-                                <span className="text-[9px] font-bold text-[#701a2d]">
-                                  Pg {page.pageNumber}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRotatePage(idx)}
-                                  className="p-0.5 rounded bg-[#fff1f2] hover:bg-[#800020] text-[#800020] hover:text-white transition"
-                                  title={`Rotate Page ${page.pageNumber} 90°`}
-                                >
-                                  <RotateCw className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate">{sub.assignment}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Submitted {new Date(sub.submittedAt).toLocaleString('en-GB')}
+                            {sub.pageCount > 0 ? ` · ${sub.pageCount} page(s)` : ''}
+                          </p>
                         </div>
+                        {sub.status === 'graded' ? (
+                          <span className="shrink-0 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                            Corrected ({sub.publishedReport?.earnedMarks}/{sub.publishedReport?.totalMarks})
+                          </span>
+                        ) : (
+                          <span className="shrink-0 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Pending Review
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {loadingDetail && (
+              <div className="bg-white border border-[#f0d0d6] rounded-2xl p-8 text-center text-xs text-slate-500">
+                Loading submission details...
+              </div>
+            )}
+
+            {!loadingDetail && selectedSubmissionDetail && selectedSubmissionDetail.status === 'pending' && (
+              <div className="bg-white border border-amber-200 rounded-2xl p-6 text-center space-y-3 shadow-xs">
+                <div className="w-12 h-12 mx-auto rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">{selectedSubmissionDetail.assignment}</h3>
+                <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+                  Waiting for <strong>Mr. Haitham Hussien&apos;s</strong> correction. Your marks and feedback report will appear here as soon as Mr. Haitham finishes reviewing your paper.
+                </p>
+
+                {((selectedSubmissionDetail.pageImages?.length || 0) > 0 || selectedSubmissionDetail.submissionText) && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowStudentUploadedPages((v) => !v)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      {showStudentUploadedPages ? 'Hide My Submitted Work' : 'View My Submitted Work'}
+                    </button>
+
+                    {showStudentUploadedPages && (
+                      <div className="mt-4 text-left space-y-3 border-t border-slate-100 pt-3">
+                        {selectedSubmissionDetail.submissionText && (
+                          <pre className="p-3 bg-slate-50 rounded-lg text-xs font-mono text-slate-700 whitespace-pre-wrap">
+                            {selectedSubmissionDetail.submissionText}
+                          </pre>
+                        )}
+                        {selectedSubmissionDetail.pageImages && selectedSubmissionDetail.pageImages.length > 0 && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {selectedSubmissionDetail.pageImages.map((pg) => (
+                              <img
+                                key={pg.pageNumber}
+                                src={pg.dataUrl}
+                                alt={`Submitted page ${pg.pageNumber}`}
+                                onClick={() => setLightboxImage(pg.dataUrl)}
+                                className="w-full h-28 object-cover rounded-lg border border-slate-200 cursor-zoom-in"
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1205,982 +2327,1181 @@ export const StudentHomeworkPortal: React.FC<StudentHomeworkPortalProps> = ({
               </div>
             )}
 
-            {/* Tab 2: Type Student Answers Directly */}
-            {inputMode === 'type' && (
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-bold text-[#701a2d]">
-                    Student Answers &amp; Working
-                  </label>
-                  <span className="text-[10px] text-slate-500">Type what the student wrote</span>
-                </div>
+            {!loadingDetail &&
+              selectedSubmissionDetail &&
+              selectedSubmissionDetail.status === 'graded' &&
+              selectedSubmissionDetail.publishedReport &&
+              renderReportCard(selectedSubmissionDetail.publishedReport, selectedSubmissionDetail.teacherNote)}
+          </div>
+        </div>
+        </div>
+      )}
 
-                {/* Input helper controls */}
-                <div className="flex items-center justify-between text-[11px] text-slate-500">
-                  <span>Enter student's typed responses or transcription:</span>
-                  {customTextWorking && (
-                    <button
-                      type="button"
-                      onClick={() => setCustomTextWorking('')}
-                      className="px-2 py-0.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-semibold transition"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-
-                <textarea
-                  value={customTextWorking}
-                  onChange={(e) => setCustomTextWorking(e.target.value)}
-                  placeholder={`Type or paste student answers here, for example:
-Q1: 8 + 12 ÷ 4 = 8 + 3 = 11
-Q2: 5 × (16 + 2 - 12) = 5 × 6 = 30
-Q3: 25 + 11 = 36`}
-                  rows={6}
-                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:border-[#800020] font-mono leading-relaxed placeholder:text-slate-400"
-                />
+      {/* =================================================================== */}
+      {/* EDUCATOR PORTAL VIEW (Mr. Haitham Only)                             */}
+      {/* =================================================================== */}
+      {isTeacher && (
+        <div className="space-y-5">
+          {/* Active Answer Key Bar */}
+          <div className="bg-white border-2 border-[#800020]/25 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-xs">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center shrink-0">
+                <FileCheck className="w-5 h-5" />
               </div>
-            )}
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#800020]">
+                    Educator-Only Active Model Answer Key
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                    {activeModelKey.questionCount || 20} Questions &bull; {activeModelKey.totalMarks || 75} Marks
+                  </span>
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 mt-0.5">{activeModelKey.title}</h3>
+              </div>
+            </div>
 
-            {/* Tab 3: Draw on Handwritten Canvas (CNN Equation Solver) */}
-            {inputMode === 'draw' && (
-              <div className="space-y-3">
-                <HandwrittenEquationCanvas
-                  onInsertAnswer={(equationResult) => {
-                    setCustomTextWorking((prev) => {
-                      const next = prev.trim() ? `${prev.trim()}\n${equationResult}` : equationResult;
-                      return next;
-                    });
-                    setRefreshNotice(`Added "${equationResult}" from Handwritten Canvas into submission!`);
-                  }}
-                />
-                {customTextWorking && (
-                  <div className="p-3 bg-[#fff8f9] border border-[#fecdd3] rounded-lg text-xs space-y-1.5">
-                    <div className="flex items-center justify-between text-slate-600 text-[11px]">
-                      <span className="font-semibold text-[#701a2d]">Accumulated Submission Answers:</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                ref={keyFileInputRef}
+                type="file"
+                accept=".pdf,.txt,.md"
+                onChange={handleUploadKeyFile}
+                className="hidden"
+                id="educator-key-pdf"
+              />
+              <label
+                htmlFor="educator-key-pdf"
+                className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold transition shadow-xs"
+              >
+                {isUploadingKeyPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+                <span>Upload Key PDF</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingKeyTitle(activeModelKey.title);
+                  setEditingKeyText(activeModelKey.text);
+                  setIsModelKeyModalOpen(true);
+                }}
+                className="px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700"
+              >
+                Edit / Switch Template
+              </button>
+            </div>
+          </div>
+
+          {/* Educator Student Homework Submission Notifications */}
+          {(() => {
+            const unreadTeacherNotifs = portalNotifications.filter(
+              (n) => !n.readByUserIds.includes(effectiveViewerUserId)
+            );
+            const visibleNotifs =
+              showAllNotifications || unreadTeacherNotifs.length === 0
+                ? portalNotifications.slice(0, 6)
+                : unreadTeacherNotifs;
+
+            if (portalNotifications.length === 0) return null;
+
+            return (
+              <div
+                className={`rounded-2xl border p-4 shadow-xs transition ${
+                  unreadTeacherNotifs.length > 0
+                    ? 'bg-gradient-to-r from-[#fff5f7] via-white to-amber-50/50 border-[#e9b3be]'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
+                        unreadTeacherNotifs.length > 0
+                          ? 'bg-[#800020] text-white border-[#800020]'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-xs sm:text-sm font-bold text-[#701a2d]">
+                          Student Submission Notifications
+                        </h3>
+                        {unreadTeacherNotifs.length > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-[#800020] text-white text-[10px] font-bold">
+                            {unreadTeacherNotifs.length} New
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
+                            All reviewed ({portalNotifications.length})
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {unreadTeacherNotifs.length > 0
+                          ? 'New student homework submissions arrived in your inbox.'
+                          : 'All incoming student homework submission alerts are read.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {unreadTeacherNotifs.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => setInputMode('type')}
-                        className="text-[#800020] hover:underline flex items-center gap-1 font-bold"
+                        onClick={handleMarkAllPortalNotificationsRead}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#e5c1c9] hover:bg-[#fff1f2] text-[11px] font-semibold text-[#800020] transition"
                       >
-                        <span>Edit in Type View</span>
-                        <ArrowRight className="w-3 h-3" />
+                        Mark All Read
                       </button>
-                    </div>
-                    <pre className="font-mono text-[#881337] whitespace-pre-wrap text-[11px] bg-white p-2 rounded border border-[#fecdd3]">
-                      {customTextWorking}
-                    </pre>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowAllNotifications((v) => !v)}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-[11px] font-semibold text-slate-600 transition"
+                    >
+                      {showAllNotifications
+                        ? 'Hide'
+                        : unreadTeacherNotifs.length === 0
+                        ? `Show Recent (${portalNotifications.length})`
+                        : `Show All (${portalNotifications.length})`}
+                    </button>
+                  </div>
+                </div>
+
+                {(unreadTeacherNotifs.length > 0 || showAllNotifications) && (
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {visibleNotifs.map((notif) => {
+                      const isUnread = !notif.readByUserIds.includes(effectiveViewerUserId);
+                      return (
+                        <div
+                          key={notif.id}
+                          className={`rounded-xl border p-3 text-xs space-y-1.5 transition ${
+                            isUnread
+                              ? 'bg-white border-[#800020]/35 shadow-2xs'
+                              : 'bg-slate-50/70 border-slate-200 opacity-85'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isUnread && (
+                                <span className="px-1.5 py-0.5 rounded bg-[#800020] text-white text-[9px] font-extrabold uppercase tracking-wider">
+                                  New
+                                </span>
+                              )}
+                              <span className="font-bold text-slate-900">{notif.title}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 shrink-0">
+                              {new Date(notif.createdAt).toLocaleString('en-GB')}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-700 leading-relaxed">{notif.message}</p>
+                          <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                            {notif.submissionId && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSubmissionFromNotification(notif)}
+                                className="px-2.5 py-1 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-[11px] font-bold transition"
+                              >
+                                Review Submission &rarr;
+                              </button>
+                            )}
+                            {isUnread && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkPortalNotificationRead(notif.id)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-600 transition"
+                              >
+                                Mark Read
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            )}
+            );
+          })()}
 
-            {/* Student Info inputs */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <label className="block text-[11px] font-medium text-slate-600 mb-1">Student Name</label>
+          {/* Educator Mode Switcher */}
+          <div className="flex flex-wrap gap-2 bg-white border border-slate-200 p-1.5 rounded-xl w-fit">
+            <button
+              type="button"
+              onClick={() => setTeacherMode('inbox')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                teacherMode === 'inbox' ? 'bg-[#800020] text-white' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Inbox className="w-3.5 h-3.5" />
+              <span>Student Submissions Inbox ({submissions.filter((s) => s.status === 'pending').length} pending)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTeacherMode('assign')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                teacherMode === 'assign' ? 'bg-[#800020] text-white' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Assign Homework to Groups ({groupAssignments.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTeacherMode('direct')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                teacherMode === 'direct' ? 'bg-[#800020] text-white' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>Direct Sheet Check</span>
+            </button>
+          </div>
+
+          {/* EDUCATOR TAB 0: ASSIGN SEPARATE HOMEWORK TO EACH GROUP + NOTIFICATIONS */}
+          {teacherMode === 'assign' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              <form
+                onSubmit={handleCreateGroupAssignment}
+                className="lg:col-span-5 bg-white border border-[#f0d0d6] rounded-2xl p-5 space-y-4 shadow-xs"
+              >
+                <div className="border-b border-slate-100 pb-3">
+                  <h2 className="text-sm font-bold text-[#701a2d]">Assign Homework to a Specific Group</h2>
+                  <p className="text-[11px] text-slate-500">
+                    Students see only assignments created for their approved group, with website alerts &amp; Resend email notifications.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Target Group / Course</label>
+                  <select
+                    value={assignGroupId}
+                    onChange={(e) => setAssignGroupId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold"
+                    required
+                  >
+                    {COURSES.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Homework Title</label>
+                  <input
+                    type="text"
+                    value={assignTitle}
+                    onChange={(e) => setAssignTitle(e.target.value)}
+                    placeholder="e.g. Straight Line Equations — Sheet 2"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Due Date &amp; Time</label>
+                    <input
+                      type="datetime-local"
+                      value={assignDueDate}
+                      onChange={(e) => setAssignDueDate(e.target.value)}
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Grading Scale</label>
+                    <select
+                      value={assignGradingSystem}
+                      onChange={(e) => setAssignGradingSystem(e.target.value as GradingSystem)}
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold"
+                    >
+                      <option value="edexcel">Edexcel (A*–U)</option>
+                      <option value="ib">IB (Band 1–7)</option>
+                      <option value="marks">Raw Marks (%)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Homework Instructions</label>
+                  <textarea
+                    rows={3}
+                    value={assignInstructions}
+                    onChange={(e) => setAssignInstructions(e.target.value)}
+                    placeholder="Write clear steps, page numbers, calculator rules, or submission notes..."
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                    required
+                  />
+                </div>
+
+                <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 space-y-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={assignSendNotifications}
+                      onChange={(e) => setAssignSendNotifications(e.target.checked)}
+                    />
+                    <span>Send Website Notification + Resend Email Alert</span>
+                  </label>
+                  {assignSendNotifications && (
+                    <input
+                      type="text"
+                      value={assignNotifyEmails}
+                      onChange={(e) => setAssignNotifyEmails(e.target.value)}
+                      placeholder="Optional extra / Resend test email(s), comma-separated"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                    />
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSavingAssignment}
+                  className="w-full py-2.5 rounded-xl bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold shadow-sm transition disabled:opacity-50"
+                >
+                  {isSavingAssignment ? 'Assigning & Sending Notifications...' : 'Assign Homework & Notify Group'}
+                </button>
+              </form>
+
+              <div className="lg:col-span-7 bg-white border border-[#f0d0d6] rounded-2xl p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-[#701a2d]">Active Homework by Group</h3>
+                    <p className="text-[11px] text-slate-500">
+                      Each group receives its own homework dropdown menu, due dates, and instructions.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadAssignments}
+                    className="text-xs font-semibold text-[#800020] hover:underline"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                {groupAssignments.length === 0 ? (
+                  <div className="py-10 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                    No group homework assigned yet. Use the form on the left to assign homework to any group.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {groupAssignments.map((hw) => (
+                      <div key={hw.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <span className="inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] border border-[#fecdd3] mr-2">
+                              {hw.courseTitle}
+                            </span>
+                            <span className="inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                              {hw.gradingSystem}
+                            </span>
+                            <h4 className="font-bold text-sm text-slate-900 mt-1">{hw.title}</h4>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {hw.dueDate && (
+                              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                                Due: {new Date(hw.dueDate).toLocaleString('en-GB')}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteGroupAssignment(hw.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white"
+                              title="Delete assignment"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                          {hw.instructions}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* EDUCATOR TAB 1: STUDENT SUBMISSIONS INBOX */}
+          {teacherMode === 'inbox' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Inbox List */}
+              <div className="lg:col-span-4 bg-white border border-[#f0d0d6] rounded-2xl p-4 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-[#701a2d]">Inbox Queue</h2>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      loadSubmissions(selectedSubmissionId || undefined);
+                      if (selectedSubmissionId) loadSubmissionDetail(selectedSubmissionId);
+                    }}
+                    className="text-xs text-[#800020] hover:underline font-semibold"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <select
+                  value={inboxCourseFilter}
+                  onChange={(e) => setInboxCourseFilter(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700"
+                >
+                  <option value="all">All Groups / Courses ({submissions.length})</option>
+                  {COURSES.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({submissions.filter((s) => s.courseId === c.id).length})
+                    </option>
+                  ))}
+                </select>
+
+                <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg text-[11px]">
+                  {(['all', 'pending', 'graded'] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setInboxFilter(f)}
+                      className={`py-1 rounded font-semibold capitalize transition ${
+                        inboxFilter === f ? 'bg-white text-[#800020] shadow-2xs' : 'text-slate-600'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+
+                {loadingSubmissions ? (
+                  <div className="py-8 text-center text-xs text-slate-500">Loading inbox...</div>
+                ) : filteredInboxSubmissions.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-slate-500">No submissions in this filter.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[540px] overflow-y-auto pr-1">
+                    {filteredInboxSubmissions.map((sub) => {
+                      const active = selectedSubmissionId === sub.id;
+                      return (
+                        <div
+                          key={sub.id}
+                          className={`p-3 rounded-xl border transition cursor-pointer ${
+                            active
+                              ? 'bg-[#fdf2f4] border-[#800020]'
+                              : 'bg-white border-slate-200 hover:border-[#fecdd3]'
+                          }`}
+                          onClick={() => setSelectedSubmissionId(sub.id)}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-900 truncate">{sub.studentName}</p>
+                              <p className="text-[11px] text-slate-600 truncate">{sub.assignment}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                {sub.courseTitle} &middot; {new Date(sub.submittedAt).toLocaleDateString('en-GB')}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSubmission(sub.id);
+                              }}
+                              title="Delete submission"
+                              className="p-1 text-slate-400 hover:text-red-600"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                sub.status === 'graded'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : sub.draftReport
+                                  ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                                  : sub.draftStatus === 'queued' || sub.draftStatus === 'generating'
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-200 animate-pulse'
+                                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+                              }`}
+                            >
+                              {sub.status === 'graded'
+                                ? `Published (${sub.publishedReport?.earnedMarks}/${sub.publishedReport?.totalMarks})`
+                                : sub.draftReport
+                                ? `Draft Ready (${sub.draftReport.earnedMarks}/${sub.draftReport.totalMarks}) · Approve`
+                                : sub.draftStatus === 'queued' || sub.draftStatus === 'generating'
+                                ? 'Auto-Correcting...'
+                                : 'Pending Marking'}
+                            </span>
+                            {sub.pageCount > 0 && (
+                              <span className="text-[10px] text-slate-500">{sub.pageCount} page(s)</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Inbox Detail + Correction Workbench */}
+              <div className="lg:col-span-8 space-y-4">
+                {!selectedSubmissionDetail ? (
+                  <div className="bg-white border border-[#f0d0d6] rounded-2xl p-10 text-center text-xs text-slate-500">
+                    Select a student submission on the left to inspect uploaded pages and prepare a report.
+                  </div>
+                ) : loadingDetail ? (
+                  <div className="bg-white border border-[#f0d0d6] rounded-2xl p-10 text-center text-xs text-slate-500">
+                    Loading student pages...
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Student Pages Preview + Draft Button */}
+                    <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 space-y-4 shadow-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div>
+                          <h3 className="text-base font-bold text-slate-900">
+                            {selectedSubmissionDetail.studentName} &mdash; {selectedSubmissionDetail.assignment}
+                          </h3>
+                          <p className="text-xs text-slate-500">
+                            {selectedSubmissionDetail.courseTitle} &middot; Submitted{' '}
+                            {new Date(selectedSubmissionDetail.submittedAt).toLocaleString('en-GB')}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <select
+                            value={gradingSystem}
+                            onChange={(e) => {
+                              const nextSys = e.target.value as GradingSystem;
+                              setGradingSystem(nextSys);
+                              setEditableReport((prev) => (prev ? recalculateReportTotals(prev, nextSys) : prev));
+                            }}
+                            className="px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 bg-white"
+                          >
+                            <option value="edexcel">Scale: Edexcel (A*–U)</option>
+                            <option value="ib">Scale: IB (Band 1–7)</option>
+                            <option value="marks">Scale: Raw Marks (%)</option>
+                          </select>
+                          <select
+                            value={precisionMode}
+                            onChange={(e) => setPrecisionMode(e.target.value as 'deep' | 'max')}
+                            className="px-2.5 py-2 rounded-lg border border-slate-200 text-xs text-slate-700 bg-white"
+                          >
+                            <option value="deep">Standard Marking Pass</option>
+                            <option value="max">Detailed Handwriting Pass</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={handleGenerateSubmissionDraft}
+                            disabled={isGeneratingDraft}
+                            className="px-4 py-2 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold flex items-center gap-1.5 transition disabled:opacity-50"
+                          >
+                            {isGeneratingDraft ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Preparing Correction Draft...</span>
+                              </>
+                            ) : (
+                              <>
+                                <FileCheck className="w-3.5 h-3.5" />
+                                <span>{editableReport ? 'Re-Run Correction Draft' : 'Prepare Correction Draft'}</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCreateManualDraft}
+                            disabled={isGeneratingDraft}
+                            className="px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition disabled:opacity-50"
+                          >
+                            Manual Sheet
+                          </button>
+                        </div>
+                      </div>
+
+                      {(selectedSubmissionDetail.draftStatus === 'queued' ||
+                        selectedSubmissionDetail.draftStatus === 'generating') &&
+                        !editableReport && (
+                          <div className="flex items-center gap-2.5 bg-amber-50 border border-amber-200 text-amber-900 px-3.5 py-2.5 rounded-xl text-xs font-medium">
+                            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                            <span>
+                              Automatic 3-Phase correction draft is preparing in the background — this panel updates automatically once ready.
+                            </span>
+                          </div>
+                        )}
+
+                      {selectedSubmissionDetail.draftStatus === 'failed' && !editableReport && (
+                        <div className="bg-rose-50 border border-rose-200 text-rose-800 px-3.5 py-3 rounded-xl text-xs break-words space-y-2.5">
+                          <div>
+                            <strong>Auto-correction paused:</strong>{' '}
+                            {selectedSubmissionDetail.draftError || 'Please verify your Model Answer Key and click Prepare Correction Draft.'}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCreateManualDraft}
+                              disabled={isGeneratingDraft}
+                              className="px-3.5 py-1.5 rounded-lg bg-[#800020] hover:bg-[#6b1226] text-white text-xs font-bold transition"
+                            >
+                              Open Manual Correction Sheet (No Quota Needed)
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedSubmissionDetail.submissionText && (
+                        <div>
+                          <span className="text-[11px] font-bold text-slate-600 block mb-1">Student Typed Notes:</span>
+                          <pre className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono whitespace-pre-wrap text-slate-800">
+                            {selectedSubmissionDetail.submissionText}
+                          </pre>
+                        </div>
+                      )}
+
+                      {selectedSubmissionDetail.pageImages && selectedSubmissionDetail.pageImages.length > 0 && (
+                        <div>
+                          <span className="text-[11px] font-bold text-slate-600 block mb-1.5">
+                            Uploaded Pages (click to enlarge):
+                          </span>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {selectedSubmissionDetail.pageImages.map((pg) => (
+                              <div key={pg.pageNumber} className="border border-slate-200 rounded-xl p-1.5 bg-slate-50">
+                                <img
+                                  src={pg.dataUrl}
+                                  alt={`Student page ${pg.pageNumber}`}
+                                  onClick={() => setLightboxImage(pg.dataUrl)}
+                                  className="w-full h-32 object-cover rounded-lg cursor-zoom-in"
+                                />
+                                <p className="text-[10px] font-semibold text-center text-slate-600 mt-1">
+                                  Page {pg.pageNumber}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Step 1: Spacious Teacher Review & Edit Box -> Linked Live to Step 2 Parent Report */}
+                    {editableReport && (
+                      <div className="bg-white border border-[#f0d0d6] rounded-2xl p-5 space-y-5 shadow-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f5e1e5] pb-3">
+                          <div>
+                            <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] mb-1">
+                              Step 1 · Teacher Verification &amp; Answer Editor
+                            </span>
+                            <h4 className="text-sm font-bold text-[#701a2d]">
+                              Review, Edit or Add Questions &amp; Worked Solutions
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              Every change below updates the linked Parent Report, Student Report, Clean PDF, and Resend Email automatically.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="px-3.5 py-2 rounded-xl bg-[#fff1f2] border border-[#fecdd3] text-right">
+                              <span className="text-base font-black text-[#800020]">
+                                {editableReport.earnedMarks} / {editableReport.totalMarks}
+                              </span>
+                              <span className="text-xs font-bold text-slate-700 ml-2">
+                                ({editableReport.percentage}% &middot; {editableReport.grade})
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {editableReport.questions.map((q, idx) => (
+                            <div
+                              key={`${q.questionNumber}-${idx}`}
+                              className="border border-slate-200 rounded-xl p-3.5 bg-slate-50/40 space-y-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={q.displayLabel || `Q${q.questionNumber}`}
+                                    onChange={(e) =>
+                                      handleUpdateEditableQuestion(idx, { displayLabel: e.target.value })
+                                    }
+                                    className="w-24 px-2 py-1 rounded border border-slate-300 bg-white text-xs font-bold text-slate-900"
+                                  />
+                                  <span
+                                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                      q.earnedMarks === q.maxMarks
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : q.earnedMarks > 0
+                                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                    }`}
+                                  >
+                                    {q.earnedMarks === q.maxMarks
+                                      ? 'Full Marks'
+                                      : q.earnedMarks > 0
+                                      ? 'Partial Credit'
+                                      : 'Needs Review'}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 text-xs">
+                                  <label className="text-[11px] font-semibold text-slate-600">Mark:</label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={q.maxMarks}
+                                    value={q.earnedMarks}
+                                    onChange={(e) =>
+                                      handleUpdateEditableQuestion(idx, {
+                                        earnedMarks: Math.max(0, Math.min(q.maxMarks, Number(e.target.value) || 0)),
+                                      })
+                                    }
+                                    className="w-14 px-2 py-1 border border-slate-300 rounded bg-white text-center font-bold text-xs"
+                                  />
+                                  <span className="text-slate-400">/</span>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={50}
+                                    value={q.maxMarks}
+                                    onChange={(e) =>
+                                      handleUpdateEditableQuestion(idx, {
+                                        maxMarks: Math.max(1, Number(e.target.value) || 1),
+                                      })
+                                    }
+                                    title="Max marks for question"
+                                    className="w-14 px-2 py-1 border border-slate-300 rounded bg-white text-center font-semibold text-xs text-slate-700"
+                                  />
+                                  {editableReport.questions.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveEditableQuestion(idx)}
+                                      className="p-1 text-slate-400 hover:text-rose-600"
+                                      title="Remove question"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="text-[10px] font-bold uppercase text-slate-600 block mb-1">
+                                    1. What Was Written
+                                  </label>
+                                  <textarea
+                                    rows={3}
+                                    value={q.phase1Extraction || q.studentWorkingFound}
+                                    onChange={(e) =>
+                                      handleUpdateEditableQuestion(idx, {
+                                        studentWorkingFound: e.target.value,
+                                        phase1Extraction: e.target.value,
+                                      })
+                                    }
+                                    className="w-full p-2 border border-slate-200 rounded-lg bg-white text-xs font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold uppercase text-[#800020] block mb-1">
+                                    2. Exact Mistake &amp; Teacher Feedback
+                                  </label>
+                                  <textarea
+                                    rows={3}
+                                    value={q.phase2ErrorAnalysis || q.teacherFeedback || q.errorAnalysis}
+                                    onChange={(e) =>
+                                      handleUpdateEditableQuestion(idx, {
+                                        teacherFeedback: e.target.value,
+                                        errorAnalysis: e.target.value,
+                                        phase2ErrorAnalysis: e.target.value,
+                                      })
+                                    }
+                                    className="w-full p-2 border border-rose-200 rounded-lg bg-white text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold uppercase text-emerald-800 block mb-1">
+                                    3. Complete Worked Solution
+                                  </label>
+                                  <textarea
+                                    rows={3}
+                                    value={q.phase3Solution || q.modelSolution}
+                                    onChange={(e) =>
+                                      handleUpdateEditableQuestion(idx, {
+                                        modelSolution: e.target.value,
+                                        phase3Solution: e.target.value,
+                                      })
+                                    }
+                                    className="w-full p-2 border border-emerald-200 rounded-lg bg-emerald-50/40 text-xs font-mono text-emerald-950"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={handleAddEditableQuestion}
+                            className="w-full py-2 rounded-xl border border-dashed border-[#800020]/40 text-[#800020] hover:bg-[#fff5f7] text-xs font-bold transition"
+                          >
+                            + Add Question to Report
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Overall Summary (Shown at top of Parent Report)</label>
+                            <textarea
+                              rows={2}
+                              value={editableReport.generalFeedback}
+                              onChange={(e) =>
+                                setEditableReport((prev) => (prev ? { ...prev, generalFeedback: e.target.value } : prev))
+                              }
+                              className="w-full p-2.5 border border-slate-200 rounded-xl text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                              Mr. Haitham&apos;s Note for Student &amp; Parent
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={teacherNoteInput}
+                              onChange={(e) => setTeacherNoteInput(e.target.value)}
+                              placeholder="Optional personal advice, praise, or next focus area for parents..."
+                              className="w-full p-2.5 border border-slate-200 rounded-xl text-xs"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex-1 min-w-[220px]">
+                            <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                              Parent Notification Email (Resend Gateway)
+                            </label>
+                            <input
+                              type="email"
+                              value={publishParentEmail}
+                              onChange={(e) => setPublishParentEmail(e.target.value)}
+                              placeholder="Leave blank to use student's saved parent email"
+                              className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                            />
+                          </div>
+                          {selectedSubmissionDetail.emailDelivery && (
+                            <span
+                              className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
+                                selectedSubmissionDetail.emailDelivery.status === 'sent'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                              }`}
+                            >
+                              Last email: {selectedSubmissionDetail.emailDelivery.status === 'sent' ? 'Sent via Resend' : 'Logged locally'} ({selectedSubmissionDetail.emailDelivery.to})
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => downloadReportCsv(editableReport)}
+                              className="px-3.5 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                            >
+                              <Download className="w-3.5 h-3.5" /> Export CSV
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowParentPreview(true)}
+                              className="px-3.5 py-2 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-xs font-semibold text-indigo-800 flex items-center gap-1.5"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              Preview Clean Parent Report
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                printStandaloneParentReport(
+                                  recalculateReportTotals(editableReport, gradingSystem),
+                                  teacherNoteInput,
+                                  selectedSubmissionDetail.courseTitle || courseTitle
+                                )
+                              }
+                              className="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 flex items-center gap-1.5"
+                            >
+                              <Printer className="w-3.5 h-3.5" /> Download / Print PDF
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handlePublishToStudent}
+                            disabled={isPublishingReport}
+                            style={{ backgroundColor: '#059669', color: '#ffffff' }}
+                            className="px-6 py-3 rounded-xl hover:opacity-95 text-xs sm:text-sm font-bold shadow-sm flex items-center gap-2 transition disabled:opacity-50"
+                          >
+                            {isPublishingReport ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Approving &amp; Sending...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>
+                                  {selectedSubmissionDetail.status === 'graded'
+                                    ? 'Update & Re-Send Report to Student & Parent'
+                                    : 'Approve & Send Report to Student & Parent'}
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* EDUCATOR TAB 2: DIRECT SHEET CHECK */}
+          {teacherMode === 'direct' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              <div className="lg:col-span-5 bg-white border border-[#f0d0d6] rounded-2xl p-5 shadow-sm space-y-4">
+                <h2 className="text-sm font-bold text-[#701a2d]">Direct Sheet Evaluation</h2>
                 <input
                   type="text"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
-                  placeholder="e.g. Test Student"
-                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#800020] font-medium"
+                  className="w-full px-3 py-2 rounded-lg border border-[#e5d0d4] text-xs"
+                  placeholder="Student / Paper label"
                 />
-              </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-slate-600 mb-1">Student ID / Code</label>
                 <input
-                  type="text"
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#800020] font-mono"
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="educator-direct-file"
                 />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">Active Model Answer Key (Step 1)</label>
-              <div className="bg-[#fdfaf8] border border-[#f0d0d6] rounded-lg p-2.5 text-xs text-slate-700 flex items-center justify-between gap-2">
-                <div className="truncate">
-                  <span className="font-bold text-[#701a2d] block truncate">{activeModelKey.title}</span>
-                  <span className="text-[10px] text-slate-500">
-                    {activeModelKey.fileName ? `PDF: ${activeModelKey.fileName}` : 'All questions parsed & active'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#fff1f2] text-[#800020] font-bold border border-[#fecdd3]">
-                    {activeModelKey.questionCount || 26} Qs • {activeModelKey.totalMarks || 75} Marks
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => keyFileInputRef.current?.click()}
-                    className="px-2 py-1 rounded bg-[#800020] hover:bg-[#68001a] text-white text-[10px] font-bold transition"
-                    title="Upload a different Model Answer PDF"
-                  >
-                    Upload Key PDF
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                AI Vision &amp; Reasoning Precision
-              </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPrecisionMode('deep')}
-                  className={`px-2.5 py-2 rounded-lg border text-left transition ${
-                    precisionMode === 'deep'
-                      ? 'bg-[#fff1f2] border-[#800020] text-[#701a2d] shadow-2xs'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-[#fecdd3]'
-                  }`}
+                <label
+                  htmlFor="educator-direct-file"
+                  className="flex flex-col items-center justify-center border-2 border-dashed border-[#e5c1c9] hover:border-[#800020] rounded-xl p-5 cursor-pointer bg-[#fffcfd] text-center"
                 >
-                  <span className="text-[11px] font-bold block">2-Pass Deep Vision</span>
-                  <span className="text-[9px] text-slate-500 block">Ultra-High OCR + Thinking</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrecisionMode('max')}
-                  className={`px-2.5 py-2 rounded-lg border text-left transition ${
-                    precisionMode === 'max'
-                      ? 'bg-[#fff1f2] border-[#800020] text-[#701a2d] shadow-2xs'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-[#fecdd3]'
-                  }`}
-                >
-                  <span className="text-[11px] font-bold block">Gemini 4 Max Reason</span>
-                  <span className="text-[9px] text-slate-500 block">Toughest Handwriting</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Run Button in Burgundy */}
-            <button
-              onClick={handleCheckHomework}
-              disabled={isGrading || isRenderingPages}
-              className="w-full py-3.5 bg-gradient-to-r from-[#800020] via-[#9f1239] to-[#800020] hover:from-[#66001a] hover:to-[#800020] text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-rose-950/20 flex items-center justify-center gap-2 transition disabled:opacity-50"
-            >
-              {isGrading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  <span>Notebook AI is checking homework against mark scheme...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>
-                    Check Homework with AI Notebook {studentName ? `(${studentName})` : ''}
-                  </span>
-                </>
-              )}
-            </button>
-
-            {/* Delete / Clear button */}
-            {selectedFile && (
-              <button
-                type="button"
-                onClick={handleResetPortal}
-                className="w-full py-2 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-[#e5d0d4] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span>Delete Uploaded Homework &amp; Reset</span>
-              </button>
-            )}
-          </div>
-
-          {/* Quick Info Box */}
-          <div className="bg-[#fdfaf8] border border-[#f0d0d6] rounded-xl p-4 text-xs text-slate-600 space-y-2">
-            <div className="flex items-center gap-2 text-[#701a2d] font-bold">
-              <BookOpen className="w-4 h-4 text-[#800020]" />
-              <span>Marking Standard</span>
-            </div>
-            <p className="text-[11px] leading-relaxed">
-              Every submission is evaluated against Cambridge IGCSE standards with rigorous method marks <strong>[M1]</strong> and accuracy marks <strong>[A1]</strong>.
-            </p>
-          </div>
-        </div>
-
-        {/* Right Column: AI Feedback Report (7 cols) */}
-        <div className="lg:col-span-7 space-y-4">
-          {!report && !isGrading && (
-            <div className="bg-white border border-[#f0d0d6] rounded-2xl p-10 text-center space-y-4 shadow-sm">
-              <div className="w-14 h-14 rounded-full bg-[#fff1f2] text-[#800020] mx-auto flex items-center justify-center border border-[#fecdd3]">
-                <FileCheck className="w-7 h-7" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-[#701a2d]">Test Portal Ready for Homework Checking</h3>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Upload a student homework file (PDF or photo) on the left, then click &ldquo;Check Homework with AI Notebook&rdquo; to generate the official evaluation report.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-center gap-3 pt-2">
-                <button
-                  onClick={handleCheckHomework}
-                  className="px-5 py-2.5 bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold rounded-xl shadow-md transition flex items-center gap-1.5"
-                >
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>Check Homework {studentName ? `for ${studentName}` : 'Now'}</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {isGrading && (
-            <div className="bg-white border border-[#f0d0d6] rounded-2xl p-12 text-center space-y-4 shadow-sm">
-              <Loader2 className="w-10 h-10 animate-spin text-[#800020] mx-auto" />
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-[#701a2d]">Notebook Grading in Progress</h3>
-                <p className="text-xs text-slate-500">
-                  Matching student handwriting against Mr. Haitham Hussien&apos;s BIDMAS solution key...
-                </p>
-              </div>
-              <div className="w-48 bg-rose-100 h-1.5 rounded-full mx-auto overflow-hidden">
-                <div className="bg-[#800020] h-full w-2/3 animate-pulse"></div>
-              </div>
-            </div>
-          )}
-
-          {report && !isGrading && (
-            <div className="bg-white border border-[#f0d0d6] rounded-2xl overflow-hidden shadow-xl animate-in fade-in space-y-4 text-slate-800">
-              {/* NotebookLM Evaluation Report Header Bar in Burgundy */}
-              <div className="bg-gradient-to-r from-[#701a2d] via-[#800020] to-[#590e1f] text-white p-5">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-white/20 gap-2">
-                  <span className="text-[11px] font-bold tracking-widest text-rose-200 uppercase">
-                    {report.headerTitle || 'IGCSE MATHEMATICS — HOMEWORK EVALUATION REPORT'}
-                  </span>
-                  <span className="text-[11px] font-bold tracking-wider text-amber-300 uppercase">
-                    {report.teacherName || 'MR. HAITHAM HUSSIEN'}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-black text-white math-serif tracking-tight">
-                      {report.reportTitle || 'Student Homework Correction & Report'}
-                    </h2>
-                    <p className="text-xs text-rose-200 mt-0.5">
-                      Cambridge IGCSE Curriculum Evaluation • {report.submissionDate}
-                      {report.gradingMeta?.model ? (
-                        <span className="ml-2 inline-block px-2 py-0.5 rounded bg-white/15 text-[10px] font-mono text-amber-200 border border-white/20">
-                          {report.gradingMeta.model} • {report.gradingMeta.twoPassOcrUsed ? '2-Pass OCR' : 'Direct Vision'} • {report.gradingMeta.mediaResolution || 'HIGH'} • Thinking {report.gradingMeta.thinkingLevel || 'HIGH'}
-                        </span>
-                      ) : null}
+                  {isRenderingPages ? (
+                    <Loader2 className="w-6 h-6 animate-spin text-[#800020]" />
+                  ) : selectedFile ? (
+                    <p className="text-xs font-bold text-slate-900">
+                      {selectedFile.name} ({pageImages.length || 1} page(s))
                     </p>
-                  </div>
-
-                  {/* Actions & PDF Links */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {report.pdfUrl && (
-                      <button
-                        onClick={() => {
-                          setPdfModalType('student');
-                          setPdfModalUrl(report.pdfUrl || '/assets/aistudio/adam-bardana-homework-report_9fb73cfc.pdf');
-                          setShowPdfModal(true);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#800020] hover:bg-rose-50 text-xs font-bold shadow-md transition"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View Official PDF</span>
-                      </button>
-                    )}
-
-                    {report.pdfUrl && (
-                      <a
-                        href={report.pdfUrl}
-                        download={`${(report.studentName || 'student').toLowerCase().replace(/\s+/g, '-')}-evaluation-report.pdf`}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold border border-white/25 transition"
-                        title="Download official PDF report"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download PDF</span>
-                      </a>
-                    )}
-
-                    <button
-                      onClick={handleResetPortal}
-                      className="p-2 text-rose-200 hover:text-white rounded-lg hover:bg-white/10 transition"
-                      title="Clear and test another student"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* NotebookLM Information Matrix */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/20">
-                  <div className="bg-white/10 p-2.5 rounded-lg border border-white/15">
-                    <span className="text-[10px] uppercase font-bold text-rose-200 block tracking-wider">
-                      Student Name
-                    </span>
-                    <span className="text-sm font-extrabold text-white mt-0.5 block truncate">
-                      {report.studentName}
-                    </span>
-                  </div>
-
-                  <div className="bg-white/10 p-2.5 rounded-lg border border-white/15">
-                    <span className="text-[10px] uppercase font-bold text-rose-200 block tracking-wider">
-                      Subject &amp; Topic
-                    </span>
-                    <span className="text-xs font-semibold text-rose-100 mt-0.5 block truncate">
-                      {report.subject} • {report.topic || 'BIDMAS'}
-                    </span>
-                  </div>
-
-                  <div className="bg-white/10 p-2.5 rounded-lg border border-white/15">
-                    <span className="text-[10px] uppercase font-bold text-rose-200 block tracking-wider">
-                      Instructor &amp; Chapter
-                    </span>
-                    <span className="text-xs font-semibold text-rose-100 mt-0.5 block truncate">
-                      {report.teacherName} • {report.chapter || 'Chapter 1'}
-                    </span>
-                  </div>
-
-                  <div className="bg-white/10 p-2.5 rounded-lg border border-white/15 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-rose-200 block tracking-wider">
-                        Score &amp; Grade
-                      </span>
-                      <span className="text-sm font-black text-amber-300 mt-0.5 block">
-                        {report.earnedMarks} / {report.totalMarks} ({report.percentage}%)
-                      </span>
-                    </div>
-                    <span
-                      className={`text-xs font-bold px-2.5 py-1 rounded-md ${
-                        report.percentage >= 80
-                          ? 'bg-emerald-500 text-white'
-                          : report.percentage >= 60
-                          ? 'bg-amber-400 text-amber-950'
-                          : 'bg-rose-500 text-white'
-                      }`}
-                    >
-                      {report.grade}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* View Style Switcher & Question Filters */}
-              <div className="px-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
-                <div className="flex items-center gap-1.5 bg-[#fcf5f7] p-1 rounded-lg border border-[#f5dbe1]">
-                  <button
-                    onClick={() => setViewStyle('notebookTable')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition ${
-                      viewStyle === 'notebookTable'
-                        ? 'bg-[#800020] text-white shadow-sm'
-                        : 'text-slate-600 hover:text-[#800020]'
-                    }`}
-                  >
-                    <TableIcon className="w-3.5 h-3.5" />
-                    <span>NotebookLM Table</span>
-                  </button>
-                  <button
-                    onClick={() => setViewStyle('detailedCards')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition ${
-                      viewStyle === 'detailedCards'
-                        ? 'bg-[#800020] text-white shadow-sm'
-                        : 'text-slate-600 hover:text-[#800020]'
-                    }`}
-                  >
-                    <ListIcon className="w-3.5 h-3.5" />
-                    <span>Detailed Step Cards</span>
-                  </button>
-                </div>
-
-                {/* Filter Pills */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setQuestionFilter('all')}
-                    className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
-                      questionFilter === 'all'
-                        ? 'bg-[#fff1f2] text-[#800020] border border-[#fecdd3]'
-                        : 'bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200'
-                    }`}
-                  >
-                    All ({report.questions.length})
-                  </button>
-                  <button
-                    onClick={() => setQuestionFilter('correct')}
-                    className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
-                      questionFilter === 'correct'
-                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                        : 'bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200'
-                    }`}
-                  >
-                    Correct ({report.questions.filter((q) => q.status === 'correct').length})
-                  </button>
-                  <button
-                    onClick={() => setQuestionFilter('review')}
-                    className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
-                      questionFilter === 'review'
-                        ? 'bg-rose-50 text-rose-800 border border-rose-300'
-                        : 'bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200'
-                    }`}
-                  >
-                    Incorrect ({report.questions.filter((q) => q.status !== 'correct').length})
-                  </button>
-                </div>
-              </div>
-
-              {/* 1. Question-by-Question Marking Breakdown */}
-              <div className="px-5 space-y-3">
-                <div className="flex items-center justify-between pb-1 border-b border-[#f5e1e5]">
-                  <h3 className="font-bold text-[#701a2d] text-sm flex items-center gap-2">
-                    <span>1. Question-by-Question Marking Breakdown</span>
-                    <span className="text-[10px] text-slate-500 font-normal">
-                      (Total Marks: {report.earnedMarks} / {report.totalMarks})
-                    </span>
-                  </h3>
-                  {viewStyle === 'detailedCards' && (
-                    <button
-                      onClick={() => setExpandedQuestion(expandedQuestion === -1 ? null : -1)}
-                      className="text-[#800020] hover:underline text-[11px] whitespace-nowrap font-semibold"
-                    >
-                      {expandedQuestion === -1 ? 'Collapse All' : 'Expand All'}
-                    </button>
+                  ) : (
+                    <p className="text-xs font-bold text-slate-700">Click to upload PDF / Photo</p>
                   )}
-                </div>
+                </label>
 
-                {/* VIEW MODE 1: Exact NotebookLM Report Table in White & Burgundy */}
-                {viewStyle === 'notebookTable' ? (
-                  <div className="overflow-x-auto border border-[#f0d0d6] rounded-xl bg-white shadow-xs">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-[#fdf5f6] text-[#701a2d] uppercase text-[10px] tracking-wider border-b border-[#f0d0d6]">
-                          <th className="py-3 px-3 w-[60px] font-bold text-center">Q#</th>
-                          <th className="py-3 px-3 font-bold">Topic / Expression</th>
-                          <th className="py-3 px-3 w-[80px] font-bold text-center">Mark</th>
-                          <th className="py-3 px-3 w-[110px] font-bold text-center">Status</th>
-                          <th className="py-3 px-4 font-bold">Student Answer / Error Analysis</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#f5e1e5]">
-                        {report.questions
-                          .filter((q) => {
-                            if (questionFilter === 'correct') return q.status === 'correct';
-                            if (questionFilter === 'review') return q.status !== 'correct';
-                            return true;
-                          })
-                          .map((q, idx) => {
-                            const isCorrect = q.status === 'correct';
-                            const isSelected = expandedQuestion === q.questionNumber;
+                <textarea
+                  value={customTextWorking}
+                  onChange={(e) => setCustomTextWorking(e.target.value)}
+                  rows={4}
+                  className="w-full p-3 rounded-xl border border-[#e5d0d4] text-xs font-mono"
+                  placeholder="Or paste typed answers..."
+                />
 
-                            return (
-                              <React.Fragment key={q.questionNumber}>
-                                <tr
-                                  onClick={() =>
-                                    setExpandedQuestion(isSelected ? null : q.questionNumber)
-                                  }
-                                  className={`cursor-pointer transition-colors ${
-                                    idx % 2 === 0 ? 'bg-white' : 'bg-[#fdfafb]'
-                                  } hover:bg-[#fff5f6] ${isSelected ? 'ring-1 ring-[#800020]' : ''}`}
-                                >
-                                  {/* Q# */}
-                                  <td className="py-3 px-3 font-mono font-bold text-center text-[#701a2d]">
-                                    {q.displayLabel || `Q${q.questionNumber}`}
-                                  </td>
+                <button
+                  type="button"
+                  onClick={handleDirectCheck}
+                  disabled={isDirectGrading || isRenderingPages}
+                  className="w-full py-3 bg-[#800020] hover:bg-[#66001a] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                >
+                  {isDirectGrading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Evaluating Worksheet...</span>
+                    </>
+                  ) : (
+                    <span>Evaluate Against Active Answer Key</span>
+                  )}
+                </button>
+              </div>
 
-                                  {/* Topic / Expression */}
-                                  <td className="py-3 px-3 font-medium text-slate-800 font-mono">
-                                    {q.topicExpression || q.prompt}
-                                  </td>
-
-                                  {/* Mark */}
-                                  <td className="py-3 px-3 font-mono font-bold text-center text-slate-700">
-                                    {q.earnedMarks}/{q.maxMarks}
-                                  </td>
-
-                                  {/* Status */}
-                                  <td className="py-3 px-3 text-center">
-                                    <span
-                                      className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black tracking-wide ${
-                                        isCorrect
-                                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                                          : 'bg-rose-50 text-[#800020] border border-rose-300'
-                                      }`}
-                                    >
-                                      {q.statusLabel || (isCorrect ? 'CORRECT' : 'INCORRECT')}
-                                    </span>
-                                  </td>
-
-                                  {/* Student Answer / Error Analysis */}
-                                  <td className="py-3 px-4 text-xs text-slate-700 leading-snug">
-                                    <span
-                                      className={
-                                        !isCorrect ? 'text-[#800020] font-medium' : 'text-slate-700'
-                                      }
-                                    >
-                                      {q.errorAnalysis || q.teacherFeedback}
-                                    </span>
-                                  </td>
-                                </tr>
-
-                                {/* Expanded Detail Drawer on Table Row Click */}
-                                {isSelected && (
-                                  <tr className="bg-[#fff9fa]">
-                                    <td colSpan={5} className="p-3 border-t border-b border-[#f5e1e5]">
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                        <div className="bg-white p-2.5 rounded-lg border border-[#fecdd3]">
-                                          <span className="text-[10px] uppercase font-bold text-[#800020] block mb-1">
-                                            Student Working Found:
-                                          </span>
-                                          <p className="font-mono text-slate-800 font-semibold">{q.studentWorkingFound}</p>
-                                        </div>
-                                        <div className="bg-white p-2.5 rounded-lg border border-[#fecdd3]">
-                                          <span className="text-[10px] uppercase font-bold text-[#800020] block mb-1">
-                                            Official Model Answer ({q.markSchemeRef}):
-                                          </span>
-                                          <p className="font-mono text-[#701a2d] font-semibold">{q.modelSolution}</p>
-                                        </div>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
+              <div className="lg:col-span-7">
+                {directReport ? (
+                  renderReportCard(directReport)
                 ) : (
-                  /* VIEW MODE 2: Card-based Detailed Breakdown */
-                  <div className="space-y-2">
-                    {report.questions
-                      .filter((q) => {
-                        if (questionFilter === 'correct') return q.status === 'correct';
-                        if (questionFilter === 'review') return q.status !== 'correct';
-                        return true;
-                      })
-                      .map((q) => {
-                        const isExpanded =
-                          expandedQuestion === -1 || expandedQuestion === q.questionNumber;
-                        const isFull = q.earnedMarks === q.maxMarks;
-
-                        return (
-                          <div
-                            key={q.questionNumber}
-                            className={`border rounded-xl transition overflow-hidden ${
-                              isFull
-                                ? 'bg-white border-[#f0d0d6] hover:border-emerald-500/50'
-                                : 'bg-[#fffcfd] border-[#fecdd3] hover:border-[#800020]'
-                            }`}
-                          >
-                            <div
-                              onClick={() =>
-                                setExpandedQuestion(
-                                  expandedQuestion === q.questionNumber ? null : q.questionNumber
-                                )
-                              }
-                              className="p-3 flex items-center justify-between cursor-pointer select-none"
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <span
-                                  className={`min-w-8 px-2 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                    isFull
-                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                                      : 'bg-rose-50 text-[#800020] border border-rose-300'
-                                  }`}
-                                >
-                                  {q.displayLabel || `Q${q.questionNumber}`}
-                                </span>
-                                <div>
-                                  <span className="text-xs font-semibold text-slate-800">
-                                    {q.topicExpression || q.prompt}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 ml-2 font-mono">
-                                    ({q.paperRef})
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
-                                    isFull
-                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                                      : 'bg-rose-50 text-[#800020] border border-rose-300'
-                                  }`}
-                                >
-                                  +{q.earnedMarks}/{q.maxMarks}
-                                </span>
-                                {isExpanded ? (
-                                  <ChevronUp className="w-4 h-4 text-slate-400" />
-                                ) : (
-                                  <ChevronDown className="w-4 h-4 text-slate-400" />
-                                )}
-                              </div>
-                            </div>
-
-                            {isExpanded && (
-                              <div className="px-4 pb-3.5 pt-1 border-t border-[#f5e1e5] text-xs space-y-2 bg-[#fdfafb]">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                                  <div className="bg-white p-2.5 rounded-lg border border-[#fecdd3]">
-                                    <span className="text-[10px] uppercase font-bold text-[#800020] block mb-1">
-                                      Student Working Detected:
-                                    </span>
-                                    <p className="font-mono text-slate-800 text-xs font-semibold">
-                                      {q.studentWorkingFound}
-                                    </p>
-                                  </div>
-                                  <div className="bg-white p-2.5 rounded-lg border border-[#fecdd3]">
-                                    <span className="text-[10px] uppercase font-bold text-[#800020] block mb-1">
-                                      Model Answer ({q.markSchemeRef}):
-                                    </span>
-                                    <p className="font-mono text-[#701a2d] text-xs font-semibold">
-                                      {q.modelSolution}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="bg-[#fff1f2] border border-[#fecdd3] p-2.5 rounded-lg text-[11px] text-[#701a2d]">
-                                  <strong className="text-[#800020]">Marking Note: </strong>
-                                  {q.errorAnalysis || q.teacherFeedback}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-
-              {/* 2. Diagnostic Review & Mistake Analysis */}
-              <div className="px-5">
-                <div className="bg-[#fffcfd] border border-[#f5e1e5] rounded-xl p-4 space-y-2 shadow-xs">
-                  <h3 className="font-bold text-[#701a2d] text-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#800020]"></span>
-                    <span>2. Diagnostic Review &amp; Mistake Analysis</span>
-                  </h3>
-                  <p className="text-xs text-slate-700 leading-relaxed font-sans">
-                    {report.diagnosticReview || report.generalFeedback}
-                  </p>
-                </div>
-              </div>
-
-              {/* 3. Personalized Action Plan & Next Steps */}
-              <div className="px-5 pb-2">
-                <div className="bg-[#fffcfd] border border-[#f5e1e5] rounded-xl p-4 space-y-2.5 shadow-xs">
-                  <h3 className="font-bold text-[#701a2d] text-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                    <span>3. Personalized Action Plan &amp; Next Steps</span>
-                  </h3>
-
-                  <div className="space-y-2 text-xs">
-                    {report.actionPlan && report.actionPlan.length > 0 ? (
-                      report.actionPlan.map((action, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-[#f5e1e5]"
-                        >
-                          <span className="text-emerald-700 font-bold mt-0.5">•</span>
-                          <div>
-                            <strong className="text-[#701a2d] mr-1.5 font-bold">
-                              {action.title}:
-                            </strong>
-                            <span className="text-slate-700">{action.detail}</span>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      report.recommendedNextSteps.map((step, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-[#f5e1e5]"
-                        >
-                          <span className="text-emerald-700 font-bold mt-0.5">•</span>
-                          <span className="text-slate-700">{step}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Teacher Haitham's Humane Encouragement Note */}
-              <div className="px-5 pb-3">
-                <div className="bg-gradient-to-br from-[#fffdfa] via-[#fffbf2] to-[#fffdfa] border border-[#eedac5] rounded-xl p-4 relative overflow-hidden shadow-sm">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#f3d9b8] mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[#800020] font-serif text-lg font-bold">✍️</span>
-                      <h4 className="text-xs font-bold text-[#701a2d] uppercase tracking-wider font-sans">
-                        Teacher Haitham&apos;s Humane Mentorship Note
-                      </h4>
-                    </div>
-                    <span className="text-[10px] text-[#800020] font-mono px-2 py-0.5 rounded bg-white border border-[#eedac5] font-bold">
-                      Cambridge IGCSE Mentor Stamp
-                    </span>
-                  </div>
-
-                  <p className="teacher-handwriting text-xl text-[#701a2d] leading-relaxed">
-                    &ldquo;Dear {report.studentName || 'Student'}, remember that getting a calculation wrong is never an endpoint — it is our clearest map of where to shine the spotlight next! With BIDMAS, always train your eyes to isolate brackets first. You are making real, tangible progress. Keep practicing with patience and curious persistence.&rdquo;
-                  </p>
-
-                  <div className="mt-2 pt-2 border-t border-[#f3d9b8] flex items-center justify-between text-[11px] text-slate-600">
-                    <span className="font-serif italic font-semibold text-[#800020]">— Mr. Haitham Hussien, Cambridge Mathematics Specialist</span>
-                    <span className="font-mono text-[10px] text-slate-500">NotebookLM Diagnostic Engine Verified</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Interactive Student Q&A Box */}
-              <div className="p-4 bg-[#fcf8f9] border-t border-[#f0d0d6] space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-[#701a2d] flex items-center gap-1.5">
-                    <HelpCircle className="w-3.5 h-3.5 text-[#800020]" />
-                    Have a question about your marks or any step?
-                  </span>
-                  <button
-                    onClick={() => window.print()}
-                    className="flex items-center gap-1 text-[11px] text-slate-600 hover:text-[#800020] px-2 py-1 rounded hover:bg-white transition"
-                  >
-                    <Printer className="w-3 h-3" /> Print Report
-                  </button>
-                </div>
-
-                <form onSubmit={handleAskTutor} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={studentQuery}
-                    onChange={(e) => setStudentQuery(e.target.value)}
-                    placeholder="Ask Mr. Haitham Hussien AI Tutor (e.g. Why did Question 7 violate BIDMAS?)..."
-                    className="flex-1 bg-white text-slate-800 text-xs px-3 py-2 rounded-lg border border-[#e5d0d4] outline-none focus:border-[#800020] shadow-xs"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!studentQuery.trim() || isAskingTutor}
-                    className="px-3.5 py-2 bg-[#800020] hover:bg-[#68001a] text-white rounded-lg text-xs font-bold disabled:opacity-40 transition shadow-xs"
-                  >
-                    {isAskingTutor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Ask Tutor'}
-                  </button>
-                </form>
-
-                {tutorReply && (
-                  <div className="p-3 bg-white border border-[#f0d0d6] rounded-lg text-xs text-slate-800 mt-2 leading-relaxed shadow-xs">
-                    <div className="font-bold text-[#800020] mb-1 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-[#be123c]" /> Tutor Response:
-                    </div>
-                    {tutorReply}
+                  <div className="bg-white border border-[#f0d0d6] rounded-2xl p-10 text-center text-xs text-slate-500">
+                    Upload a sheet on the left to evaluate it directly against &ldquo;{activeModelKey.title}&rdquo;.
                   </div>
                 )}
               </div>
             </div>
           )}
         </div>
-      </div>
+      )}
 
-      {/* PDF Viewer Modal */}
-      {showPdfModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white border border-[#e6ccd2] rounded-xl max-w-5xl w-full h-[88vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-3.5 border-b border-[#f0d8dd] bg-[#fffdfa]">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#800020]" />
-                <span className="font-bold text-slate-900 text-sm font-serif">
-                  {pdfModalType === 'student'
-                    ? `${report?.studentName || 'Student'} — Homework Evaluation Report`
-                    : activeModelKey.title || 'Official Model Answer Key & Mark Scheme'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href={pdfModalUrl}
-                  download
-                  className="flex items-center gap-1 px-3 py-1 text-xs bg-[#800020] hover:bg-[#6b1226] text-white rounded-lg font-semibold shadow-xs transition"
-                >
-                  <Download className="w-3 h-3" /> Download
-                </a>
-                <button
-                  onClick={() => setShowPdfModal(false)}
-                  className="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-900 rounded-lg hover:bg-[#fdf4f6] font-medium"
-                >
-                  Close ✕
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 bg-[#fdfafb] p-2 overflow-hidden flex items-center justify-center">
-              <iframe
-                src={pdfModalUrl}
-                className="w-full h-full rounded border border-[#edd7dc]"
-                title="NotebookLM PDF Document Preview"
-              />
-            </div>
+      {/* Image Lightbox Modal */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setLightboxImage(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-slate-900 shadow-lg flex items-center justify-center font-bold"
+            >
+              ✕
+            </button>
+            <img src={lightboxImage} alt="Submitted Page Full View" className="max-h-[86vh] rounded-xl shadow-2xl" />
           </div>
         </div>
       )}
 
-      {/* Model Answer Key Editor / Uploader Modal */}
-      {isModelKeyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+      {/* Educator-Only Model Answer Key Manager Modal */}
+      {isTeacher && isModelKeyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white border border-[#e6ccd2] rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-800">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-[#f0d8dd] bg-[#fffdfa]">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-[#fff1f2] text-[#800020] flex items-center justify-center border border-[#fecdd3]">
                   <FileCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[#701a2d]">
-                    Model Answer Key &amp; Mark Scheme Manager
-                  </h3>
+                  <h3 className="text-sm font-bold text-[#701a2d]">Educator Model Answer Key Manager</h3>
                   <p className="text-[11px] text-slate-500">
-                    Define any custom assignment answer key; homework will be dynamically graded against it.
+                    Private to Mr. Haitham Hussien &mdash; never visible to students.
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsModelKeyModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-[#fdf2f4] text-slate-400 hover:text-slate-700 transition"
+                className="p-1 rounded-lg hover:bg-[#fdf2f4] text-slate-400 hover:text-slate-700"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="flex-1 p-5 overflow-y-auto space-y-4">
-              {/* PDF File Upload Zone (Primary Action) */}
-              <div className="p-4 rounded-xl border-2 border-dashed border-[#fecdd3] hover:border-[#800020] bg-[#fffafb] transition">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#fff1f2] text-[#800020] border border-[#fecdd3] flex items-center justify-center shrink-0">
-                      <FileUp className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800">
-                        Upload Model Answer Key (PDF)
-                      </h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Upload official exam mark schemes or worked solutions (<code>.pdf</code>, <code>.txt</code>). All worked steps [M1] and accuracy marks [A1] are extracted automatically.
-                      </p>
-                    </div>
-                  </div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(MODEL_KEY_TEMPLATES).map(([id, tmpl]) => (
                   <button
+                    key={id}
                     type="button"
-                    onClick={() => keyFileInputRef.current?.click()}
-                    disabled={isUploadingKeyPdf}
-                    className="px-4 py-2 rounded-xl bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                    onClick={() => {
+                      setSelectedTemplate(id);
+                      setEditingKeyTitle(tmpl.title);
+                      setEditingKeyText(tmpl.text);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                      selectedTemplate === id
+                        ? 'bg-[#800020] text-white border-[#800020]'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
                   >
-                    {isUploadingKeyPdf ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Extracting PDF...</span>
-                      </>
-                    ) : (
-                      <>
-                        <FileUp className="w-3.5 h-3.5" />
-                        <span>Choose PDF File</span>
-                      </>
-                    )}
+                    {tmpl.title}
                   </button>
-                </div>
-                {activeModelKey.fileName && (
-                  <div className="mt-3 pt-2.5 border-t border-[#f8e1e5] flex items-center justify-between text-[11px]">
-                    <span className="text-[#701a2d] font-semibold flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Active File: <strong>{activeModelKey.fileName}</strong>
-                    </span>
-                    {activeModelKey.pdfUrl && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPdfModalType('model');
-                          setPdfModalUrl(activeModelKey.pdfUrl!);
-                          setShowPdfModal(true);
-                        }}
-                        className="text-[#800020] hover:underline font-bold"
-                      >
-                        Preview PDF Document
-                      </button>
-                    )}
-                  </div>
-                )}
+                ))}
               </div>
 
-              {/* Template Quick Selection */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Or Select a Curriculum Template
-                </label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {Object.entries(MODEL_KEY_TEMPLATES).map(([key, tmpl]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => handleSelectTemplate(key)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-                        selectedTemplate === key
-                          ? 'bg-[#800020] text-white border-[#800020] shadow-xs'
-                          : 'bg-[#fffcfd] text-slate-700 border-[#edd7dc] hover:bg-[#fff1f2] hover:text-[#800020]'
-                      }`}
-                    >
-                      {tmpl.title.split('—')[0].replace('Pearson Edexcel', 'Edexcel').replace('Chapter 1: Numbers', 'BIDMAS').trim()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Assignment Title */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Assignment Title / Curriculum Topic
-                </label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Answer Key Title</label>
                 <input
                   type="text"
                   value={editingKeyTitle}
                   onChange={(e) => setEditingKeyTitle(e.target.value)}
-                  placeholder="e.g. Chapter 3: Linear Equations & Algebra"
-                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-lg px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#800020] font-medium"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
                 />
               </div>
 
-              {/* Model Answer Key Text */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Solution Key &amp; Mark Scheme Content
-                  </label>
-                  <span className="text-[10px] text-slate-400">
-                    Include questions, method marks [M1], and final answers [A1]
-                  </span>
-                </div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Questions &amp; Mark Scheme</label>
                 <textarea
+                  rows={12}
                   value={editingKeyText}
                   onChange={(e) => setEditingKeyText(e.target.value)}
-                  placeholder={`QUESTION 1 [1 Mark]\nWork out: 2x + 5 = 15\nModel Answer: 2x = 10 -> x = 5\nMark Scheme: [1 Mark] Final answer x = 5`}
-                  rows={14}
-                  className="w-full bg-[#fdfcfb] border border-[#e5d0d4] rounded-xl p-3 text-xs text-slate-800 outline-none focus:border-[#800020] font-mono leading-relaxed"
+                  className="w-full p-3 border border-slate-200 rounded-xl text-xs font-mono"
                 />
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="p-4 border-t border-[#f0d8dd] bg-[#fffdfa] flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={handleResetModelKey}
-                className="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-medium transition"
+                className="px-3.5 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
-                Reset to Default BIDMAS
+                Reset to Default
               </button>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsModelKeyModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-[#edd7dc] text-slate-600 hover:bg-[#fff5f6] text-xs font-semibold transition"
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSaveModelKey(editingKeyTitle, editingKeyText)}
-                  disabled={!editingKeyText.trim()}
-                  className="px-5 py-2 rounded-lg bg-[#800020] hover:bg-[#68001a] text-white text-xs font-bold transition shadow-xs disabled:opacity-40"
+                  className="px-5 py-2 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold"
                 >
-                  Save &amp; Set as Active Model Answer
+                  Save Active Key
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Standalone Clean Formal Parent Report Preview Modal (Live-linked to Step 1 Teacher Edits) */}
+      {showParentPreview && editableReport && selectedSubmissionDetail && (
+        <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6">
+          <div className="bg-slate-100 w-full max-w-4xl max-h-[92vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-300">
+            <div className="bg-white px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Formal Parent Progress Report Preview
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Live-synced with your edited marks &amp; solutions from Step 1 (no website menus or sidebar included).
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    printStandaloneParentReport(
+                      recalculateReportTotals(editableReport, gradingSystem),
+                      teacherNoteInput,
+                      selectedSubmissionDetail.courseTitle || courseTitle
+                    )
+                  }
+                  className="px-3.5 py-2 rounded-lg bg-[#800020] hover:bg-[#66001a] text-white text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Download / Print Clean PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowParentPreview(false)}
+                  className="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+                <iframe
+                  title="Formal Parent Progress Report"
+                  className="w-full h-[72vh] border-0"
+                  srcDoc={buildStandaloneParentReportHtml(
+                    recalculateReportTotals(editableReport, gradingSystem),
+                    teacherNoteInput,
+                    selectedSubmissionDetail.courseTitle || courseTitle
+                  )}
+                />
               </div>
             </div>
           </div>
